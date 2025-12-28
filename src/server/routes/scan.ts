@@ -2,13 +2,15 @@ import { Hono } from "hono";
 import { db, schema } from "../../db";
 import { eq, and } from "drizzle-orm";
 import { execSync } from "child_process";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import { broadcast } from "../ws";
 import {
   scanSchema,
   restartPromptQuerySchema,
   validateOrThrow,
 } from "../../shared/validation";
-import { NotFoundError } from "../middleware/error-handler";
+import { BadRequestError } from "../middleware/error-handler";
 import type {
   BranchNamingRule,
   TreeNode,
@@ -17,6 +19,7 @@ import type {
   WorktreeInfo,
   PRInfo,
   ScanSnapshot,
+  TreeSpec,
 } from "../../shared/types";
 
 interface BranchInfo {
@@ -25,37 +28,46 @@ interface BranchInfo {
   lastCommitAt: string;
 }
 
+interface GhPR {
+  number: number;
+  title: string;
+  state: string;
+  url: string;
+  headRefName: string;
+  isDraft: boolean;
+  labels: { name: string }[];
+  assignees: { login: string }[];
+  reviewDecision: string;
+  statusCheckRollup?: { conclusion?: string }[];
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+}
+
 export const scanRouter = new Hono();
 
 // POST /api/scan
 scanRouter.post("/", async (c) => {
   const body = await c.req.json();
   const input = validateOrThrow(scanSchema, body);
+  const { repoId, localPath } = input;
 
-  // Get repo
-  const repos = await db
-    .select()
-    .from(schema.repos)
-    .where(eq(schema.repos.id, input.repoId));
-
-  const repo = repos[0];
-  if (!repo) {
-    throw new NotFoundError("Repo");
+  // Verify local path exists
+  if (!existsSync(localPath)) {
+    throw new BadRequestError(`Local path does not exist: ${localPath}`);
   }
 
-  const repoPath = repo.path;
-
   // 1. Get branches
-  const branches = getBranches(repoPath);
+  const branches = getBranches(localPath);
 
-  // 2. Get worktrees
-  const worktrees = getWorktrees(repoPath);
+  // 2. Get worktrees with heartbeat
+  const worktrees = getWorktrees(localPath);
 
-  // 3. Get PRs
-  const prs = getPRs(repoPath);
+  // 3. Get PRs with detailed info
+  const prs = getPRs(localPath);
 
   // 4. Build tree (infer parent-child relationships)
-  const { nodes, edges } = buildTree(branches, worktrees, prs, repoPath);
+  const { nodes, edges } = buildTree(branches, worktrees, prs, localPath);
 
   // 5. Get branch naming rule
   const rules = await db
@@ -63,7 +75,7 @@ scanRouter.post("/", async (c) => {
     .from(schema.projectRules)
     .where(
       and(
-        eq(schema.projectRules.repoId, input.repoId),
+        eq(schema.projectRules.repoId, repoId),
         eq(schema.projectRules.ruleType, "branch_naming"),
         eq(schema.projectRules.isActive, true)
       )
@@ -74,10 +86,26 @@ scanRouter.post("/", async (c) => {
     ? (JSON.parse(ruleRecord.ruleJson) as BranchNamingRule)
     : null;
 
-  // 6. Calculate warnings
-  const warnings = calculateWarnings(nodes, branchNaming);
+  // 6. Get tree spec (設計ツリー)
+  const treeSpecs = await db
+    .select()
+    .from(schema.treeSpecs)
+    .where(eq(schema.treeSpecs.repoId, repoId));
 
-  // 7. Generate restart info for active worktree
+  const treeSpec: TreeSpec | undefined = treeSpecs[0]
+    ? {
+        id: treeSpecs[0].id,
+        repoId: treeSpecs[0].repoId,
+        specJson: JSON.parse(treeSpecs[0].specJson),
+        createdAt: treeSpecs[0].createdAt,
+        updatedAt: treeSpecs[0].updatedAt,
+      }
+    : undefined;
+
+  // 7. Calculate warnings (including tree divergence)
+  const warnings = calculateWarnings(nodes, edges, branchNaming, treeSpec);
+
+  // 8. Generate restart info for active worktree
   const activeWorktree = worktrees.find((w) => w.branch !== "HEAD");
   const restart = activeWorktree
     ? generateRestartInfo(activeWorktree, nodes, warnings, branchNaming)
@@ -90,12 +118,13 @@ scanRouter.post("/", async (c) => {
     worktrees,
     rules: { branchNaming },
     restart,
+    ...(treeSpec && { treeSpec }),
   };
 
   // Broadcast scan result
   broadcast({
     type: "scan.updated",
-    repoId: input.repoId,
+    repoId,
     data: snapshot,
   });
 
@@ -106,20 +135,12 @@ scanRouter.post("/", async (c) => {
 scanRouter.get("/restart-prompt", async (c) => {
   const query = validateOrThrow(restartPromptQuerySchema, {
     repoId: c.req.query("repoId"),
+    localPath: c.req.query("localPath"),
     planId: c.req.query("planId"),
     worktreePath: c.req.query("worktreePath"),
   });
 
-  // Get repo
-  const repos = await db
-    .select()
-    .from(schema.repos)
-    .where(eq(schema.repos.id, query.repoId));
-
-  const repo = repos[0];
-  if (!repo) {
-    throw new NotFoundError("Repo");
-  }
+  const { repoId, localPath } = query;
 
   // Get plan if provided
   let plan = null;
@@ -137,7 +158,7 @@ scanRouter.get("/restart-prompt", async (c) => {
     .from(schema.projectRules)
     .where(
       and(
-        eq(schema.projectRules.repoId, query.repoId),
+        eq(schema.projectRules.repoId, repoId),
         eq(schema.projectRules.ruleType, "branch_naming"),
         eq(schema.projectRules.isActive, true)
       )
@@ -149,7 +170,7 @@ scanRouter.get("/restart-prompt", async (c) => {
     : null;
 
   // Get git status for worktree
-  const targetPath = query.worktreePath ?? repo.path;
+  const targetPath = query.worktreePath ?? localPath;
   let gitStatus = "";
   try {
     gitStatus = execSync(`cd "${targetPath}" && git status --short`, {
@@ -159,7 +180,7 @@ scanRouter.get("/restart-prompt", async (c) => {
     gitStatus = "Unable to get git status";
   }
 
-  const prompt = `# Restart Prompt for ${repo.name}
+  const prompt = `# Restart Prompt for ${repoId}
 
 ## Project Rules
 ### Branch Naming
@@ -239,7 +260,7 @@ function getWorktrees(repoPath: string): WorktreeInfo[] {
     }
     if (current.path) worktrees.push(current as WorktreeInfo);
 
-    // Check dirty status for each worktree
+    // Check dirty status and heartbeat for each worktree
     for (const wt of worktrees) {
       try {
         const status = execSync(`cd "${wt.path}" && git status --porcelain`, {
@@ -248,6 +269,23 @@ function getWorktrees(repoPath: string): WorktreeInfo[] {
         wt.dirty = status.trim().length > 0;
       } catch {
         wt.dirty = false;
+      }
+
+      // Check heartbeat
+      const heartbeatPath = join(wt.path, ".vibetree", "heartbeat.json");
+      if (existsSync(heartbeatPath)) {
+        try {
+          const heartbeat = JSON.parse(readFileSync(heartbeatPath, "utf-8"));
+          const lastUpdate = new Date(heartbeat.updatedAt).getTime();
+          const now = Date.now();
+          // Active if updated within last 30 seconds
+          if (now - lastUpdate < 30000) {
+            wt.isActive = true;
+            wt.activeAgent = heartbeat.agent;
+          }
+        } catch {
+          // Ignore parse errors
+        }
       }
     }
 
@@ -260,17 +298,10 @@ function getWorktrees(repoPath: string): WorktreeInfo[] {
 function getPRs(repoPath: string): PRInfo[] {
   try {
     const output = execSync(
-      `cd "${repoPath}" && gh pr list --json number,title,state,url,headRefName,statusCheckRollup --limit 50`,
+      `cd "${repoPath}" && gh pr list --json number,title,state,url,headRefName,isDraft,labels,assignees,reviewDecision,statusCheckRollup,additions,deletions,changedFiles --limit 50`,
       { encoding: "utf-8" }
     );
-    const prs = JSON.parse(output) as Array<{
-      number: number;
-      title: string;
-      state: string;
-      url: string;
-      headRefName: string;
-      statusCheckRollup?: Array<{ conclusion?: string }>;
-    }>;
+    const prs: GhPR[] = JSON.parse(output);
     return prs.map((pr) => {
       const prInfo: PRInfo = {
         number: pr.number,
@@ -278,6 +309,13 @@ function getPRs(repoPath: string): PRInfo[] {
         state: pr.state,
         url: pr.url,
         branch: pr.headRefName,
+        isDraft: pr.isDraft,
+        labels: pr.labels?.map((l) => l.name) ?? [],
+        assignees: pr.assignees?.map((a) => a.login) ?? [],
+        reviewDecision: pr.reviewDecision,
+        additions: pr.additions,
+        deletions: pr.deletions,
+        changedFiles: pr.changedFiles,
       };
       const conclusion = pr.statusCheckRollup?.[0]?.conclusion;
       if (conclusion) {
@@ -310,8 +348,15 @@ function buildTree(
 
     const badges: string[] = [];
     if (worktree?.dirty) badges.push("dirty");
-    if (pr) badges.push(pr.state === "OPEN" ? "pr" : "pr-merged");
-    if (pr?.checks === "FAILURE") badges.push("ci-fail");
+    if (worktree?.isActive) badges.push("active");
+    if (pr) {
+      badges.push(pr.state === "OPEN" ? "pr" : "pr-merged");
+      if (pr.isDraft) badges.push("draft");
+      if (pr.checks === "FAILURE") badges.push("ci-fail");
+      if (pr.checks === "SUCCESS") badges.push("ci-pass");
+      if (pr.reviewDecision === "APPROVED") badges.push("approved");
+      if (pr.reviewDecision === "CHANGES_REQUESTED") badges.push("changes-requested");
+    }
 
     // Calculate ahead/behind relative to main
     let aheadBehind: { ahead: number; behind: number } | undefined;
@@ -355,7 +400,9 @@ function buildTree(
 
 function calculateWarnings(
   nodes: TreeNode[],
-  branchNaming: BranchNamingRule | null
+  edges: TreeEdge[],
+  branchNaming: BranchNamingRule | null,
+  treeSpec?: TreeSpec
 ): Warning[] {
   const warnings: Warning[] = [];
 
@@ -363,7 +410,6 @@ function calculateWarnings(
   let branchPattern: RegExp | null = null;
   if (branchNaming?.pattern) {
     try {
-      // Convert pattern like "vt/{planId}/{taskSlug}" to regex
       const regexStr = branchNaming.pattern
         .replace(/\{planId\}/g, "\\d+")
         .replace(/\{taskSlug\}/g, "[a-z0-9-]+");
@@ -425,6 +471,24 @@ function calculateWarnings(
         message: `Branch ${node.branchName} does not follow naming convention`,
         meta: { branch: node.branchName },
       });
+    }
+  }
+
+  // TREE_DIVERGENCE: Check if design tree matches git reality
+  if (treeSpec) {
+    const gitEdgeSet = new Set(edges.map((e) => `${e.parent}->${e.child}`));
+
+    // Check for edges in design but not in git
+    for (const edge of treeSpec.specJson.edges) {
+      const key = `${edge.parent}->${edge.child}`;
+      if (!gitEdgeSet.has(key)) {
+        warnings.push({
+          severity: "warn",
+          code: "TREE_DIVERGENCE",
+          message: `Design tree has ${edge.parent} -> ${edge.child} but git doesn't match`,
+          meta: { parent: edge.parent, child: edge.child, type: "missing_in_git" },
+        });
+      }
     }
   }
 

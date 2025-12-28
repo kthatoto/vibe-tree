@@ -6,6 +6,7 @@ import { projectRulesRouter } from "./routes/project-rules";
 import { planRouter } from "./routes/plan";
 import { scanRouter } from "./routes/scan";
 import { instructionsRouter } from "./routes/instructions";
+import { treeSpecRouter } from "./routes/tree-spec";
 import { errorHandler } from "./middleware/error-handler";
 import { handleWsMessage, addClient, removeClient, type WSClient } from "./ws";
 
@@ -35,6 +36,7 @@ app.route("/api/project-rules", projectRulesRouter);
 app.route("/api/plan", planRouter);
 app.route("/api/scan", scanRouter);
 app.route("/api/instructions", instructionsRouter);
+app.route("/api/tree-spec", treeSpecRouter);
 
 // 404 handler for API routes
 app.notFound((c) => {

@@ -12,21 +12,11 @@ function setupTestDb() {
   sqlite = new Database(":memory:");
   testDb = drizzle(sqlite, { schema });
 
-  // Create tables
-  sqlite.run(`
-    CREATE TABLE repos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      path TEXT NOT NULL UNIQUE,
-      name TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )
-  `);
-
+  // Create tables (repos table removed - fetched from gh CLI now)
   sqlite.run(`
     CREATE TABLE project_rules (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      repo_id INTEGER NOT NULL REFERENCES repos(id),
+      repo_id TEXT NOT NULL,
       rule_type TEXT NOT NULL,
       rule_json TEXT NOT NULL,
       is_active INTEGER NOT NULL DEFAULT 1,
@@ -38,7 +28,7 @@ function setupTestDb() {
   sqlite.run(`
     CREATE TABLE plans (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      repo_id INTEGER NOT NULL REFERENCES repos(id),
+      repo_id TEXT NOT NULL,
       title TEXT NOT NULL,
       content_md TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'draft',
@@ -64,13 +54,35 @@ function setupTestDb() {
   sqlite.run(`
     CREATE TABLE instructions_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      repo_id INTEGER NOT NULL REFERENCES repos(id),
+      repo_id TEXT NOT NULL,
       plan_id INTEGER REFERENCES plans(id),
       worktree_path TEXT,
       branch_name TEXT,
       kind TEXT NOT NULL,
       content_md TEXT NOT NULL,
       created_at TEXT NOT NULL
+    )
+  `);
+
+  sqlite.run(`
+    CREATE TABLE tree_specs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      repo_id TEXT NOT NULL,
+      spec_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+
+  sqlite.run(`
+    CREATE TABLE worktree_activity (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      worktree_path TEXT NOT NULL UNIQUE,
+      repo_id TEXT NOT NULL,
+      branch_name TEXT,
+      active_agent TEXT,
+      last_seen_at TEXT NOT NULL,
+      note TEXT
     )
   `);
 }
@@ -80,7 +92,8 @@ function clearDb() {
   sqlite.run("DELETE FROM plan_tasks");
   sqlite.run("DELETE FROM plans");
   sqlite.run("DELETE FROM project_rules");
-  sqlite.run("DELETE FROM repos");
+  sqlite.run("DELETE FROM tree_specs");
+  sqlite.run("DELETE FROM worktree_activity");
 }
 
 describe("Database Schema", () => {
@@ -96,65 +109,16 @@ describe("Database Schema", () => {
     clearDb();
   });
 
-  test("can insert and query repos", async () => {
+  test("can insert project_rules with string repoId", async () => {
     const now = new Date().toISOString();
-    const result = await testDb
-      .insert(schema.repos)
-      .values({
-        path: "/test/repo",
-        name: "test-repo",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
+    const repoId = "kthatoto/vibe-tree";
 
-    expect(result.length).toBe(1);
-    expect(result[0]?.name).toBe("test-repo");
-    expect(result[0]?.path).toBe("/test/repo");
-  });
-
-  test("repo path is unique", async () => {
-    const now = new Date().toISOString();
-    await testDb.insert(schema.repos).values({
-      path: "/test/repo",
-      name: "test-repo",
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    // Try to insert duplicate
-    expect(() => {
-      sqlite.run(
-        "INSERT INTO repos (path, name, created_at, updated_at) VALUES ('/test/repo', 'another', ?, ?)",
-        [now, now]
-      );
-    }).toThrow();
-  });
-
-  test("can insert project_rules with repo reference", async () => {
-    const now = new Date().toISOString();
-
-    // Insert repo first
-    const repos = await testDb
-      .insert(schema.repos)
-      .values({
-        path: "/test/repo",
-        name: "test-repo",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-
-    const repoId = repos[0]?.id;
-    expect(repoId).toBeDefined();
-
-    // Insert project rule
     const rules = await testDb
       .insert(schema.projectRules)
       .values({
-        repoId: repoId!,
+        repoId,
         ruleType: "branch_naming",
-        ruleJson: JSON.stringify({ pattern: "test/{id}" }),
+        ruleJson: JSON.stringify({ pattern: "vt/{planId}/{taskSlug}" }),
         isActive: true,
         createdAt: now,
         updatedAt: now,
@@ -163,25 +127,13 @@ describe("Database Schema", () => {
 
     expect(rules.length).toBe(1);
     expect(rules[0]?.ruleType).toBe("branch_naming");
+    expect(rules[0]?.repoId).toBe("kthatoto/vibe-tree");
   });
 
   test("can insert and query plans", async () => {
     const now = new Date().toISOString();
+    const repoId = "owner/repo-name";
 
-    // Insert repo
-    const repos = await testDb
-      .insert(schema.repos)
-      .values({
-        path: "/test/repo",
-        name: "test-repo",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-
-    const repoId = repos[0]?.id!;
-
-    // Insert plan
     const plans = await testDb
       .insert(schema.plans)
       .values({
@@ -197,25 +149,13 @@ describe("Database Schema", () => {
     expect(plans.length).toBe(1);
     expect(plans[0]?.title).toBe("Test Plan");
     expect(plans[0]?.status).toBe("draft");
+    expect(plans[0]?.repoId).toBe("owner/repo-name");
   });
 
   test("can update plan status", async () => {
     const now = new Date().toISOString();
+    const repoId = "owner/repo";
 
-    // Insert repo
-    const repos = await testDb
-      .insert(schema.repos)
-      .values({
-        path: "/test/repo",
-        name: "test-repo",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-
-    const repoId = repos[0]?.id!;
-
-    // Insert plan
     const plans = await testDb
       .insert(schema.plans)
       .values({
@@ -229,7 +169,6 @@ describe("Database Schema", () => {
 
     const planId = plans[0]?.id!;
 
-    // Update plan
     const updated = await testDb
       .update(schema.plans)
       .set({ status: "committed", updatedAt: now })
@@ -241,21 +180,8 @@ describe("Database Schema", () => {
 
   test("can insert instructions_log", async () => {
     const now = new Date().toISOString();
+    const repoId = "org/project";
 
-    // Insert repo
-    const repos = await testDb
-      .insert(schema.repos)
-      .values({
-        path: "/test/repo",
-        name: "test-repo",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-
-    const repoId = repos[0]?.id!;
-
-    // Insert instruction log
     const logs = await testDb
       .insert(schema.instructionsLog)
       .values({
@@ -268,25 +194,13 @@ describe("Database Schema", () => {
 
     expect(logs.length).toBe(1);
     expect(logs[0]?.kind).toBe("user_instruction");
+    expect(logs[0]?.repoId).toBe("org/project");
   });
 
   test("can insert plan_tasks", async () => {
     const now = new Date().toISOString();
+    const repoId = "owner/repo";
 
-    // Insert repo
-    const repos = await testDb
-      .insert(schema.repos)
-      .values({
-        path: "/test/repo",
-        name: "test-repo",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-
-    const repoId = repos[0]?.id!;
-
-    // Insert plan
     const plans = await testDb
       .insert(schema.plans)
       .values({
@@ -299,7 +213,6 @@ describe("Database Schema", () => {
 
     const planId = plans[0]?.id!;
 
-    // Insert task
     const tasks = await testDb
       .insert(schema.planTasks)
       .values({
@@ -316,6 +229,72 @@ describe("Database Schema", () => {
     expect(tasks.length).toBe(1);
     expect(tasks[0]?.title).toBe("Task 1");
     expect(tasks[0]?.status).toBe("todo");
+  });
+
+  test("can insert and query tree_specs", async () => {
+    const now = new Date().toISOString();
+    const repoId = "kthatoto/vibe-tree";
+    const specJson = JSON.stringify({
+      nodes: [{ branchName: "main" }, { branchName: "feature/auth" }],
+      edges: [{ parent: "main", child: "feature/auth" }],
+    });
+
+    const specs = await testDb
+      .insert(schema.treeSpecs)
+      .values({
+        repoId,
+        specJson,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    expect(specs.length).toBe(1);
+    expect(specs[0]?.repoId).toBe("kthatoto/vibe-tree");
+
+    const parsed = JSON.parse(specs[0]?.specJson ?? "{}");
+    expect(parsed.nodes.length).toBe(2);
+    expect(parsed.edges.length).toBe(1);
+  });
+
+  test("can insert and query worktree_activity", async () => {
+    const now = new Date().toISOString();
+    const repoId = "owner/repo";
+
+    const activities = await testDb
+      .insert(schema.worktreeActivity)
+      .values({
+        worktreePath: "/path/to/worktree",
+        repoId,
+        branchName: "feature/test",
+        activeAgent: "claude",
+        lastSeenAt: now,
+        note: "Working on feature",
+      })
+      .returning();
+
+    expect(activities.length).toBe(1);
+    expect(activities[0]?.worktreePath).toBe("/path/to/worktree");
+    expect(activities[0]?.activeAgent).toBe("claude");
+  });
+
+  test("worktree_path is unique", async () => {
+    const now = new Date().toISOString();
+    const repoId = "owner/repo";
+
+    await testDb.insert(schema.worktreeActivity).values({
+      worktreePath: "/unique/path",
+      repoId,
+      lastSeenAt: now,
+    });
+
+    // Try to insert duplicate
+    expect(() => {
+      sqlite.run(
+        "INSERT INTO worktree_activity (worktree_path, repo_id, last_seen_at) VALUES ('/unique/path', 'another/repo', ?)",
+        [now]
+      );
+    }).toThrow();
   });
 });
 
@@ -349,5 +328,20 @@ describe("Shared Types", () => {
     };
     expect(node.branchName).toBeDefined();
     expect(Array.isArray(node.badges)).toBe(true);
+  });
+
+  test("TreeSpec structure", () => {
+    const spec = {
+      id: 1,
+      repoId: "owner/repo",
+      specJson: {
+        nodes: [{ branchName: "main" }],
+        edges: [],
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    expect(spec.repoId).toBe("owner/repo");
+    expect(Array.isArray(spec.specJson.nodes)).toBe(true);
   });
 });

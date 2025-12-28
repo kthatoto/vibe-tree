@@ -1,11 +1,14 @@
 // Shared types between backend and frontend
 
+// Repo from GitHub
 export interface Repo {
-  id: number;
-  path: string;
+  id: string; // owner/name format
   name: string;
-  createdAt: string;
-  updatedAt: string;
+  fullName: string;
+  url: string;
+  description: string;
+  isPrivate: boolean;
+  defaultBranch: string;
 }
 
 export interface BranchNamingRule {
@@ -16,7 +19,7 @@ export interface BranchNamingRule {
 
 export interface ProjectRule {
   id: number;
-  repoId: number;
+  repoId: string; // owner/name format
   ruleType: "branch_naming";
   ruleJson: BranchNamingRule;
   isActive: boolean;
@@ -28,7 +31,7 @@ export type PlanStatus = "draft" | "committed";
 
 export interface Plan {
   id: number;
-  repoId: number;
+  repoId: string;
   title: string;
   contentMd: string;
   status: PlanStatus;
@@ -57,7 +60,7 @@ export type InstructionKind =
 
 export interface InstructionLog {
   id: number;
-  repoId: number;
+  repoId: string;
   planId: number | null;
   worktreePath: string | null;
   branchName: string | null;
@@ -72,6 +75,8 @@ export interface WorktreeInfo {
   branch: string;
   commit: string;
   dirty: boolean;
+  isActive?: boolean; // heartbeat active
+  activeAgent?: string; // e.g., "claude"
 }
 
 export interface PRInfo {
@@ -80,7 +85,25 @@ export interface PRInfo {
   state: string;
   url: string;
   branch: string;
-  checks?: string;
+  isDraft?: boolean;
+  labels?: string[];
+  assignees?: string[];
+  reviewDecision?: string; // APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED
+  checks?: string; // SUCCESS, FAILURE, PENDING
+  additions?: number;
+  deletions?: number;
+  changedFiles?: number;
+}
+
+export interface IssueInfo {
+  number: number;
+  title: string;
+  state: string;
+  url: string;
+  labels?: string[];
+  assignees?: string[];
+  parentIssue?: number;
+  childIssues?: number[];
 }
 
 export type WarningSeverity = "warn" | "error";
@@ -89,7 +112,8 @@ export type WarningCode =
   | "DIRTY"
   | "CI_FAIL"
   | "ORDER_BROKEN"
-  | "BRANCH_NAMING_VIOLATION";
+  | "BRANCH_NAMING_VIOLATION"
+  | "TREE_DIVERGENCE"; // 設計ツリーとGit実態の乖離
 
 export interface Warning {
   severity: WarningSeverity;
@@ -102,6 +126,7 @@ export interface TreeNode {
   branchName: string;
   badges: string[];
   pr?: PRInfo;
+  issue?: IssueInfo;
   worktree?: WorktreeInfo;
   lastCommitAt: string;
   aheadBehind?: { ahead: number; behind: number };
@@ -113,12 +138,37 @@ export interface TreeEdge {
   parent: string;
   child: string;
   confidence: EdgeConfidence;
+  isDesigned?: boolean; // true if from tree_specs (設計ツリー)
 }
 
 export interface RestartInfo {
   worktreePath: string;
   cdCommand: string;
   restartPromptMd: string;
+}
+
+// 設計ツリー (tree_specs)
+export interface TreeSpec {
+  id: number;
+  repoId: string;
+  specJson: {
+    nodes: TreeSpecNode[];
+    edges: TreeSpecEdge[];
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TreeSpecNode {
+  branchName: string;
+  intendedIssue?: number;
+  intendedPr?: number;
+  description?: string;
+}
+
+export interface TreeSpecEdge {
+  parent: string;
+  child: string;
 }
 
 export interface ScanSnapshot {
@@ -128,6 +178,7 @@ export interface ScanSnapshot {
   worktrees: WorktreeInfo[];
   rules: { branchNaming: BranchNamingRule | null };
   restart: RestartInfo | null;
+  treeSpec?: TreeSpec; // 設計ツリー
 }
 
 // WebSocket message types
@@ -139,6 +190,6 @@ export type WSMessageType =
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;
-  repoId?: number;
+  repoId?: string;
   data?: T;
 }

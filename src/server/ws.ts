@@ -1,6 +1,6 @@
 export interface WSClient {
   send(data: string): void;
-  data?: { repoId?: number };
+  data?: { repoId?: string };
 }
 
 const clients: WSClient[] = [];
@@ -30,7 +30,7 @@ export function handleWsMessage(ws: WSClient, message: string | Buffer) {
   }
 }
 
-export function broadcast(message: { type: string; repoId?: number; data?: unknown }) {
+export function broadcast(message: { type: string; repoId?: string; data?: unknown }) {
   const json = JSON.stringify(message);
   for (const client of clients) {
     // Send to all clients or only to clients subscribed to this repo

@@ -1,15 +1,7 @@
 import { z } from "zod";
 
-// Repo schemas
-export const createRepoSchema = z.object({
-  path: z
-    .string()
-    .min(1, "Path is required")
-    .refine((p) => p.startsWith("/"), "Path must be absolute"),
-  name: z.string().optional(),
-});
-
-export type CreateRepoInput = z.infer<typeof createRepoSchema>;
+// Repo ID format: owner/name (e.g., "kthatoto/vibe-tree")
+const repoIdSchema = z.string().min(1).regex(/^[^/]+\/[^/]+$/, "Invalid repo ID format (expected owner/name)");
 
 // Branch naming schemas
 export const branchNamingRuleSchema = z.object({
@@ -19,7 +11,7 @@ export const branchNamingRuleSchema = z.object({
 });
 
 export const updateBranchNamingSchema = z.object({
-  repoId: z.number().int().positive("Valid repoId is required"),
+  repoId: repoIdSchema,
   pattern: z.string().min(1, "Pattern is required"),
   description: z.string().default(""),
   examples: z.array(z.string()).default([]),
@@ -29,7 +21,7 @@ export type UpdateBranchNamingInput = z.infer<typeof updateBranchNamingSchema>;
 
 // Plan schemas
 export const startPlanSchema = z.object({
-  repoId: z.number().int().positive("Valid repoId is required"),
+  repoId: repoIdSchema,
   title: z.string().min(1, "Title is required").max(200, "Title too long"),
 });
 
@@ -44,13 +36,15 @@ export type UpdatePlanInput = z.infer<typeof updatePlanSchema>;
 
 export const commitPlanSchema = z.object({
   planId: z.number().int().positive("Valid planId is required"),
+  localPath: z.string().min(1, "Local path is required"),
 });
 
 export type CommitPlanInput = z.infer<typeof commitPlanSchema>;
 
 // Scan schemas
 export const scanSchema = z.object({
-  repoId: z.number().int().positive("Valid repoId is required"),
+  repoId: repoIdSchema,
+  localPath: z.string().min(1, "Local path is required"),
 });
 
 export type ScanInput = z.infer<typeof scanSchema>;
@@ -63,7 +57,7 @@ export const instructionKindSchema = z.enum([
 ]);
 
 export const logInstructionSchema = z.object({
-  repoId: z.number().int().positive("Valid repoId is required"),
+  repoId: repoIdSchema,
   planId: z.number().int().positive().nullable().optional(),
   worktreePath: z.string().nullable().optional(),
   branchName: z.string().nullable().optional(),
@@ -73,13 +67,35 @@ export const logInstructionSchema = z.object({
 
 export type LogInstructionInput = z.infer<typeof logInstructionSchema>;
 
+// Tree spec schemas
+export const treeSpecNodeSchema = z.object({
+  branchName: z.string().min(1),
+  intendedIssue: z.number().int().positive().optional(),
+  intendedPr: z.number().int().positive().optional(),
+  description: z.string().optional(),
+});
+
+export const treeSpecEdgeSchema = z.object({
+  parent: z.string().min(1),
+  child: z.string().min(1),
+});
+
+export const updateTreeSpecSchema = z.object({
+  repoId: repoIdSchema,
+  nodes: z.array(treeSpecNodeSchema),
+  edges: z.array(treeSpecEdgeSchema),
+});
+
+export type UpdateTreeSpecInput = z.infer<typeof updateTreeSpecSchema>;
+
 // Query param schemas
 export const repoIdQuerySchema = z.object({
-  repoId: z.coerce.number().int().positive("Valid repoId is required"),
+  repoId: repoIdSchema,
 });
 
 export const restartPromptQuerySchema = z.object({
-  repoId: z.coerce.number().int().positive("Valid repoId is required"),
+  repoId: repoIdSchema,
+  localPath: z.string().min(1),
   planId: z.coerce.number().int().positive().optional(),
   worktreePath: z.string().optional(),
 });

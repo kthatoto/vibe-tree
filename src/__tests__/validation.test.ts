@@ -1,6 +1,5 @@
 import { describe, test, expect } from "bun:test";
 import {
-  createRepoSchema,
   updateBranchNamingSchema,
   startPlanSchema,
   updatePlanSchema,
@@ -9,50 +8,15 @@ import {
   logInstructionSchema,
   repoIdQuerySchema,
   restartPromptQuerySchema,
+  updateTreeSpecSchema,
   validateOrThrow,
   ValidationError,
 } from "../shared/validation";
 
-describe("createRepoSchema", () => {
-  test("accepts valid absolute path", () => {
-    const result = createRepoSchema.safeParse({ path: "/Users/test/repo" });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.path).toBe("/Users/test/repo");
-    }
-  });
-
-  test("accepts path with optional name", () => {
-    const result = createRepoSchema.safeParse({
-      path: "/Users/test/repo",
-      name: "my-repo",
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.name).toBe("my-repo");
-    }
-  });
-
-  test("rejects empty path", () => {
-    const result = createRepoSchema.safeParse({ path: "" });
-    expect(result.success).toBe(false);
-  });
-
-  test("rejects relative path", () => {
-    const result = createRepoSchema.safeParse({ path: "relative/path" });
-    expect(result.success).toBe(false);
-  });
-
-  test("rejects missing path", () => {
-    const result = createRepoSchema.safeParse({});
-    expect(result.success).toBe(false);
-  });
-});
-
 describe("updateBranchNamingSchema", () => {
   test("accepts valid input", () => {
     const result = updateBranchNamingSchema.safeParse({
-      repoId: 1,
+      repoId: "owner/repo",
       pattern: "vt/{planId}/{taskSlug}",
       description: "Test description",
       examples: ["vt/1/feature"],
@@ -62,7 +26,7 @@ describe("updateBranchNamingSchema", () => {
 
   test("uses defaults for optional fields", () => {
     const result = updateBranchNamingSchema.safeParse({
-      repoId: 1,
+      repoId: "owner/repo",
       pattern: "vt/{planId}/{taskSlug}",
     });
     expect(result.success).toBe(true);
@@ -72,17 +36,17 @@ describe("updateBranchNamingSchema", () => {
     }
   });
 
-  test("rejects invalid repoId", () => {
+  test("rejects invalid repoId format", () => {
     const result = updateBranchNamingSchema.safeParse({
-      repoId: 0,
+      repoId: "invalid",
       pattern: "vt/{planId}/{taskSlug}",
     });
     expect(result.success).toBe(false);
   });
 
-  test("rejects negative repoId", () => {
+  test("rejects repoId with multiple slashes", () => {
     const result = updateBranchNamingSchema.safeParse({
-      repoId: -1,
+      repoId: "owner/repo/extra",
       pattern: "vt/{planId}/{taskSlug}",
     });
     expect(result.success).toBe(false);
@@ -90,7 +54,7 @@ describe("updateBranchNamingSchema", () => {
 
   test("rejects empty pattern", () => {
     const result = updateBranchNamingSchema.safeParse({
-      repoId: 1,
+      repoId: "owner/repo",
       pattern: "",
     });
     expect(result.success).toBe(false);
@@ -100,7 +64,7 @@ describe("updateBranchNamingSchema", () => {
 describe("startPlanSchema", () => {
   test("accepts valid input", () => {
     const result = startPlanSchema.safeParse({
-      repoId: 1,
+      repoId: "owner/repo",
       title: "My Plan",
     });
     expect(result.success).toBe(true);
@@ -108,7 +72,7 @@ describe("startPlanSchema", () => {
 
   test("rejects empty title", () => {
     const result = startPlanSchema.safeParse({
-      repoId: 1,
+      repoId: "owner/repo",
       title: "",
     });
     expect(result.success).toBe(false);
@@ -116,7 +80,7 @@ describe("startPlanSchema", () => {
 
   test("rejects too long title", () => {
     const result = startPlanSchema.safeParse({
-      repoId: 1,
+      repoId: "owner/repo",
       title: "a".repeat(201),
     });
     expect(result.success).toBe(false);
@@ -124,7 +88,7 @@ describe("startPlanSchema", () => {
 
   test("accepts title at max length", () => {
     const result = startPlanSchema.safeParse({
-      repoId: 1,
+      repoId: "owner/repo",
       title: "a".repeat(200),
     });
     expect(result.success).toBe(true);
@@ -160,30 +124,67 @@ describe("updatePlanSchema", () => {
 });
 
 describe("commitPlanSchema", () => {
-  test("accepts valid planId", () => {
-    const result = commitPlanSchema.safeParse({ planId: 1 });
+  test("accepts valid input with planId and localPath", () => {
+    const result = commitPlanSchema.safeParse({
+      planId: 1,
+      localPath: "/path/to/repo",
+    });
     expect(result.success).toBe(true);
   });
 
   test("rejects invalid planId", () => {
-    const result = commitPlanSchema.safeParse({ planId: 0 });
+    const result = commitPlanSchema.safeParse({
+      planId: 0,
+      localPath: "/path/to/repo",
+    });
     expect(result.success).toBe(false);
   });
 
   test("rejects missing planId", () => {
-    const result = commitPlanSchema.safeParse({});
+    const result = commitPlanSchema.safeParse({
+      localPath: "/path/to/repo",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects missing localPath", () => {
+    const result = commitPlanSchema.safeParse({
+      planId: 1,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects empty localPath", () => {
+    const result = commitPlanSchema.safeParse({
+      planId: 1,
+      localPath: "",
+    });
     expect(result.success).toBe(false);
   });
 });
 
 describe("scanSchema", () => {
-  test("accepts valid repoId", () => {
-    const result = scanSchema.safeParse({ repoId: 1 });
+  test("accepts valid repoId and localPath", () => {
+    const result = scanSchema.safeParse({
+      repoId: "owner/repo",
+      localPath: "/path/to/repo",
+    });
     expect(result.success).toBe(true);
   });
 
-  test("rejects invalid repoId", () => {
-    const result = scanSchema.safeParse({ repoId: -1 });
+  test("rejects invalid repoId format", () => {
+    const result = scanSchema.safeParse({
+      repoId: "invalid",
+      localPath: "/path/to/repo",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects empty localPath", () => {
+    const result = scanSchema.safeParse({
+      repoId: "owner/repo",
+      localPath: "",
+    });
     expect(result.success).toBe(false);
   });
 });
@@ -191,7 +192,7 @@ describe("scanSchema", () => {
 describe("logInstructionSchema", () => {
   test("accepts valid user_instruction", () => {
     const result = logInstructionSchema.safeParse({
-      repoId: 1,
+      repoId: "owner/repo",
       kind: "user_instruction",
       contentMd: "Do something",
     });
@@ -200,7 +201,7 @@ describe("logInstructionSchema", () => {
 
   test("accepts valid director_suggestion", () => {
     const result = logInstructionSchema.safeParse({
-      repoId: 1,
+      repoId: "owner/repo",
       kind: "director_suggestion",
       contentMd: "Suggestion content",
     });
@@ -209,7 +210,7 @@ describe("logInstructionSchema", () => {
 
   test("accepts valid system_note", () => {
     const result = logInstructionSchema.safeParse({
-      repoId: 1,
+      repoId: "owner/repo",
       kind: "system_note",
       contentMd: "System note",
     });
@@ -218,7 +219,7 @@ describe("logInstructionSchema", () => {
 
   test("accepts optional fields", () => {
     const result = logInstructionSchema.safeParse({
-      repoId: 1,
+      repoId: "owner/repo",
       planId: 5,
       worktreePath: "/path/to/worktree",
       branchName: "feature-branch",
@@ -230,7 +231,7 @@ describe("logInstructionSchema", () => {
 
   test("rejects invalid kind", () => {
     const result = logInstructionSchema.safeParse({
-      repoId: 1,
+      repoId: "owner/repo",
       kind: "invalid_kind",
       contentMd: "Content",
     });
@@ -239,7 +240,7 @@ describe("logInstructionSchema", () => {
 
   test("rejects empty contentMd", () => {
     const result = logInstructionSchema.safeParse({
-      repoId: 1,
+      repoId: "owner/repo",
       kind: "user_instruction",
       contentMd: "",
     });
@@ -248,70 +249,115 @@ describe("logInstructionSchema", () => {
 });
 
 describe("repoIdQuerySchema", () => {
-  test("coerces string to number", () => {
-    const result = repoIdQuerySchema.safeParse({ repoId: "1" });
+  test("accepts valid repoId format", () => {
+    const result = repoIdQuerySchema.safeParse({ repoId: "owner/repo" });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.repoId).toBe(1);
+      expect(result.data.repoId).toBe("owner/repo");
     }
   });
 
-  test("accepts number directly", () => {
-    const result = repoIdQuerySchema.safeParse({ repoId: 5 });
+  test("accepts repoId with dashes and underscores", () => {
+    const result = repoIdQuerySchema.safeParse({ repoId: "my-org/my_repo-name" });
     expect(result.success).toBe(true);
   });
 
-  test("rejects non-numeric string", () => {
-    const result = repoIdQuerySchema.safeParse({ repoId: "abc" });
+  test("rejects repoId without slash", () => {
+    const result = repoIdQuerySchema.safeParse({ repoId: "invalid" });
     expect(result.success).toBe(false);
   });
 
-  test("rejects zero", () => {
-    const result = repoIdQuerySchema.safeParse({ repoId: "0" });
+  test("rejects empty repoId", () => {
+    const result = repoIdQuerySchema.safeParse({ repoId: "" });
     expect(result.success).toBe(false);
   });
 });
 
 describe("restartPromptQuerySchema", () => {
   test("accepts minimal input", () => {
-    const result = restartPromptQuerySchema.safeParse({ repoId: "1" });
+    const result = restartPromptQuerySchema.safeParse({
+      repoId: "owner/repo",
+      localPath: "/path/to/repo",
+    });
     expect(result.success).toBe(true);
   });
 
   test("accepts all optional fields", () => {
     const result = restartPromptQuerySchema.safeParse({
-      repoId: "1",
+      repoId: "owner/repo",
+      localPath: "/path/to/repo",
       planId: "2",
       worktreePath: "/path/to/worktree",
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.repoId).toBe(1);
+      expect(result.data.repoId).toBe("owner/repo");
       expect(result.data.planId).toBe(2);
       expect(result.data.worktreePath).toBe("/path/to/worktree");
     }
   });
 });
 
+describe("updateTreeSpecSchema", () => {
+  test("accepts valid tree spec", () => {
+    const result = updateTreeSpecSchema.safeParse({
+      repoId: "owner/repo",
+      nodes: [
+        { branchName: "main" },
+        { branchName: "feature/auth", intendedIssue: 123 },
+      ],
+      edges: [{ parent: "main", child: "feature/auth" }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("accepts empty nodes and edges", () => {
+    const result = updateTreeSpecSchema.safeParse({
+      repoId: "owner/repo",
+      nodes: [],
+      edges: [],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("rejects invalid repoId", () => {
+    const result = updateTreeSpecSchema.safeParse({
+      repoId: "invalid",
+      nodes: [],
+      edges: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects empty branchName in nodes", () => {
+    const result = updateTreeSpecSchema.safeParse({
+      repoId: "owner/repo",
+      nodes: [{ branchName: "" }],
+      edges: [],
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
 describe("validateOrThrow", () => {
   test("returns data on success", () => {
-    const result = validateOrThrow(createRepoSchema, { path: "/test/path" });
-    expect(result.path).toBe("/test/path");
+    const result = validateOrThrow(repoIdQuerySchema, { repoId: "owner/repo" });
+    expect(result.repoId).toBe("owner/repo");
   });
 
   test("throws ValidationError on failure", () => {
     expect(() => {
-      validateOrThrow(createRepoSchema, { path: "" });
+      validateOrThrow(repoIdQuerySchema, { repoId: "" });
     }).toThrow(ValidationError);
   });
 
   test("ValidationError has correct message", () => {
     try {
-      validateOrThrow(createRepoSchema, {});
+      validateOrThrow(repoIdQuerySchema, {});
       expect(true).toBe(false); // Should not reach here
     } catch (error) {
       expect(error).toBeInstanceOf(ValidationError);
-      expect((error as ValidationError).message).toContain("path");
+      expect((error as ValidationError).message).toContain("repoId");
     }
   });
 });

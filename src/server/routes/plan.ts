@@ -112,17 +112,6 @@ planRouter.post("/commit", async (c) => {
     throw new NotFoundError("Plan");
   }
 
-  // Get repo
-  const repos = await db
-    .select()
-    .from(schema.repos)
-    .where(eq(schema.repos.id, plan.repoId));
-
-  const repo = repos[0];
-  if (!repo) {
-    throw new NotFoundError("Repo");
-  }
-
   // Get branch naming rule
   const rules = await db
     .select()
@@ -148,7 +137,7 @@ planRouter.post("/commit", async (c) => {
     const escapedTitle = plan.title.replace(/"/g, '\\"');
     const escapedBody = issueBody.replace(/"/g, '\\"').replace(/\n/g, "\\n");
     const result = execSync(
-      `cd "${repo.path}" && gh issue create --title "${escapedTitle}" --body "${escapedBody}"`,
+      `cd "${input.localPath}" && gh issue create --title "${escapedTitle}" --body "${escapedBody}"`,
       { encoding: "utf-8" }
     );
     issueUrl = result.trim();

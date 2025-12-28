@@ -1,89 +1,83 @@
 import { Hono } from "hono";
-import { db, schema } from "../../db";
-import { eq } from "drizzle-orm";
-import {
-  createRepoSchema,
-  validateOrThrow,
-} from "../../shared/validation";
+import { execSync } from "child_process";
 import { NotFoundError } from "../middleware/error-handler";
+
+interface GhRepo {
+  name: string;
+  nameWithOwner: string;
+  url: string;
+  description: string;
+  isPrivate: boolean;
+  defaultBranchRef: { name: string } | null;
+}
+
+interface RepoInfo {
+  id: string;
+  name: string;
+  fullName: string;
+  url: string;
+  description: string;
+  isPrivate: boolean;
+  defaultBranch: string;
+}
 
 export const reposRouter = new Hono();
 
-// GET /api/repos
+// GET /api/repos - List repos from GitHub
 reposRouter.get("/", async (c) => {
-  const repos = await db.select().from(schema.repos);
-  return c.json(repos);
+  const limit = parseInt(c.req.query("limit") ?? "30");
+
+  try {
+    const output = execSync(
+      `gh repo list --json name,nameWithOwner,url,description,isPrivate,defaultBranchRef --limit ${limit}`,
+      { encoding: "utf-8" }
+    );
+
+    const ghRepos: GhRepo[] = JSON.parse(output);
+
+    const repos: RepoInfo[] = ghRepos.map((r) => ({
+      id: r.nameWithOwner,
+      name: r.name,
+      fullName: r.nameWithOwner,
+      url: r.url,
+      description: r.description ?? "",
+      isPrivate: r.isPrivate,
+      defaultBranch: r.defaultBranchRef?.name ?? "main",
+    }));
+
+    return c.json(repos);
+  } catch (error) {
+    console.error("Failed to fetch repos from gh:", error);
+    return c.json([]);
+  }
 });
 
-// POST /api/repos - Register a new repo
-reposRouter.post("/", async (c) => {
-  const body = await c.req.json();
-  const input = validateOrThrow(createRepoSchema, body);
+// GET /api/repos/:owner/:name - Get single repo info
+reposRouter.get("/:owner/:name", async (c) => {
+  const owner = c.req.param("owner");
+  const name = c.req.param("name");
+  const fullName = `${owner}/${name}`;
 
-  const repoName = input.name ?? input.path.split("/").pop() ?? "unknown";
-  const now = new Date().toISOString();
+  try {
+    const output = execSync(
+      `gh repo view ${fullName} --json name,nameWithOwner,url,description,isPrivate,defaultBranchRef`,
+      { encoding: "utf-8" }
+    );
 
-  // Check if repo already exists
-  const existing = await db
-    .select()
-    .from(schema.repos)
-    .where(eq(schema.repos.path, input.path));
+    const r: GhRepo = JSON.parse(output);
 
-  if (existing.length > 0) {
-    return c.json(existing[0]);
-  }
+    const repo: RepoInfo = {
+      id: r.nameWithOwner,
+      name: r.name,
+      fullName: r.nameWithOwner,
+      url: r.url,
+      description: r.description ?? "",
+      isPrivate: r.isPrivate,
+      defaultBranch: r.defaultBranchRef?.name ?? "main",
+    };
 
-  // Insert repo
-  const result = await db
-    .insert(schema.repos)
-    .values({
-      path: input.path,
-      name: repoName,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning();
-
-  const repo = result[0];
-  if (!repo) {
-    throw new Error("Failed to create repo");
-  }
-
-  // Initialize branch_naming rule
-  const defaultBranchNaming = {
-    pattern: "vt/{planId}/{taskSlug}",
-    description: "Default branch naming pattern for Vibe Tree",
-    examples: ["vt/1/add-auth", "vt/2/fix-bug", "vt/3/refactor-api"],
-  };
-
-  await db.insert(schema.projectRules).values({
-    repoId: repo.id,
-    ruleType: "branch_naming",
-    ruleJson: JSON.stringify(defaultBranchNaming),
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  return c.json(repo, 201);
-});
-
-// GET /api/repos/:id
-reposRouter.get("/:id", async (c) => {
-  const id = parseInt(c.req.param("id"));
-  if (isNaN(id)) {
+    return c.json(repo);
+  } catch {
     throw new NotFoundError("Repo");
   }
-
-  const repos = await db
-    .select()
-    .from(schema.repos)
-    .where(eq(schema.repos.id, id));
-
-  const repo = repos[0];
-  if (!repo) {
-    throw new NotFoundError("Repo");
-  }
-
-  return c.json(repo);
 });

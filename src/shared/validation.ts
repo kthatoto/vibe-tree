@@ -120,6 +120,15 @@ export const useRepoPinSchema = z.object({
 
 export type UseRepoPinInput = z.infer<typeof useRepoPinSchema>;
 
+// Branch schemas
+export const createBranchSchema = z.object({
+  localPath: z.string().min(1, "Local path is required"),
+  branchName: z.string().min(1, "Branch name is required"),
+  baseBranch: z.string().min(1, "Base branch is required"),
+});
+
+export type CreateBranchInput = z.infer<typeof createBranchSchema>;
+
 // AI agent schemas
 export const aiStartSchema = z.object({
   localPath: z.string().min(1, "Local path is required"),

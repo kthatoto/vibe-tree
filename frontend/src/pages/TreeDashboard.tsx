@@ -260,6 +260,65 @@ export default function TreeDashboard() {
     );
   };
 
+  // Generate branch name from task title
+  const generateBranchName = (title: string): string => {
+    const slug = title
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .substring(0, 50);
+    // Use branch naming rule if available
+    const pattern = snapshot?.rules?.branchNaming?.pattern;
+    if (pattern && pattern.includes("{taskSlug}")) {
+      return pattern.replace("{taskSlug}", slug);
+    }
+    return `task/${slug}`;
+  };
+
+  // Start task: create branch and update status
+  const handleStartTask = async (taskId: string) => {
+    if (!selectedPin || !snapshot) return;
+
+    const task = wizardNodes.find((n) => n.id === taskId);
+    if (!task) return;
+
+    // Don't start if already has a branch
+    if (task.branchName) {
+      setError("Task already has a branch");
+      return;
+    }
+
+    const branchName = generateBranchName(task.title);
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Create the git branch
+      await api.createBranch(selectedPin.localPath, branchName, wizardBaseBranch);
+
+      // Update task with branch name and status
+      const updatedNodes = wizardNodes.map((n) =>
+        n.id === taskId ? { ...n, branchName, status: "doing" as TaskStatus } : n
+      );
+      setWizardNodes(updatedNodes);
+
+      // Save tree spec
+      await api.updateTreeSpec({
+        repoId: snapshot.repoId,
+        baseBranch: wizardBaseBranch,
+        nodes: updatedNodes,
+        edges: wizardEdges,
+      });
+
+      // Rescan to update graph
+      await handleScan(selectedPin.localPath);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSaveTreeSpec = async () => {
     if (!snapshot?.repoId) return;
     setLoading(true);
@@ -271,11 +330,11 @@ export default function TreeDashboard() {
         nodes: wizardNodes,
         edges: wizardEdges,
       });
-      setShowTreeWizard(false);
-      // Rescan to update the view
+      // Rescan first, then close modal to prevent flicker
       if (selectedPin) {
         await handleScan(selectedPin.localPath);
       }
+      setShowTreeWizard(false);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -767,6 +826,15 @@ export default function TreeDashboard() {
                             <option value="done">Done</option>
                           </select>
                           <span className="wizard-task__title">{task.title}</span>
+                          {!task.branchName && task.status === "todo" && (
+                            <button
+                              className="wizard-task__start"
+                              onClick={() => handleStartTask(task.id)}
+                              disabled={loading}
+                            >
+                              Start
+                            </button>
+                          )}
                           <button
                             className="wizard-task__remove"
                             onClick={() => handleRemoveWizardTask(task.id)}
@@ -1748,6 +1816,23 @@ export default function TreeDashboard() {
           flex: 1;
           font-weight: 600;
           font-size: 14px;
+        }
+        .wizard-task__start {
+          background: #4CAF50;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          padding: 4px 12px;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .wizard-task__start:hover {
+          background: #45a049;
+        }
+        .wizard-task__start:disabled {
+          background: #ccc;
+          cursor: not-allowed;
         }
         .wizard-task__remove {
           background: #fee;

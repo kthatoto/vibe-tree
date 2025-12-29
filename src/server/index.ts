@@ -10,6 +10,7 @@ import { treeSpecRouter } from "./routes/tree-spec";
 import { repoPinsRouter } from "./routes/repo-pins";
 import { aiRouter } from "./routes/ai";
 import { chatRouter } from "./routes/chat";
+import { branchRouter } from "./routes/branch";
 import { errorHandler } from "./middleware/error-handler";
 import { handleWsMessage, addClient, removeClient, type WSClient } from "./ws";
 
@@ -49,6 +50,7 @@ app.route("/api/tree-spec", treeSpecRouter);
 app.route("/api/repo-pins", repoPinsRouter);
 app.route("/api/ai", aiRouter);
 app.route("/api/chat", chatRouter);
+app.route("/api/branch", branchRouter);
 
 // 404 handler for API routes
 app.notFound((c) => {

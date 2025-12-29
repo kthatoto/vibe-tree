@@ -376,6 +376,16 @@ export const api = {
     return fetchJson<{ sessions: AgentSession[] }>(`${API_BASE}/ai/sessions${params}`);
   },
 
+  // Branch
+  createBranch: (localPath: string, branchName: string, baseBranch: string) =>
+    fetchJson<{ success: boolean; branchName: string; baseBranch: string }>(
+      `${API_BASE}/branch/create`,
+      {
+        method: "POST",
+        body: JSON.stringify({ localPath, branchName, baseBranch }),
+      }
+    ),
+
   // Chat
   getChatSessions: (repoId: string) =>
     fetchJson<ChatSession[]>(`${API_BASE}/chat/sessions?repoId=${encodeURIComponent(repoId)}`),

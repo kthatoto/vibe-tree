@@ -6,8 +6,6 @@ import {
   type ScanSnapshot,
   type TreeNode,
   type RepoPin,
-  type AgentSession,
-  type AgentOutputData,
   type ChatSession,
   type ChatMessage,
   type TreeSpecNode,
@@ -15,12 +13,6 @@ import {
   type TaskStatus,
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
-
-interface OutputLine {
-  stream: "stdout" | "stderr";
-  data: string;
-  timestamp: string;
-}
 
 export default function TreeDashboard() {
   // Repo pins state
@@ -37,13 +29,6 @@ export default function TreeDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-
-  // Agent state
-  const [runningAgent, setRunningAgent] = useState<AgentSession | null>(null);
-  const [agentLoading, setAgentLoading] = useState(false);
-  const [agentOutput, setAgentOutput] = useState<OutputLine[]>([]);
-  const [showConsole, setShowConsole] = useState(false);
-  const consoleRef = useRef<HTMLDivElement>(null);
 
   // Chat state
   const [chatSession, setChatSession] = useState<ChatSession | null>(null);
@@ -73,16 +58,6 @@ export default function TreeDashboard() {
     }).catch(console.error);
   }, []);
 
-  // Load agent status on mount
-  useEffect(() => {
-    api.aiStatus().then(({ agents }) => {
-      if (agents.length > 0) {
-        setRunningAgent(agents[0]);
-        setShowConsole(true);
-      }
-    }).catch(console.error);
-  }, []);
-
   // Get selected pin
   const selectedPin = repoPins.find((p) => p.id === selectedPinId) ?? null;
 
@@ -104,61 +79,6 @@ export default function TreeDashboard() {
       setSnapshot(msg.data as ScanSnapshot);
     });
 
-    const unsubAgentStarted = wsClient.on("agent.started", (msg) => {
-      const data = msg.data as { sessionId: string; pid: number; startedAt: string; localPath: string; branch?: string };
-      setRunningAgent({
-        id: data.sessionId,
-        repoId: snapshot.repoId,
-        worktreePath: data.localPath,
-        branch: data.branch ?? null,
-        status: "running",
-        pid: data.pid,
-        startedAt: data.startedAt,
-        lastSeenAt: data.startedAt,
-        endedAt: null,
-        exitCode: null,
-      });
-      setShowConsole(true);
-    });
-
-    const unsubAgentOutput = wsClient.on("agent.output", (msg) => {
-      const data = msg.data as AgentOutputData;
-      setAgentOutput((prev) => [...prev, {
-        stream: data.stream,
-        data: data.data,
-        timestamp: data.timestamp,
-      }]);
-      // Auto-scroll console
-      setTimeout(() => {
-        if (consoleRef.current) {
-          consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
-        }
-      }, 10);
-    });
-
-    const unsubAgentFinished = wsClient.on("agent.finished", (msg) => {
-      const data = msg.data as { exitCode?: number; finishedAt: string };
-      setRunningAgent((prev) => prev ? {
-        ...prev,
-        status: "exited",
-        endedAt: data.finishedAt,
-        exitCode: data.exitCode ?? null,
-      } : null);
-      // Auto-rescan when agent finishes
-      if (selectedPin) {
-        handleScan(selectedPin.localPath);
-      }
-    });
-
-    const unsubAgentStopped = wsClient.on("agent.stopped", (msg) => {
-      const data = msg.data as { stoppedAt: string };
-      setRunningAgent((prev) => prev ? {
-        ...prev,
-        status: "stopped",
-        endedAt: data.stoppedAt,
-      } : null);
-    });
-
     const unsubChatMessage = wsClient.on("chat.message", (msg) => {
       const message = msg.data as ChatMessage;
       setChatMessages((prev) => {
@@ -176,13 +96,9 @@ export default function TreeDashboard() {
 
     return () => {
       unsubScan();
-      unsubAgentStarted();
-      unsubAgentOutput();
-      unsubAgentFinished();
-      unsubAgentStopped();
       unsubChatMessage();
     };
-  }, [snapshot?.repoId, selectedPin?.localPath]);
+  }, [snapshot?.repoId]);
 
   const handleScan = useCallback(async (localPath: string) => {
     if (!localPath) return;
@@ -233,50 +149,6 @@ export default function TreeDashboard() {
     } catch (err) {
       setError((err as Error).message);
     }
-  };
-
-  const handleRunClaude = async () => {
-    if (!selectedPin) return;
-    setAgentLoading(true);
-    setError(null);
-    setAgentOutput([]); // Clear previous output
-    try {
-      const result = await api.aiStart(selectedPin.localPath, plan?.id);
-      setRunningAgent({
-        id: result.sessionId,
-        repoId: result.repoId,
-        worktreePath: result.localPath,
-        branch: result.branch ?? null,
-        status: "running",
-        pid: result.pid,
-        startedAt: result.startedAt,
-        lastSeenAt: result.startedAt,
-        endedAt: null,
-        exitCode: null,
-      });
-      setShowConsole(true);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setAgentLoading(false);
-    }
-  };
-
-  const handleStopClaude = async () => {
-    if (!runningAgent?.pid) return;
-    setAgentLoading(true);
-    try {
-      await api.aiStop(runningAgent.pid);
-      setRunningAgent((prev) => prev ? { ...prev, status: "stopped" } : null);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setAgentLoading(false);
-    }
-  };
-
-  const handleClearConsole = () => {
-    setAgentOutput([]);
   };
 
   // Chat functions
@@ -607,42 +479,6 @@ export default function TreeDashboard() {
           {loading ? "Scanning..." : "Scan"}
         </button>
 
-        {/* Claude Agent Controls */}
-        {selectedPin && (
-          <div className="agent-controls">
-            {runningAgent?.status === "running" ? (
-              <button
-                className="btn-stop"
-                onClick={handleStopClaude}
-                disabled={agentLoading}
-              >
-                {agentLoading ? "Stopping..." : "Stop Claude"}
-              </button>
-            ) : (
-              <button
-                className="btn-run"
-                onClick={handleRunClaude}
-                disabled={agentLoading || !snapshot}
-              >
-                {agentLoading ? "Starting..." : "Run Claude"}
-              </button>
-            )}
-            {runningAgent && (
-              <span className={`agent-status agent-status--${runningAgent.status}`}>
-                {runningAgent.status === "running" && `Running (PID: ${runningAgent.pid})`}
-                {runningAgent.status === "stopped" && "Stopped"}
-                {runningAgent.status === "exited" && `Exited (code: ${runningAgent.exitCode ?? "?"})`}
-              </span>
-            )}
-            <button
-              className="btn-console"
-              onClick={() => setShowConsole(!showConsole)}
-            >
-              {showConsole ? "Hide Console" : "Show Console"}
-            </button>
-          </div>
-        )}
-
         {plan && (
           <span className="dashboard__plan">
             Plan: <strong>{plan.title}</strong>
@@ -654,37 +490,6 @@ export default function TreeDashboard() {
           </span>
         )}
       </div>
-
-      {/* Agent Console */}
-      {showConsole && (
-        <div className="agent-console">
-          <div className="agent-console__header">
-            <h3>Agent Console</h3>
-            <div className="agent-console__actions">
-              <button onClick={handleClearConsole}>Clear</button>
-              <button onClick={() => setShowConsole(false)}>×</button>
-            </div>
-          </div>
-          <div className="agent-console__output" ref={consoleRef}>
-            {agentOutput.length === 0 ? (
-              <div className="agent-console__empty">
-                {runningAgent?.status === "running"
-                  ? "Waiting for output..."
-                  : "No output yet. Click \"Run Claude\" to start."}
-              </div>
-            ) : (
-              agentOutput.map((line, i) => (
-                <div
-                  key={i}
-                  className={`agent-console__line agent-console__line--${line.stream}`}
-                >
-                  {line.data}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Chat Panel */}
       {showChat && chatSession && (
@@ -1136,65 +941,6 @@ export default function TreeDashboard() {
           font-size: 16px;
           line-height: 1;
         }
-        .agent-controls {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-          margin-left: 12px;
-          padding-left: 12px;
-          border-left: 1px solid #ddd;
-        }
-        .btn-run {
-          padding: 8px 16px;
-          background: #28a745;
-          color: white;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-        }
-        .btn-run:disabled {
-          background: #ccc;
-          cursor: not-allowed;
-        }
-        .btn-stop {
-          padding: 8px 16px;
-          background: #dc3545;
-          color: white;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-        }
-        .btn-stop:disabled {
-          background: #ccc;
-          cursor: not-allowed;
-        }
-        .btn-console {
-          padding: 8px 12px;
-          background: #6c757d;
-          color: white;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-          font-size: 13px;
-        }
-        .agent-status {
-          font-size: 13px;
-          font-weight: 500;
-          padding: 4px 8px;
-          border-radius: 4px;
-        }
-        .agent-status--running {
-          color: #28a745;
-          background: #e8f5e9;
-        }
-        .agent-status--stopped {
-          color: #f57c00;
-          background: #fff3e0;
-        }
-        .agent-status--exited {
-          color: #666;
-          background: #f5f5f5;
-        }
         .dashboard__controls button {
           padding: 8px 16px;
           background: #0066cc;
@@ -1215,62 +961,6 @@ export default function TreeDashboard() {
         .dashboard__plan a {
           margin-left: 8px;
           color: #0066cc;
-        }
-        .agent-console {
-          background: #1e1e1e;
-          border-bottom: 1px solid #333;
-        }
-        .agent-console__header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 8px 16px;
-          background: #2d2d2d;
-          border-bottom: 1px solid #444;
-        }
-        .agent-console__header h3 {
-          margin: 0;
-          color: #ccc;
-          font-size: 13px;
-          font-weight: 500;
-        }
-        .agent-console__actions {
-          display: flex;
-          gap: 8px;
-        }
-        .agent-console__actions button {
-          padding: 4px 8px;
-          background: #444;
-          color: #ccc;
-          border: none;
-          border-radius: 3px;
-          cursor: pointer;
-          font-size: 12px;
-        }
-        .agent-console__actions button:hover {
-          background: #555;
-        }
-        .agent-console__output {
-          padding: 12px 16px;
-          max-height: 300px;
-          overflow-y: auto;
-          font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-          font-size: 12px;
-          line-height: 1.5;
-        }
-        .agent-console__empty {
-          color: #666;
-          font-style: italic;
-        }
-        .agent-console__line {
-          white-space: pre-wrap;
-          word-break: break-all;
-        }
-        .agent-console__line--stdout {
-          color: #e0e0e0;
-        }
-        .agent-console__line--stderr {
-          color: #f44336;
         }
         .dashboard__main {
           display: grid;

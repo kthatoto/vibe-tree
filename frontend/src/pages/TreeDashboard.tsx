@@ -584,9 +584,9 @@ export default function TreeDashboard() {
                   {selectedNode.aheadBehind && (
                     <div className="detail-section">
                       <h4>Sync Status</h4>
-                      <div className="detail-row">
-                        <span>Ahead: {selectedNode.aheadBehind.ahead}</span>
-                        <span>Behind: {selectedNode.aheadBehind.behind}</span>
+                      <div className="detail-row" style={{ gap: "16px" }}>
+                        <span style={{ color: "#4caf50" }}>+{selectedNode.aheadBehind.ahead} ahead</span>
+                        <span style={{ color: "#f44336" }}>-{selectedNode.aheadBehind.behind} behind</span>
                       </div>
                     </div>
                   )}

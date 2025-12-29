@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   api,
   type Plan,
@@ -11,8 +10,10 @@ import {
   type TreeSpecNode,
   type TreeSpecEdge,
   type TaskStatus,
+  type BranchNamingRule,
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
+import BranchGraph from "../components/BranchGraph";
 
 export default function TreeDashboard() {
   // Repo pins state
@@ -46,6 +47,16 @@ export default function TreeDashboard() {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
   const [newTaskParent, setNewTaskParent] = useState("");
+
+  // Settings modal state
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsRule, setSettingsRule] = useState<BranchNamingRule | null>(null);
+  const [settingsPattern, setSettingsPattern] = useState("");
+  const [settingsDescription, setSettingsDescription] = useState("");
+  const [settingsExamples, setSettingsExamples] = useState<string[]>([]);
+  const [settingsNewExample, setSettingsNewExample] = useState("");
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
 
   // Load repo pins on mount
   useEffect(() => {
@@ -294,204 +305,359 @@ export default function TreeDashboard() {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const getNodeChildren = (branchName: string): TreeNode[] => {
-    if (!snapshot) return [];
-    const childNames = snapshot.edges
-      .filter((e) => e.parent === branchName)
-      .map((e) => e.child);
-    return snapshot.nodes.filter((n) => childNames.includes(n.branchName));
+  // Settings functions
+  const handleOpenSettings = async () => {
+    if (!snapshot?.repoId) return;
+    setShowSettings(true);
+    setSettingsLoading(true);
+    try {
+      const rule = await api.getBranchNaming(snapshot.repoId);
+      setSettingsRule(rule);
+      setSettingsPattern(rule.pattern);
+      setSettingsDescription(rule.description);
+      setSettingsExamples(rule.examples);
+    } catch {
+      // Default rule if not exists
+      setSettingsRule({ pattern: "vt/{planId}/{taskSlug}", description: "", examples: [] });
+      setSettingsPattern("vt/{planId}/{taskSlug}");
+      setSettingsDescription("");
+      setSettingsExamples([]);
+    } finally {
+      setSettingsLoading(false);
+    }
   };
 
-  const renderNode = (node: TreeNode, depth: number = 0): React.ReactElement => {
-    const children = getNodeChildren(node.branchName);
-    const isSelected = selectedNode?.branchName === node.branchName;
-    const edge = snapshot?.edges.find((e) => e.child === node.branchName);
-
-    return (
-      <div key={node.branchName}>
-        <div
-          className={`tree-node ${isSelected ? "tree-node--selected" : ""} ${
-            node.worktree?.isActive ? "tree-node--active" : ""
-          }`}
-          style={{ marginLeft: depth * 24 }}
-          onClick={() => setSelectedNode(node)}
-        >
-          <div className="tree-node__header">
-            <span className="tree-node__name">{node.branchName}</span>
-            {edge?.isDesigned && (
-              <span className="tree-node__badge tree-node__badge--designed">
-                設計
-              </span>
-            )}
-            {node.worktree?.isActive && (
-              <span className="tree-node__badge tree-node__badge--agent">
-                {node.worktree.activeAgent || "active"}
-              </span>
-            )}
-            {node.worktree?.dirty && (
-              <span className="tree-node__badge tree-node__badge--dirty">
-                dirty
-              </span>
-            )}
-            {node.pr && (
-              <span
-                className={`tree-node__badge tree-node__badge--pr tree-node__badge--${node.pr.state}`}
-              >
-                PR#{node.pr.number}
-              </span>
-            )}
-            {node.pr?.isDraft && (
-              <span className="tree-node__badge tree-node__badge--draft">
-                draft
-              </span>
-            )}
-            {node.pr?.reviewDecision && (
-              <span
-                className={`tree-node__badge tree-node__badge--review tree-node__badge--${node.pr.reviewDecision.toLowerCase()}`}
-              >
-                {node.pr.reviewDecision === "APPROVED"
-                  ? "✓"
-                  : node.pr.reviewDecision === "CHANGES_REQUESTED"
-                  ? "✗"
-                  : "○"}
-              </span>
-            )}
-            {node.pr?.checks && (
-              <span
-                className={`tree-node__badge tree-node__badge--ci tree-node__badge--${node.pr.checks.toLowerCase()}`}
-              >
-                CI
-              </span>
-            )}
-          </div>
-          <div className="tree-node__meta">
-            {node.aheadBehind && (
-              <span className="tree-node__stat">
-                ↑{node.aheadBehind.ahead} ↓{node.aheadBehind.behind}
-              </span>
-            )}
-            {node.pr && (
-              <span className="tree-node__changes">
-                +{node.pr.additions || 0} -{node.pr.deletions || 0}
-              </span>
-            )}
-            {node.pr?.labels?.map((label) => (
-              <span key={label} className="tree-node__label">
-                {label}
-              </span>
-            ))}
-            {node.worktree && (
-              <button
-                className="btn-chat-small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleOpenChat(node.worktree!.path);
-                }}
-              >
-                Chat
-              </button>
-            )}
-          </div>
-        </div>
-        {children.map((child) => renderNode(child, depth + 1))}
-      </div>
-    );
+  const handleSaveSettings = async () => {
+    if (!snapshot?.repoId) return;
+    setSettingsLoading(true);
+    setSettingsSaved(false);
+    try {
+      const updated = await api.updateBranchNaming({
+        repoId: snapshot.repoId,
+        pattern: settingsPattern,
+        description: settingsDescription,
+        examples: settingsExamples,
+      });
+      setSettingsRule(updated);
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 3000);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSettingsLoading(false);
+    }
   };
 
-  // Find root nodes (no parent or parent is default branch)
-  const getRootNodes = (): TreeNode[] => {
-    if (!snapshot) return [];
-    const childBranches = new Set(snapshot.edges.map((e) => e.child));
-    return snapshot.nodes.filter(
-      (n) =>
-        !childBranches.has(n.branchName) ||
-        n.branchName === snapshot.defaultBranch
-    );
+  const handleAddSettingsExample = () => {
+    if (settingsNewExample && !settingsExamples.includes(settingsNewExample)) {
+      setSettingsExamples([...settingsExamples, settingsNewExample]);
+      setSettingsNewExample("");
+    }
+  };
+
+  const handleRemoveSettingsExample = (ex: string) => {
+    setSettingsExamples(settingsExamples.filter((e) => e !== ex));
   };
 
   return (
-    <div className="dashboard">
-      <header className="dashboard__header">
-        <h1>Vibe Tree</h1>
-        <div className="dashboard__nav">
-          {snapshot?.repoId && (
-            <>
-              <span className="dashboard__repo">{snapshot.repoId}</span>
-              <Link to={`/settings?repoId=${encodeURIComponent(snapshot.repoId)}`}>Settings</Link>
-            </>
+    <div className="dashboard dashboard--with-sidebar">
+      {/* Left Sidebar */}
+      <aside className="sidebar">
+        <div className="sidebar__header">
+          <h1>Vibe Tree</h1>
+        </div>
+
+        {/* Repo Selection */}
+        <div className="sidebar__section">
+          <h3>Repository</h3>
+          <div className="repo-selector">
+            <select
+              value={selectedPinId ?? ""}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "new") {
+                  setShowAddNew(true);
+                } else if (val) {
+                  handleSelectPin(Number(val));
+                }
+              }}
+            >
+              <option value="">Select a repo...</option>
+              {repoPins.map((pin) => (
+                <option key={pin.id} value={pin.id}>
+                  {pin.label || pin.repoId}
+                </option>
+              ))}
+              <option value="new">+ Add new...</option>
+            </select>
+            {selectedPin && (
+              <button
+                className="btn-delete"
+                onClick={() => handleDeletePin(selectedPin.id)}
+                title="Remove from list"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          {selectedPin && (
+            <div className="sidebar__path">{selectedPin.localPath}</div>
+          )}
+
+          {showAddNew && (
+            <div className="add-repo-form">
+              <input
+                type="text"
+                placeholder="Local path..."
+                value={newLocalPath}
+                onChange={(e) => setNewLocalPath(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddRepoPin()}
+              />
+              <div className="add-repo-form__buttons">
+                <button onClick={handleAddRepoPin}>Add</button>
+                <button onClick={() => setShowAddNew(false)}>Cancel</button>
+              </div>
+            </div>
           )}
         </div>
-      </header>
 
-      {error && <div className="dashboard__error">{error}</div>}
-
-      {/* Repo Selector */}
-      <div className="dashboard__controls">
-        <div className="repo-selector">
-          <select
-            value={selectedPinId ?? ""}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val === "new") {
-                setShowAddNew(true);
-              } else if (val) {
-                handleSelectPin(Number(val));
-              }
-            }}
+        {/* Actions */}
+        <div className="sidebar__section">
+          <button
+            className="sidebar__btn sidebar__btn--primary"
+            onClick={() => selectedPin && handleScan(selectedPin.localPath)}
+            disabled={loading || !selectedPin}
           >
-            <option value="">Select a repo...</option>
-            {repoPins.map((pin) => (
-              <option key={pin.id} value={pin.id}>
-                {pin.label || pin.repoId} ({pin.localPath})
-              </option>
-            ))}
-            <option value="new">+ Add new repo...</option>
-          </select>
-          {selectedPin && (
+            {loading ? "Scanning..." : "Scan"}
+          </button>
+          {snapshot && (
             <button
-              className="btn-delete"
-              onClick={() => handleDeletePin(selectedPin.id)}
-              title="Remove from list"
+              className="sidebar__btn"
+              onClick={handleOpenSettings}
             >
-              ×
+              Settings
             </button>
           )}
         </div>
 
-        {showAddNew && (
-          <div className="add-repo-form">
-            <input
-              type="text"
-              placeholder="Local path (e.g., ~/projects/my-repo)"
-              value={newLocalPath}
-              onChange={(e) => setNewLocalPath(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAddRepoPin()}
-            />
-            <button onClick={handleAddRepoPin}>Add</button>
-            <button onClick={() => setShowAddNew(false)}>Cancel</button>
+        {/* Plan Info */}
+        {plan && (
+          <div className="sidebar__section">
+            <h3>Plan</h3>
+            <div className="sidebar__plan">
+              <strong>{plan.title}</strong>
+              {plan.githubIssueUrl && (
+                <a href={plan.githubIssueUrl} target="_blank" rel="noopener noreferrer">
+                  View Issue
+                </a>
+              )}
+            </div>
           </div>
         )}
 
-        <button
-          onClick={() => selectedPin && handleScan(selectedPin.localPath)}
-          disabled={loading || !selectedPin}
-        >
-          {loading ? "Scanning..." : "Scan"}
-        </button>
-
-        {plan && (
-          <span className="dashboard__plan">
-            Plan: <strong>{plan.title}</strong>
-            {plan.githubIssueUrl && (
-              <a href={plan.githubIssueUrl} target="_blank" rel="noopener noreferrer">
-                (Issue)
-              </a>
-            )}
-          </span>
+        {/* Worktrees */}
+        {snapshot && snapshot.worktrees.length > 0 && (
+          <div className="sidebar__section">
+            <h3>Worktrees</h3>
+            <div className="sidebar__worktrees">
+              {snapshot.worktrees.map((wt) => (
+                <div
+                  key={wt.path}
+                  className={`sidebar__worktree ${wt.isActive ? "sidebar__worktree--active" : ""}`}
+                >
+                  <span className="sidebar__worktree-branch">{wt.branch}</span>
+                  <button
+                    className="sidebar__worktree-chat"
+                    onClick={() => handleOpenChat(wt.path)}
+                    title="Open chat"
+                  >
+                    Chat
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
-      </div>
+      </aside>
 
-      {/* Chat Panel */}
+      {/* Main Content */}
+      <main className="main-content">
+        {error && <div className="dashboard__error">{error}</div>}
+
+        {/* Tree View */}
+        {snapshot && (
+          <div className="tree-view">
+            {/* Left: Graph */}
+            <div className="tree-view__graph">
+              <div className="panel panel--graph">
+                <div className="panel__header">
+                  <h3>Branch Graph</h3>
+                  <div className="panel__header-actions">
+                    <button className="btn-wizard" onClick={handleOpenTreeWizard}>
+                      Edit Task Tree
+                    </button>
+                    <span className="panel__count">{snapshot.nodes.length} branches</span>
+                  </div>
+                </div>
+                <div className="graph-container">
+                  <BranchGraph
+                    nodes={snapshot.nodes}
+                    edges={snapshot.edges}
+                    defaultBranch={snapshot.defaultBranch}
+                    selectedBranch={selectedNode?.branchName ?? null}
+                    onSelectBranch={(branchName) => {
+                      const node = snapshot.nodes.find((n) => n.branchName === branchName);
+                      setSelectedNode(node ?? null);
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Warnings */}
+              {snapshot.warnings.length > 0 && (
+                <div className="panel panel--warnings">
+                  <div className="panel__header">
+                    <h3>Warnings ({snapshot.warnings.length})</h3>
+                  </div>
+                  {snapshot.warnings.map((w, i) => (
+                    <div key={i} className={`warning warning--${w.severity}`}>
+                      <strong>[{w.code}]</strong> {w.message}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Right: Details */}
+            <div className="tree-view__details">
+              {selectedNode ? (
+                <div className="panel">
+                  <div className="panel__header">
+                    <h3>{selectedNode.branchName}</h3>
+                  </div>
+
+                  {/* PR Info */}
+                  {selectedNode.pr && (
+                    <div className="detail-section">
+                      <h4>Pull Request</h4>
+                      <a href={selectedNode.pr.url} target="_blank" rel="noopener noreferrer">
+                        #{selectedNode.pr.number}: {selectedNode.pr.title}
+                      </a>
+                      <div className="detail-row">
+                        <span>State: {selectedNode.pr.state}</span>
+                        {selectedNode.pr.isDraft && <span>(Draft)</span>}
+                      </div>
+                      {selectedNode.pr.reviewDecision && (
+                        <div className="detail-row">Review: {selectedNode.pr.reviewDecision}</div>
+                      )}
+                      {selectedNode.pr.checks && (
+                        <div className="detail-row">CI: {selectedNode.pr.checks}</div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Worktree Info */}
+                  {selectedNode.worktree && (
+                    <div className="detail-section">
+                      <h4>Worktree</h4>
+                      <div className="detail-row">
+                        <span>Path: {selectedNode.worktree.path}</span>
+                      </div>
+                      <div className="detail-row">
+                        <span>Dirty: {selectedNode.worktree.dirty ? "Yes" : "No"}</span>
+                      </div>
+                      {selectedNode.worktree.isActive && (
+                        <div className="detail-row">
+                          <span>Active: {selectedNode.worktree.activeAgent || "Yes"}</span>
+                        </div>
+                      )}
+                      <button
+                        className="btn-chat"
+                        onClick={() => handleOpenChat(selectedNode.worktree!.path)}
+                      >
+                        Open Chat
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Ahead/Behind */}
+                  {selectedNode.aheadBehind && (
+                    <div className="detail-section">
+                      <h4>Sync Status</h4>
+                      <div className="detail-row">
+                        <span>Ahead: {selectedNode.aheadBehind.ahead}</span>
+                        <span>Behind: {selectedNode.aheadBehind.behind}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="panel">
+                  <div className="panel__header">
+                    <h3>Select a branch</h3>
+                  </div>
+                  <p style={{ padding: "16px", color: "#666" }}>
+                    Click on a branch to see details.
+                  </p>
+                </div>
+              )}
+
+              {/* Restart Info */}
+              {snapshot.restart && (
+                <div className="panel panel--restart">
+                  <div className="panel__header">
+                    <h3>Restart Session</h3>
+                  </div>
+                  <div className="detail-section">
+                    <label>CD Command:</label>
+                    <div className="copy-row">
+                      <code>{snapshot.restart.cdCommand}</code>
+                      <button onClick={() => copyToClipboard(snapshot.restart!.cdCommand, "cd")}>
+                        {copied === "cd" ? "Copied!" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="detail-section">
+                    <label>Restart Prompt:</label>
+                    <pre className="restart-prompt">{snapshot.restart.restartPromptMd}</pre>
+                    <button onClick={() => copyToClipboard(snapshot.restart!.restartPromptMd, "prompt")}>
+                      {copied === "prompt" ? "Copied!" : "Copy Prompt"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Instruction Logger */}
+              <div className="panel">
+                <div className="panel__header">
+                  <h3>Log Instruction</h3>
+                </div>
+                <textarea
+                  value={instruction}
+                  onChange={(e) => setInstruction(e.target.value)}
+                  placeholder="Enter instruction for Claude..."
+                />
+                <button
+                  onClick={handleLogInstruction}
+                  disabled={!instruction.trim() || !snapshot?.repoId}
+                  className="btn-primary"
+                >
+                  Log Instruction
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!snapshot && !loading && (
+          <div className="empty-state">
+            <h2>No repository selected</h2>
+            <p>Select a repository from the sidebar and click Scan to get started.</p>
+          </div>
+        )}
+      </main>
+
+      {/* Chat Panel (floating) */}
       {showChat && chatSession && (
         <div className="chat-panel">
           <div className="chat-panel__header">
@@ -675,183 +841,76 @@ export default function TreeDashboard() {
         </div>
       )}
 
-      {/* Main Content */}
-      {snapshot && (
-        <div className="dashboard__main">
-          {/* Left: Tree */}
-          <div className="dashboard__tree">
-            <div className="panel">
-              <div className="panel__header">
-                <h3>Branch Tree</h3>
-                <div className="panel__header-actions">
-                  <button className="btn-wizard" onClick={handleOpenTreeWizard}>
-                    Edit Design Tree
-                  </button>
-                  <span className="panel__count">{snapshot.nodes.length} branches</span>
-                </div>
-              </div>
-              <div className="tree-list">
-                {getRootNodes()
-                  .sort((a, b) => {
-                    // Default branch comes first
-                    if (a.branchName === snapshot.defaultBranch) return -1;
-                    if (b.branchName === snapshot.defaultBranch) return 1;
-                    return 0;
-                  })
-                  .map((node) => renderNode(node))}
-              </div>
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal__header">
+              <h2>Settings</h2>
+              <button onClick={() => setShowSettings(false)}>×</button>
             </div>
-
-            {/* Warnings */}
-            {snapshot.warnings.length > 0 && (
-              <div className="panel panel--warnings">
-                <div className="panel__header">
-                  <h3>Warnings ({snapshot.warnings.length})</h3>
-                </div>
-                {snapshot.warnings.map((w, i) => (
-                  <div
-                    key={i}
-                    className={`warning warning--${w.severity}`}
-                  >
-                    <strong>[{w.code}]</strong> {w.message}
+            <div className="modal__content">
+              {settingsLoading && !settingsRule ? (
+                <div className="modal__loading">Loading...</div>
+              ) : settingsRule ? (
+                <>
+                  {settingsSaved && (
+                    <div className="modal__success">Settings saved!</div>
+                  )}
+                  <div className="settings-section">
+                    <label>Branch Naming Pattern</label>
+                    <input
+                      type="text"
+                      value={settingsPattern}
+                      onChange={(e) => setSettingsPattern(e.target.value)}
+                      placeholder="vt/{planId}/{taskSlug}"
+                    />
+                    <small>Use {"{planId}"} and {"{taskSlug}"} as placeholders</small>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Right: Details */}
-          <div className="dashboard__details">
-            {selectedNode ? (
-              <div className="panel">
-                <div className="panel__header">
-                  <h3>{selectedNode.branchName}</h3>
-                </div>
-
-                {/* PR Info */}
-                {selectedNode.pr && (
-                  <div className="detail-section">
-                    <h4>Pull Request</h4>
-                    <a
-                      href={selectedNode.pr.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      #{selectedNode.pr.number}: {selectedNode.pr.title}
-                    </a>
-                    <div className="detail-row">
-                      <span>State: {selectedNode.pr.state}</span>
-                      {selectedNode.pr.isDraft && <span>(Draft)</span>}
+                  <div className="settings-section">
+                    <label>Description</label>
+                    <textarea
+                      value={settingsDescription}
+                      onChange={(e) => setSettingsDescription(e.target.value)}
+                      placeholder="Description of the naming convention..."
+                    />
+                  </div>
+                  <div className="settings-section">
+                    <label>Examples</label>
+                    <div className="settings-examples">
+                      {settingsExamples.map((ex, i) => (
+                        <span key={i} className="settings-example">
+                          <code>{ex}</code>
+                          <button onClick={() => handleRemoveSettingsExample(ex)}>×</button>
+                        </span>
+                      ))}
                     </div>
-                    {selectedNode.pr.reviewDecision && (
-                      <div className="detail-row">
-                        Review: {selectedNode.pr.reviewDecision}
-                      </div>
-                    )}
-                    {selectedNode.pr.checks && (
-                      <div className="detail-row">CI: {selectedNode.pr.checks}</div>
-                    )}
-                    <div className="detail-row">
-                      +{selectedNode.pr.additions} -{selectedNode.pr.deletions} (
-                      {selectedNode.pr.changedFiles} files)
-                    </div>
-                    {selectedNode.pr.assignees && selectedNode.pr.assignees.length > 0 && (
-                      <div className="detail-row">
-                        Assignees: {selectedNode.pr.assignees.join(", ")}
-                      </div>
-                    )}
-                    {selectedNode.pr.labels && selectedNode.pr.labels.length > 0 && (
-                      <div className="detail-row">
-                        Labels: {selectedNode.pr.labels.join(", ")}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Worktree Info */}
-                {selectedNode.worktree && (
-                  <div className="detail-section">
-                    <h4>Worktree</h4>
-                    <code>{selectedNode.worktree.path}</code>
-                    {selectedNode.worktree.isActive && (
-                      <div className="detail-row">
-                        Active: {selectedNode.worktree.activeAgent || "yes"}
-                      </div>
-                    )}
-                    {selectedNode.worktree.dirty && (
-                      <div className="detail-row warning--warn">Uncommitted changes</div>
-                    )}
-                  </div>
-                )}
-
-                {/* Ahead/Behind */}
-                {selectedNode.aheadBehind && (
-                  <div className="detail-section">
-                    <h4>Status</h4>
-                    <div className="detail-row">
-                      Ahead: {selectedNode.aheadBehind.ahead}, Behind:{" "}
-                      {selectedNode.aheadBehind.behind}
+                    <div className="settings-add-example">
+                      <input
+                        type="text"
+                        value={settingsNewExample}
+                        onChange={(e) => setSettingsNewExample(e.target.value)}
+                        placeholder="Add example..."
+                        onKeyDown={(e) => e.key === "Enter" && handleAddSettingsExample()}
+                      />
+                      <button onClick={handleAddSettingsExample}>Add</button>
                     </div>
                   </div>
-                )}
-              </div>
-            ) : (
-              <div className="panel panel--placeholder">
-                <p>Select a branch to see details</p>
-              </div>
-            )}
-
-            {/* Restart Panel */}
-            {snapshot.restart && (
-              <div className="panel panel--restart">
-                <div className="panel__header">
-                  <h3>Restart Session</h3>
-                </div>
-                <div className="detail-section">
-                  <label>Terminal Command:</label>
-                  <div className="copy-row">
-                    <code>{snapshot.restart.cdCommand}</code>
-                    <button
-                      onClick={() =>
-                        copyToClipboard(snapshot.restart!.cdCommand, "cd")
-                      }
-                    >
-                      {copied === "cd" ? "Copied!" : "Copy"}
-                    </button>
-                  </div>
-                </div>
-                <div className="detail-section">
-                  <label>Restart Prompt:</label>
-                  <pre className="restart-prompt">
-                    {snapshot.restart.restartPromptMd}
-                  </pre>
-                  <button
-                    onClick={() =>
-                      copyToClipboard(snapshot.restart!.restartPromptMd, "prompt")
-                    }
-                  >
-                    {copied === "prompt" ? "Copied!" : "Copy Prompt"}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Instruction Logger */}
-            <div className="panel">
-              <div className="panel__header">
-                <h3>Log Instruction</h3>
-              </div>
-              <textarea
-                value={instruction}
-                onChange={(e) => setInstruction(e.target.value)}
-                placeholder="Enter instruction for Claude..."
-              />
+                </>
+              ) : (
+                <div className="modal__error">Failed to load settings</div>
+              )}
+            </div>
+            <div className="modal__footer">
+              <button className="btn-secondary" onClick={() => setShowSettings(false)}>
+                Cancel
+              </button>
               <button
-                onClick={handleLogInstruction}
-                disabled={!instruction.trim() || !snapshot?.repoId}
                 className="btn-primary"
+                onClick={handleSaveSettings}
+                disabled={settingsLoading}
               >
-                Log Instruction
+                {settingsLoading ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
@@ -863,73 +922,171 @@ export default function TreeDashboard() {
           min-height: 100vh;
           background: #f5f5f5;
         }
-        .dashboard__header {
+        .dashboard--with-sidebar {
           display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 16px 24px;
-          background: white;
-          border-bottom: 1px solid #ddd;
         }
-        .dashboard__header h1 {
+
+        /* Sidebar styles */
+        .sidebar {
+          width: 280px;
+          min-width: 280px;
+          background: white;
+          border-right: 1px solid #ddd;
+          display: flex;
+          flex-direction: column;
+          height: 100vh;
+          position: sticky;
+          top: 0;
+          overflow-y: auto;
+        }
+        .sidebar__header {
+          padding: 16px 20px;
+          border-bottom: 1px solid #eee;
+        }
+        .sidebar__header h1 {
           margin: 0;
-          font-size: 20px;
+          font-size: 18px;
+          color: #333;
         }
-        .dashboard__nav {
-          display: flex;
-          align-items: center;
-          gap: 16px;
+        .sidebar__section {
+          padding: 16px 20px;
+          border-bottom: 1px solid #eee;
         }
-        .dashboard__nav a {
-          color: #0066cc;
-          text-decoration: none;
-        }
-        .dashboard__repo {
-          font-family: monospace;
-          font-size: 14px;
+        .sidebar__section h3 {
+          margin: 0 0 10px;
+          font-size: 12px;
+          font-weight: 600;
           color: #666;
-          background: #f0f0f0;
-          padding: 4px 8px;
-          border-radius: 4px;
+          text-transform: uppercase;
         }
-        .dashboard__error {
-          background: #fee;
-          color: #c00;
-          padding: 12px 24px;
-          border-bottom: 1px solid #fcc;
+        .sidebar__path {
+          font-size: 11px;
+          color: #888;
+          margin-top: 8px;
+          word-break: break-all;
+          font-family: monospace;
         }
-        .dashboard__controls {
-          display: flex;
-          gap: 12px;
-          padding: 16px 24px;
+        .sidebar__btn {
+          width: 100%;
+          padding: 10px 16px;
+          border: 1px solid #ddd;
+          border-radius: 6px;
           background: white;
-          border-bottom: 1px solid #ddd;
-          align-items: center;
-          flex-wrap: wrap;
+          color: #333;
+          cursor: pointer;
+          font-size: 14px;
+          margin-bottom: 8px;
         }
+        .sidebar__btn:hover {
+          background: #f5f5f5;
+        }
+        .sidebar__btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        .sidebar__btn--primary {
+          background: #0066cc;
+          color: white;
+          border-color: #0066cc;
+        }
+        .sidebar__btn--primary:hover {
+          background: #0052a3;
+        }
+        .sidebar__btn--primary:disabled {
+          background: #ccc;
+          border-color: #ccc;
+        }
+        .sidebar__plan {
+          font-size: 13px;
+        }
+        .sidebar__plan strong {
+          display: block;
+          margin-bottom: 4px;
+        }
+        .sidebar__plan a {
+          color: #0066cc;
+          font-size: 12px;
+        }
+        .sidebar__worktrees {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          max-height: 200px;
+          overflow-y: auto;
+        }
+        .sidebar__worktree {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 6px 10px;
+          background: #f5f5f5;
+          border-radius: 4px;
+          font-size: 12px;
+        }
+        .sidebar__worktree--active {
+          background: #e8f5e9;
+          border-left: 3px solid #28a745;
+        }
+        .sidebar__worktree-branch {
+          font-family: monospace;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .sidebar__worktree-chat {
+          padding: 2px 8px;
+          background: #6c5ce7;
+          color: white;
+          border: none;
+          border-radius: 3px;
+          font-size: 10px;
+          cursor: pointer;
+        }
+        .sidebar__worktree-chat:hover {
+          background: #5b4cdb;
+        }
+
+        /* Repo selector in sidebar */
         .repo-selector {
           display: flex;
           gap: 4px;
           align-items: center;
         }
         .repo-selector select {
-          padding: 8px 12px;
+          flex: 1;
+          padding: 8px 10px;
           border: 1px solid #ddd;
           border-radius: 4px;
-          font-size: 14px;
-          min-width: 300px;
+          font-size: 13px;
         }
         .add-repo-form {
-          display: flex;
-          gap: 8px;
-          align-items: center;
+          margin-top: 10px;
         }
         .add-repo-form input {
-          padding: 8px 12px;
+          width: 100%;
+          padding: 8px 10px;
           border: 1px solid #ddd;
           border-radius: 4px;
-          font-size: 14px;
-          width: 300px;
+          font-size: 13px;
+          margin-bottom: 8px;
+        }
+        .add-repo-form__buttons {
+          display: flex;
+          gap: 8px;
+        }
+        .add-repo-form__buttons button {
+          flex: 1;
+          padding: 6px 12px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 12px;
+          background: white;
+        }
+        .add-repo-form__buttons button:first-child {
+          background: #0066cc;
+          color: white;
+          border-color: #0066cc;
         }
         .btn-delete {
           padding: 4px 8px;
@@ -938,47 +1095,84 @@ export default function TreeDashboard() {
           border: 1px solid #fcc;
           border-radius: 4px;
           cursor: pointer;
-          font-size: 16px;
+          font-size: 14px;
           line-height: 1;
         }
-        .dashboard__controls button {
-          padding: 8px 16px;
-          background: #0066cc;
-          color: white;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
+
+        /* Main content area */
+        .main-content {
+          flex: 1;
+          padding: 20px;
+          overflow-y: auto;
         }
-        .dashboard__controls button:disabled {
-          background: #ccc;
-          cursor: not-allowed;
+        .dashboard__error {
+          background: #fee;
+          color: #c00;
+          padding: 12px 16px;
+          border-radius: 6px;
+          margin-bottom: 16px;
         }
-        .dashboard__plan {
-          margin-left: auto;
-          font-size: 14px;
+        .empty-state {
+          text-align: center;
+          padding: 60px 20px;
           color: #666;
         }
-        .dashboard__plan a {
-          margin-left: 8px;
-          color: #0066cc;
+        .empty-state h2 {
+          margin: 0 0 8px;
+          font-size: 18px;
+          color: #333;
         }
-        .dashboard__main {
+        .empty-state p {
+          margin: 0;
+          font-size: 14px;
+        }
+
+        /* Tree view layout */
+        .tree-view {
           display: grid;
-          grid-template-columns: 1fr 400px;
+          grid-template-columns: 1fr 360px;
           gap: 20px;
-          padding: 20px 24px;
-          max-width: 1600px;
-          margin: 0 auto;
+          height: calc(100vh - 40px);
         }
-        .dashboard__tree {
+        .tree-view__graph {
           display: flex;
           flex-direction: column;
           gap: 16px;
+          overflow: hidden;
         }
-        .dashboard__details {
+        .tree-view__details {
           display: flex;
           flex-direction: column;
           gap: 16px;
+          overflow-y: auto;
+        }
+
+        /* Graph container */
+        .panel--graph {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .graph-container {
+          flex: 1;
+          overflow: auto;
+          background: #fafafa;
+          border-radius: 4px;
+          min-height: 300px;
+        }
+        .branch-graph {
+          min-width: fit-content;
+        }
+        .branch-graph--empty {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 200px;
+          color: #999;
+        }
+        .branch-graph__svg {
+          display: block;
         }
         .panel {
           background: white;
@@ -1623,6 +1817,171 @@ export default function TreeDashboard() {
         }
         .btn-secondary:hover {
           background: #e8e8e8;
+        }
+
+        /* Modal styles */
+        .modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 2000;
+        }
+        .modal {
+          background: white;
+          border-radius: 12px;
+          width: 500px;
+          max-height: 80vh;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        .modal__header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 16px 20px;
+          border-bottom: 1px solid #e0e0e0;
+        }
+        .modal__header h2 {
+          margin: 0;
+          font-size: 18px;
+        }
+        .modal__header button {
+          background: none;
+          border: none;
+          font-size: 20px;
+          cursor: pointer;
+          color: #666;
+        }
+        .modal__content {
+          flex: 1;
+          overflow-y: auto;
+          padding: 20px;
+        }
+        .modal__loading {
+          text-align: center;
+          padding: 40px;
+          color: #666;
+        }
+        .modal__error {
+          color: #c00;
+          text-align: center;
+          padding: 20px;
+        }
+        .modal__success {
+          background: #e8f5e9;
+          color: #2e7d32;
+          padding: 12px 16px;
+          border-radius: 6px;
+          margin-bottom: 16px;
+          text-align: center;
+        }
+        .modal__footer {
+          display: flex;
+          justify-content: flex-end;
+          gap: 12px;
+          padding: 16px 20px;
+          border-top: 1px solid #e0e0e0;
+        }
+
+        /* Settings styles */
+        .settings-section {
+          margin-bottom: 20px;
+        }
+        .settings-section label {
+          display: block;
+          font-size: 12px;
+          font-weight: 600;
+          color: #666;
+          text-transform: uppercase;
+          margin-bottom: 8px;
+        }
+        .settings-section input[type="text"] {
+          width: 100%;
+          padding: 10px 12px;
+          border: 1px solid #ddd;
+          border-radius: 6px;
+          font-size: 14px;
+        }
+        .settings-section textarea {
+          width: 100%;
+          min-height: 80px;
+          padding: 10px 12px;
+          border: 1px solid #ddd;
+          border-radius: 6px;
+          font-size: 14px;
+          font-family: inherit;
+          resize: vertical;
+        }
+        .settings-section small {
+          display: block;
+          margin-top: 4px;
+          font-size: 11px;
+          color: #888;
+        }
+        .settings-examples {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-bottom: 10px;
+        }
+        .settings-example {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding: 4px 8px;
+          background: #f0f0f0;
+          border-radius: 4px;
+          font-size: 12px;
+        }
+        .settings-example code {
+          font-family: monospace;
+        }
+        .settings-example button {
+          background: none;
+          border: none;
+          color: #c00;
+          cursor: pointer;
+          padding: 0 4px;
+          font-size: 14px;
+        }
+        .settings-add-example {
+          display: flex;
+          gap: 8px;
+        }
+        .settings-add-example input {
+          flex: 1;
+          padding: 8px 10px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          font-size: 13px;
+        }
+        .settings-add-example button {
+          padding: 8px 16px;
+          background: #0066cc;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 13px;
+        }
+
+        /* Chat button in details panel */
+        .btn-chat {
+          margin-top: 8px;
+          padding: 8px 16px;
+          background: #6c5ce7;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 13px;
+        }
+        .btn-chat:hover {
+          background: #5b4cdb;
         }
       `}</style>
     </div>

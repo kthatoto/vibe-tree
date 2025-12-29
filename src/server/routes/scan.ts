@@ -114,7 +114,27 @@ scanRouter.post("/", async (c) => {
       }
     : undefined;
 
-  // 8. Calculate warnings (including tree divergence)
+  // 8. Merge treeSpec edges into scanned edges (designed edges override inferred)
+  if (treeSpec) {
+    const designedEdgeSet = new Set(
+      treeSpec.specJson.edges.map((e: { parent: string; child: string }) => e.child)
+    );
+    // Remove inferred edges where we have designed ones
+    const filteredEdges = edges.filter((e) => !designedEdgeSet.has(e.child));
+    // Add designed edges
+    for (const designedEdge of treeSpec.specJson.edges) {
+      filteredEdges.push({
+        parent: designedEdge.parent,
+        child: designedEdge.child,
+        confidence: "high" as const,
+        isDesigned: true,
+      });
+    }
+    edges.length = 0;
+    edges.push(...filteredEdges);
+  }
+
+  // 9. Calculate warnings (including tree divergence)
   const warnings = calculateWarnings(nodes, edges, branchNaming, defaultBranch, treeSpec);
 
   // 9. Generate restart info for active worktree
@@ -291,7 +311,8 @@ function getBranches(repoPath: string): BranchInfo[] {
           lastCommitAt: parts[2] ?? "",
         };
       });
-  } catch {
+  } catch (err) {
+    console.error("getBranches error:", err);
     return [];
   }
 }
@@ -347,7 +368,8 @@ function getWorktrees(repoPath: string): WorktreeInfo[] {
     }
 
     return worktrees;
-  } catch {
+  } catch (err) {
+    console.error("getWorktrees error:", err);
     return [];
   }
 }
@@ -380,9 +402,43 @@ function getPRs(repoPath: string): PRInfo[] {
       }
       return prInfo;
     });
-  } catch {
+  } catch (err) {
+    console.error("getPRs error:", err);
     return [];
   }
+}
+
+function findBestParent(
+  branchName: string,
+  allBranches: string[],
+  defaultBranch: string
+): { parent: string; confidence: "high" | "medium" | "low" } {
+  // Check if branch name starts with another branch name
+  // e.g., "feature/auth-login" starts with "feature/auth"
+  let bestMatch = defaultBranch;
+  let bestMatchLength = 0;
+
+  for (const candidate of allBranches) {
+    if (candidate === branchName) continue;
+    if (candidate === defaultBranch) continue;
+
+    // Check if branchName starts with candidate + separator
+    if (
+      branchName.startsWith(candidate + "/") ||
+      branchName.startsWith(candidate + "-")
+    ) {
+      // Prefer longer matches (more specific parent)
+      if (candidate.length > bestMatchLength) {
+        bestMatch = candidate;
+        bestMatchLength = candidate.length;
+      }
+    }
+  }
+
+  // If we found a prefix match, it's high confidence
+  // Otherwise fallback to default branch with low confidence
+  const confidence = bestMatchLength > 0 ? "high" : "low";
+  return { parent: bestMatch, confidence };
 }
 
 function buildTree(
@@ -394,6 +450,7 @@ function buildTree(
 ): { nodes: TreeNode[]; edges: TreeEdge[] } {
   const nodes: TreeNode[] = [];
   const edges: TreeEdge[] = [];
+  const branchNames = branches.map((b) => b.name);
 
   // Find default branch info
   const baseBranch = branches.find((b) => b.name === defaultBranch);
@@ -441,12 +498,13 @@ function buildTree(
     if (aheadBehind) node.aheadBehind = aheadBehind;
     nodes.push(node);
 
-    // Infer parent relationship using merge-base
+    // Find best parent for this branch
     if (baseBranch && branch.name !== defaultBranch) {
+      const { parent, confidence } = findBestParent(branch.name, branchNames, defaultBranch);
       edges.push({
-        parent: defaultBranch,
+        parent,
         child: branch.name,
-        confidence: "medium",
+        confidence,
       });
     }
   }

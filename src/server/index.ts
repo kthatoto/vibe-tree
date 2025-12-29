@@ -18,6 +18,12 @@ const app = new Hono();
 // Logging
 app.use("*", logger());
 
+// Debug: Log all incoming requests
+app.use("*", async (c, next) => {
+  console.log(`[${new Date().toISOString()}] ${c.req.method} ${c.req.path}`);
+  await next();
+});
+
 // Error handling
 app.use("*", errorHandler);
 

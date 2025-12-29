@@ -3,7 +3,7 @@
   "module": "index.ts",
   "type": "module",
   "scripts": {
-    "dev": "bun run dev:backend & bun run dev:frontend",
+    "dev": "concurrently -n backend,frontend -c blue,green \"bun run dev:backend\" \"bun run dev:frontend\"",
     "dev:backend": "bun run --watch src/server/index.ts",
     "dev:frontend": "cd frontend && bun run dev",
     "build": "cd frontend && bun run build",
@@ -19,6 +19,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "bun-types": "latest",
+    "concurrently": "^9.2.1",
     "drizzle-kit": "^0.31.8",
     "typescript": "^5.9.3"
   },

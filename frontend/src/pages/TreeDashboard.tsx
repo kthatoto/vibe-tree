@@ -302,16 +302,19 @@ export default function TreeDashboard() {
       );
       setWizardNodes(updatedNodes);
 
-      // Save tree spec
-      await api.updateTreeSpec({
+      // Save tree spec and update local snapshot
+      const updatedSpec = await api.updateTreeSpec({
         repoId: snapshot.repoId,
         baseBranch: wizardBaseBranch,
         nodes: updatedNodes,
         edges: wizardEdges,
       });
+      setSnapshot((prev) =>
+        prev ? { ...prev, treeSpec: updatedSpec } : prev
+      );
 
-      // Rescan to update graph
-      await handleScan(selectedPin.localPath);
+      // Rescan in background to update branch graph (don't await)
+      handleScan(selectedPin.localPath);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -324,16 +327,16 @@ export default function TreeDashboard() {
     setLoading(true);
     setError(null);
     try {
-      await api.updateTreeSpec({
+      const updatedSpec = await api.updateTreeSpec({
         repoId: snapshot.repoId,
         baseBranch: wizardBaseBranch,
         nodes: wizardNodes,
         edges: wizardEdges,
       });
-      // Rescan first, then close modal to prevent flicker
-      if (selectedPin) {
-        await handleScan(selectedPin.localPath);
-      }
+      // Update local snapshot with new treeSpec (no rescan needed)
+      setSnapshot((prev) =>
+        prev ? { ...prev, treeSpec: updatedSpec } : prev
+      );
       setShowTreeWizard(false);
     } catch (err) {
       setError((err as Error).message);

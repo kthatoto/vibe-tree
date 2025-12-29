@@ -58,7 +58,7 @@ describe('WebSocketClient', () => {
   it('should connect to WebSocket', async () => {
     const { wsClient } = await import('../ws');
 
-    wsClient.connect(1);
+    wsClient.connect('owner/repo');
 
     expect(mockWsInstance).toBeDefined();
     expect(mockWsInstance.url).toContain('/ws');
@@ -67,11 +67,11 @@ describe('WebSocketClient', () => {
   it('should subscribe to repoId on connection', async () => {
     const { wsClient } = await import('../ws');
 
-    wsClient.connect(1);
+    wsClient.connect('owner/repo');
     mockWsInstance.simulateOpen();
 
     expect(mockWsInstance.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'subscribe', repoId: 1 })
+      JSON.stringify({ type: 'subscribe', repoId: 'owner/repo' })
     );
   });
 
@@ -122,11 +122,11 @@ describe('WebSocketClient', () => {
   it('should reuse existing connection', async () => {
     const { wsClient } = await import('../ws');
 
-    wsClient.connect(1);
+    wsClient.connect('owner/repo');
     mockWsInstance.simulateOpen();
 
     const firstInstance = mockWsInstance;
-    wsClient.connect(1);
+    wsClient.connect('owner/repo');
 
     // Should be the same instance
     expect(mockWsInstance).toBe(firstInstance);
@@ -135,14 +135,14 @@ describe('WebSocketClient', () => {
   it('should resubscribe when changing repo on existing connection', async () => {
     const { wsClient } = await import('../ws');
 
-    wsClient.connect(1);
+    wsClient.connect('owner/repo');
     mockWsInstance.simulateOpen();
 
     mockWsInstance.send.mockClear();
-    wsClient.connect(2);
+    wsClient.connect('other/repo');
 
     expect(mockWsInstance.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'subscribe', repoId: 2 })
+      JSON.stringify({ type: 'subscribe', repoId: 'other/repo' })
     );
   });
 
@@ -160,7 +160,7 @@ describe('WebSocketClient', () => {
   it('should schedule reconnection on close', async () => {
     const { wsClient } = await import('../ws');
 
-    wsClient.connect(1);
+    wsClient.connect('owner/repo');
     const firstInstance = mockWsInstance;
     firstInstance.simulateOpen();
     firstInstance.simulateClose();
@@ -175,7 +175,7 @@ describe('WebSocketClient', () => {
   it('should cancel reconnection on disconnect', async () => {
     const { wsClient } = await import('../ws');
 
-    wsClient.connect(1);
+    wsClient.connect('owner/repo');
     const firstInstance = mockWsInstance;
     firstInstance.simulateOpen();
     firstInstance.simulateClose();

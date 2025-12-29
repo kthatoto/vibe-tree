@@ -294,14 +294,15 @@ describe("restartPromptQuerySchema", () => {
 });
 
 describe("updateTreeSpecSchema", () => {
-  test("accepts valid tree spec", () => {
+  test("accepts valid tree spec (task-based)", () => {
     const result = updateTreeSpecSchema.safeParse({
       repoId: "owner/repo",
+      baseBranch: "main",
       nodes: [
-        { branchName: "main" },
-        { branchName: "feature/auth", intendedIssue: 123 },
+        { id: "task-1", title: "Setup auth", status: "todo" },
+        { id: "task-2", title: "Implement login", status: "doing", branchName: "feature/auth", intendedIssue: 123 },
       ],
-      edges: [{ parent: "main", child: "feature/auth" }],
+      edges: [{ parent: "task-1", child: "task-2" }],
     });
     expect(result.success).toBe(true);
   });
@@ -324,10 +325,19 @@ describe("updateTreeSpecSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  test("rejects empty branchName in nodes", () => {
+  test("rejects missing id in nodes", () => {
     const result = updateTreeSpecSchema.safeParse({
       repoId: "owner/repo",
-      nodes: [{ branchName: "" }],
+      nodes: [{ title: "Test", status: "todo" }],
+      edges: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects missing title in nodes", () => {
+    const result = updateTreeSpecSchema.safeParse({
+      repoId: "owner/repo",
+      nodes: [{ id: "task-1", status: "todo" }],
       edges: [],
     });
     expect(result.success).toBe(false);

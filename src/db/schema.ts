@@ -49,10 +49,11 @@ export const instructionsLog = sqliteTable("instructions_log", {
   createdAt: text("created_at").notNull(),
 });
 
-// 設計ツリー (Design Tree)
+// 設計ツリー (Design Tree / Task Tree)
 export const treeSpecs = sqliteTable("tree_specs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   repoId: text("repo_id").notNull(),
+  baseBranch: text("base_branch"), // default branch (develop, main, master, etc.)
   specJson: text("spec_json").notNull(), // JSON: { nodes: TreeSpecNode[], edges: TreeSpecEdge[] }
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),

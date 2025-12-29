@@ -30,6 +30,7 @@ treeSpecRouter.get("/", async (c) => {
   return c.json({
     id: spec.id,
     repoId: spec.repoId,
+    baseBranch: spec.baseBranch ?? "main",
     specJson: JSON.parse(spec.specJson),
     createdAt: spec.createdAt,
     updatedAt: spec.updatedAt,
@@ -60,6 +61,7 @@ treeSpecRouter.post("/", async (c) => {
     result = await db
       .update(schema.treeSpecs)
       .set({
+        baseBranch: input.baseBranch,
         specJson,
         updatedAt: now,
       })
@@ -71,6 +73,7 @@ treeSpecRouter.post("/", async (c) => {
       .insert(schema.treeSpecs)
       .values({
         repoId: input.repoId,
+        baseBranch: input.baseBranch,
         specJson,
         createdAt: now,
         updatedAt: now,
@@ -86,6 +89,7 @@ treeSpecRouter.post("/", async (c) => {
   const response = {
     id: spec.id,
     repoId: spec.repoId,
+    baseBranch: spec.baseBranch ?? "main",
     specJson: JSON.parse(spec.specJson),
     createdAt: spec.createdAt,
     updatedAt: spec.updatedAt,

@@ -68,6 +68,7 @@ function setupTestDb() {
     CREATE TABLE tree_specs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       repo_id TEXT NOT NULL,
+      base_branch TEXT,
       spec_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -235,14 +236,18 @@ describe("Database Schema", () => {
     const now = new Date().toISOString();
     const repoId = "kthatoto/vibe-tree";
     const specJson = JSON.stringify({
-      nodes: [{ branchName: "main" }, { branchName: "feature/auth" }],
-      edges: [{ parent: "main", child: "feature/auth" }],
+      nodes: [
+        { id: "task-1", title: "Setup project", status: "done" },
+        { id: "task-2", title: "Implement auth", status: "doing", branchName: "feature/auth" },
+      ],
+      edges: [{ parent: "task-1", child: "task-2" }],
     });
 
     const specs = await testDb
       .insert(schema.treeSpecs)
       .values({
         repoId,
+        baseBranch: "main",
         specJson,
         createdAt: now,
         updatedAt: now,
@@ -251,6 +256,7 @@ describe("Database Schema", () => {
 
     expect(specs.length).toBe(1);
     expect(specs[0]?.repoId).toBe("kthatoto/vibe-tree");
+    expect(specs[0]?.baseBranch).toBe("main");
 
     const parsed = JSON.parse(specs[0]?.specJson ?? "{}");
     expect(parsed.nodes.length).toBe(2);

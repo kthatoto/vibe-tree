@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   api,
@@ -12,6 +12,7 @@ import {
   type ChatMessage,
   type TreeSpecNode,
   type TreeSpecEdge,
+  type TaskStatus,
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
 
@@ -52,12 +53,14 @@ export default function TreeDashboard() {
   const [showChat, setShowChat] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
 
-  // Tree Spec wizard state
+  // Tree Spec wizard state (Task-based)
   const [showTreeWizard, setShowTreeWizard] = useState(false);
+  const [wizardBaseBranch, setWizardBaseBranch] = useState<string>("main");
   const [wizardNodes, setWizardNodes] = useState<TreeSpecNode[]>([]);
   const [wizardEdges, setWizardEdges] = useState<TreeSpecEdge[]>([]);
-  const [newNodeName, setNewNodeName] = useState("");
-  const [newNodeParent, setNewNodeParent] = useState("");
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDescription, setNewTaskDescription] = useState("");
+  const [newTaskParent, setNewTaskParent] = useState("");
 
   // Load repo pins on mount
   useEffect(() => {
@@ -326,39 +329,52 @@ export default function TreeDashboard() {
     setChatMessages([]);
   };
 
-  // Tree Spec wizard functions
+  // Tree Spec wizard functions (Task-based)
   const handleOpenTreeWizard = () => {
     // Initialize with existing tree spec if available
     if (snapshot?.treeSpec) {
+      setWizardBaseBranch(snapshot.treeSpec.baseBranch);
       setWizardNodes(snapshot.treeSpec.specJson.nodes);
       setWizardEdges(snapshot.treeSpec.specJson.edges);
     } else {
-      // Start with main branch
-      setWizardNodes([{ branchName: "main" }]);
+      // Start fresh with detected default branch
+      const baseBranch = snapshot?.defaultBranch ?? "main";
+      setWizardBaseBranch(baseBranch);
+      setWizardNodes([]);
       setWizardEdges([]);
     }
     setShowTreeWizard(true);
   };
 
-  const handleAddWizardNode = () => {
-    if (!newNodeName.trim()) return;
-    const branchName = newNodeName.trim();
-    // Check for duplicates
-    if (wizardNodes.some((n) => n.branchName === branchName)) {
-      setError("Branch name already exists");
-      return;
+  const generateTaskId = () => crypto.randomUUID();
+
+  const handleAddWizardTask = () => {
+    if (!newTaskTitle.trim()) return;
+    const newNode: TreeSpecNode = {
+      id: generateTaskId(),
+      title: newTaskTitle.trim(),
+      description: newTaskDescription.trim() || undefined,
+      status: "todo" as TaskStatus,
+      branchName: undefined,
+    };
+    setWizardNodes((prev) => [...prev, newNode]);
+    if (newTaskParent) {
+      setWizardEdges((prev) => [...prev, { parent: newTaskParent, child: newNode.id }]);
     }
-    setWizardNodes((prev) => [...prev, { branchName }]);
-    if (newNodeParent) {
-      setWizardEdges((prev) => [...prev, { parent: newNodeParent, child: branchName }]);
-    }
-    setNewNodeName("");
-    setNewNodeParent("");
+    setNewTaskTitle("");
+    setNewTaskDescription("");
+    setNewTaskParent("");
   };
 
-  const handleRemoveWizardNode = (branchName: string) => {
-    setWizardNodes((prev) => prev.filter((n) => n.branchName !== branchName));
-    setWizardEdges((prev) => prev.filter((e) => e.parent !== branchName && e.child !== branchName));
+  const handleRemoveWizardTask = (taskId: string) => {
+    setWizardNodes((prev) => prev.filter((n) => n.id !== taskId));
+    setWizardEdges((prev) => prev.filter((e) => e.parent !== taskId && e.child !== taskId));
+  };
+
+  const handleUpdateTaskStatus = (taskId: string, status: TaskStatus) => {
+    setWizardNodes((prev) =>
+      prev.map((n) => (n.id === taskId ? { ...n, status } : n))
+    );
   };
 
   const handleSaveTreeSpec = async () => {
@@ -368,6 +384,7 @@ export default function TreeDashboard() {
     try {
       await api.updateTreeSpec({
         repoId: snapshot.repoId,
+        baseBranch: wizardBaseBranch,
         nodes: wizardNodes,
         edges: wizardEdges,
       });
@@ -413,7 +430,7 @@ export default function TreeDashboard() {
     return snapshot.nodes.filter((n) => childNames.includes(n.branchName));
   };
 
-  const renderNode = (node: TreeNode, depth: number = 0): JSX.Element => {
+  const renderNode = (node: TreeNode, depth: number = 0): React.ReactElement => {
     const children = getNodeChildren(node.branchName);
     const isSelected = selectedNode?.branchName === node.branchName;
     const edge = snapshot?.edges.find((e) => e.child === node.branchName);
@@ -516,8 +533,7 @@ export default function TreeDashboard() {
     return snapshot.nodes.filter(
       (n) =>
         !childBranches.has(n.branchName) ||
-        n.branchName === "main" ||
-        n.branchName === "master"
+        n.branchName === snapshot.defaultBranch
     );
   };
 
@@ -733,62 +749,112 @@ export default function TreeDashboard() {
         </div>
       )}
 
-      {/* Tree Spec Wizard Modal */}
+      {/* Task Tree Wizard Modal */}
       {showTreeWizard && (
         <div className="wizard-overlay">
           <div className="wizard-modal">
             <div className="wizard-header">
-              <h2>Design Tree Editor</h2>
+              <h2>Task Strategy Tree</h2>
               <button onClick={() => setShowTreeWizard(false)}>×</button>
             </div>
             <div className="wizard-content">
+              {/* Base Branch Selection */}
               <div className="wizard-section">
-                <h3>Branches ({wizardNodes.length})</h3>
-                <div className="wizard-nodes">
-                  {wizardNodes.map((node) => {
-                    const parentEdge = wizardEdges.find((e) => e.child === node.branchName);
+                <h3>Base Branch</h3>
+                <select
+                  value={wizardBaseBranch}
+                  onChange={(e) => setWizardBaseBranch(e.target.value)}
+                  className="wizard-base-select"
+                >
+                  {snapshot?.branches.map((branch) => (
+                    <option key={branch} value={branch}>
+                      {branch}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Task List */}
+              <div className="wizard-section">
+                <h3>Tasks ({wizardNodes.length})</h3>
+                <div className="wizard-tasks">
+                  {wizardNodes.map((task) => {
+                    const parentEdge = wizardEdges.find((e) => e.child === task.id);
+                    const parentTask = parentEdge
+                      ? wizardNodes.find((n) => n.id === parentEdge.parent)
+                      : null;
                     return (
-                      <div key={node.branchName} className="wizard-node">
-                        <span className="wizard-node__name">{node.branchName}</span>
-                        {parentEdge && (
-                          <span className="wizard-node__parent">← {parentEdge.parent}</span>
-                        )}
-                        {node.branchName !== "main" && node.branchName !== "master" && (
+                      <div key={task.id} className={`wizard-task wizard-task--${task.status}`}>
+                        <div className="wizard-task__header">
+                          <select
+                            value={task.status}
+                            onChange={(e) => handleUpdateTaskStatus(task.id, e.target.value as TaskStatus)}
+                            className="wizard-task__status"
+                          >
+                            <option value="todo">Todo</option>
+                            <option value="doing">Doing</option>
+                            <option value="done">Done</option>
+                          </select>
+                          <span className="wizard-task__title">{task.title}</span>
                           <button
-                            className="wizard-node__remove"
-                            onClick={() => handleRemoveWizardNode(node.branchName)}
+                            className="wizard-task__remove"
+                            onClick={() => handleRemoveWizardTask(task.id)}
                           >
                             ×
                           </button>
+                        </div>
+                        {task.description && (
+                          <div className="wizard-task__description">{task.description}</div>
                         )}
+                        <div className="wizard-task__meta">
+                          {parentTask && (
+                            <span className="wizard-task__parent">depends on: {parentTask.title}</span>
+                          )}
+                          {task.branchName && (
+                            <span className="wizard-task__branch">branch: {task.branchName}</span>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
+                  {wizardNodes.length === 0 && (
+                    <div className="wizard-empty">No tasks yet. Add one below.</div>
+                  )}
                 </div>
               </div>
+
+              {/* Add Task Form */}
               <div className="wizard-section">
-                <h3>Add Branch</h3>
-                <div className="wizard-add-form">
+                <h3>Add Task</h3>
+                <div className="wizard-add-form wizard-add-form--vertical">
                   <input
                     type="text"
-                    placeholder="Branch name"
-                    value={newNodeName}
-                    onChange={(e) => setNewNodeName(e.target.value)}
+                    placeholder="Task title"
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
                   />
-                  <select
-                    value={newNodeParent}
-                    onChange={(e) => setNewNodeParent(e.target.value)}
-                  >
-                    <option value="">No parent (root)</option>
-                    {wizardNodes.map((n) => (
-                      <option key={n.branchName} value={n.branchName}>
-                        {n.branchName}
-                      </option>
-                    ))}
-                  </select>
-                  <button onClick={handleAddWizardNode} disabled={!newNodeName.trim()}>
-                    Add
-                  </button>
+                  <input
+                    type="text"
+                    placeholder="Description (optional)"
+                    value={newTaskDescription}
+                    onChange={(e) => setNewTaskDescription(e.target.value)}
+                  />
+                  <div className="wizard-add-row">
+                    <select
+                      value={newTaskParent}
+                      onChange={(e) => setNewTaskParent(e.target.value)}
+                    >
+                      <option value="">No dependency (root task)</option>
+                      {wizardNodes.map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {n.title}
+                        </option>
+                      ))}
+                    </select>
+                    <button onClick={handleAddWizardTask} disabled={!newTaskTitle.trim()}>
+                      Add Task
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -797,7 +863,7 @@ export default function TreeDashboard() {
                 Cancel
               </button>
               <button className="btn-primary" onClick={handleSaveTreeSpec} disabled={loading}>
-                {loading ? "Saving..." : "Save Design Tree"}
+                {loading ? "Saving..." : "Save Task Tree"}
               </button>
             </div>
           </div>
@@ -822,8 +888,9 @@ export default function TreeDashboard() {
               <div className="tree-list">
                 {getRootNodes()
                   .sort((a, b) => {
-                    if (a.branchName === "main" || a.branchName === "master") return -1;
-                    if (b.branchName === "main" || b.branchName === "master") return 1;
+                    // Default branch comes first
+                    if (a.branchName === snapshot.defaultBranch) return -1;
+                    if (b.branchName === snapshot.defaultBranch) return 1;
                     return 0;
                   })
                   .map((node) => renderNode(node))}
@@ -1749,6 +1816,105 @@ export default function TreeDashboard() {
         .wizard-add-form button:disabled {
           background: #ccc;
           cursor: not-allowed;
+        }
+        .wizard-base-select {
+          width: 100%;
+          padding: 10px 12px;
+          border: 1px solid #ddd;
+          border-radius: 6px;
+          font-size: 14px;
+        }
+        .wizard-tasks {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          max-height: 300px;
+          overflow-y: auto;
+        }
+        .wizard-task {
+          padding: 12px;
+          background: #f5f5f5;
+          border-radius: 8px;
+          border-left: 4px solid #9e9e9e;
+        }
+        .wizard-task--todo {
+          border-left-color: #9e9e9e;
+        }
+        .wizard-task--doing {
+          border-left-color: #2196f3;
+          background: #e3f2fd;
+        }
+        .wizard-task--done {
+          border-left-color: #4caf50;
+          background: #e8f5e9;
+        }
+        .wizard-task__header {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .wizard-task__status {
+          padding: 4px 8px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          font-size: 12px;
+          background: white;
+        }
+        .wizard-task__title {
+          flex: 1;
+          font-weight: 600;
+          font-size: 14px;
+        }
+        .wizard-task__remove {
+          background: #fee;
+          color: #c00;
+          border: none;
+          border-radius: 4px;
+          padding: 2px 8px;
+          cursor: pointer;
+          font-size: 14px;
+        }
+        .wizard-task__description {
+          margin-top: 6px;
+          font-size: 12px;
+          color: #666;
+          padding-left: 8px;
+        }
+        .wizard-task__meta {
+          display: flex;
+          gap: 12px;
+          margin-top: 8px;
+          font-size: 11px;
+          color: #888;
+        }
+        .wizard-task__parent {
+          font-style: italic;
+        }
+        .wizard-task__branch {
+          font-family: monospace;
+          background: #e0e0e0;
+          padding: 1px 4px;
+          border-radius: 3px;
+        }
+        .wizard-empty {
+          text-align: center;
+          color: #999;
+          padding: 20px;
+          font-size: 13px;
+        }
+        .wizard-add-form--vertical {
+          flex-direction: column;
+        }
+        .wizard-add-form--vertical input {
+          flex: none;
+          width: 100%;
+        }
+        .wizard-add-row {
+          display: flex;
+          gap: 8px;
+        }
+        .wizard-add-row select {
+          flex: 1;
         }
         .wizard-footer {
           display: flex;

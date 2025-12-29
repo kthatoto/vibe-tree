@@ -88,21 +88,28 @@ export interface TreeEdge {
   isDesigned?: boolean;
 }
 
+export type TaskStatus = "todo" | "doing" | "done";
+
 export interface TreeSpecNode {
-  branchName: string;
+  id: string; // UUID for task identification
+  title: string; // タスク名
+  description?: string; // 完了条件/メモ
+  status: TaskStatus;
+  branchName?: string; // 未確定ならundefined
+  // Legacy fields (optional for backward compat)
   intendedIssue?: number;
   intendedPr?: number;
-  description?: string;
 }
 
 export interface TreeSpecEdge {
-  parent: string;
-  child: string;
+  parent: string; // node id
+  child: string; // node id
 }
 
 export interface TreeSpec {
   id: number;
   repoId: string;
+  baseBranch: string; // default branch (develop, main, master, etc.)
   specJson: {
     nodes: TreeSpecNode[];
     edges: TreeSpecEdge[];
@@ -113,6 +120,8 @@ export interface TreeSpec {
 
 export interface ScanSnapshot {
   repoId: string;
+  defaultBranch: string; // detected default branch (develop, main, master, etc.)
+  branches: string[]; // all branch names for UI selection
   nodes: TreeNode[];
   edges: TreeEdge[];
   warnings: Warning[];
@@ -305,6 +314,7 @@ export const api = {
     fetchJson<TreeSpec | null>(`${API_BASE}/tree-spec?repoId=${encodeURIComponent(repoId)}`),
   updateTreeSpec: (data: {
     repoId: string;
+    baseBranch?: string;
     nodes: TreeSpecNode[];
     edges: TreeSpecEdge[];
   }) =>

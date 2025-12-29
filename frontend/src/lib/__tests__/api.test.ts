@@ -162,6 +162,9 @@ describe('api', () => {
   describe('scan', () => {
     it('should scan repository', async () => {
       const snapshot = {
+        repoId: 'owner/repo',
+        defaultBranch: 'main',
+        branches: ['main'],
         nodes: [],
         edges: [],
         warnings: [],
@@ -174,7 +177,7 @@ describe('api', () => {
         json: () => Promise.resolve(snapshot),
       });
 
-      const result = await api.scan('owner/repo', '/path/to/repo');
+      const result = await api.scan('/path/to/repo');
       expect(result).toEqual(snapshot);
     });
   });

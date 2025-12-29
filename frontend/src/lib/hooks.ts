@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { api, type Repo, type Plan, type BranchNamingRule, type ScanSnapshot } from "./api";
+import { api, type Plan, type BranchNamingRule, type ScanSnapshot } from "./api";
 import { wsClient } from "./ws";
 
 // Generic async state hook
@@ -145,16 +145,16 @@ export function usePlan(repoId: string | null) {
 }
 
 // Scan hook with WebSocket updates
-export function useScan(repoId: string | null, localPath: string | null) {
+export function useScan(localPath: string | null) {
   const [data, setData] = useState<ScanSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const scan = useCallback(async () => {
-    if (!repoId || !localPath) return;
+    if (!localPath) return;
     setLoading(true);
     try {
-      const result = await api.scan(repoId, localPath);
+      const result = await api.scan(localPath);
       setData(result);
       setError(null);
     } catch (err) {
@@ -162,22 +162,22 @@ export function useScan(repoId: string | null, localPath: string | null) {
     } finally {
       setLoading(false);
     }
-  }, [repoId, localPath]);
+  }, [localPath]);
 
   // Listen for WebSocket updates
   useEffect(() => {
-    if (!repoId) return;
+    if (!data?.repoId) return;
 
-    wsClient.connect(repoId);
+    wsClient.connect(data.repoId);
 
     const unsubscribe = wsClient.on("scan.updated", (msg) => {
-      if (msg.repoId === repoId && msg.data) {
+      if (msg.repoId === data.repoId && msg.data) {
         setData(msg.data as ScanSnapshot);
       }
     });
 
     return unsubscribe;
-  }, [repoId]);
+  }, [data?.repoId]);
 
   return { data, loading, error, scan };
 }

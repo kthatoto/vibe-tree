@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import {
   useClipboard,
@@ -367,7 +367,7 @@ describe('useScan', () => {
   it('should not auto-fetch on mount', async () => {
     vi.mocked(wsClient.on).mockReturnValue(vi.fn());
 
-    const { result } = renderHook(() => useScan('owner/repo', '/path/to/repo'));
+    const { result } = renderHook(() => useScan('/path/to/repo'));
 
     // Initial state should not be loading
     expect(result.current.loading).toBe(false);
@@ -377,6 +377,9 @@ describe('useScan', () => {
 
   it('should scan when triggered', async () => {
     const mockSnapshot = {
+      repoId: 'owner/repo',
+      defaultBranch: 'main',
+      branches: ['main'],
       nodes: [],
       edges: [],
       warnings: [],
@@ -387,7 +390,7 @@ describe('useScan', () => {
     vi.mocked(api.scan).mockResolvedValue(mockSnapshot);
     vi.mocked(wsClient.on).mockReturnValue(vi.fn());
 
-    const { result } = renderHook(() => useScan('owner/repo', '/path/to/repo'));
+    const { result } = renderHook(() => useScan('/path/to/repo'));
 
     act(() => {
       result.current.scan();
@@ -402,20 +405,40 @@ describe('useScan', () => {
     expect(result.current.data).toEqual(mockSnapshot);
   });
 
-  it('should connect to WebSocket', async () => {
+  it('should connect to WebSocket after scan', async () => {
+    const mockSnapshot = {
+      repoId: 'owner/repo',
+      defaultBranch: 'main',
+      branches: ['main'],
+      nodes: [],
+      edges: [],
+      warnings: [],
+      worktrees: [],
+      rules: { branchNaming: null },
+      restart: null,
+    };
+    vi.mocked(api.scan).mockResolvedValue(mockSnapshot);
     vi.mocked(wsClient.on).mockReturnValue(vi.fn());
 
-    renderHook(() => useScan('owner/repo', '/path/to/repo'));
+    const { result } = renderHook(() => useScan('/path/to/repo'));
+
+    act(() => {
+      result.current.scan();
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
 
     await waitFor(() => {
       expect(wsClient.connect).toHaveBeenCalledWith('owner/repo');
     });
   });
 
-  it('should not connect when repoId is null', async () => {
+  it('should not connect when localPath is null', async () => {
     vi.mocked(wsClient.on).mockReturnValue(vi.fn());
 
-    renderHook(() => useScan(null, '/path/to/repo'));
+    renderHook(() => useScan(null));
 
     expect(wsClient.connect).not.toHaveBeenCalled();
   });
@@ -424,7 +447,7 @@ describe('useScan', () => {
     vi.mocked(api.scan).mockRejectedValue(new Error('Scan failed'));
     vi.mocked(wsClient.on).mockReturnValue(vi.fn());
 
-    const { result } = renderHook(() => useScan('owner/repo', '/path/to/repo'));
+    const { result } = renderHook(() => useScan('/path/to/repo'));
 
     act(() => {
       result.current.scan();

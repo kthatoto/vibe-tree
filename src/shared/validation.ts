@@ -66,21 +66,28 @@ export const logInstructionSchema = z.object({
 
 export type LogInstructionInput = z.infer<typeof logInstructionSchema>;
 
-// Tree spec schemas
+// Tree spec schemas (Task-based)
+export const taskStatusSchema = z.enum(["todo", "doing", "done"]);
+
 export const treeSpecNodeSchema = z.object({
-  branchName: z.string().min(1),
+  id: z.string().min(1), // UUID for task identification
+  title: z.string().min(1), // タスク名
+  description: z.string().optional(), // 完了条件/メモ
+  status: taskStatusSchema.default("todo"),
+  branchName: z.string().optional(), // 未確定ならundefined
+  // Legacy fields (optional for backward compat)
   intendedIssue: z.number().int().positive().optional(),
   intendedPr: z.number().int().positive().optional(),
-  description: z.string().optional(),
 });
 
 export const treeSpecEdgeSchema = z.object({
-  parent: z.string().min(1),
-  child: z.string().min(1),
+  parent: z.string().min(1), // node id
+  child: z.string().min(1), // node id
 });
 
 export const updateTreeSpecSchema = z.object({
   repoId: repoIdSchema,
+  baseBranch: z.string().optional(), // default branch (develop, main, master, etc.)
   nodes: z.array(treeSpecNodeSchema),
   edges: z.array(treeSpecEdgeSchema),
 });

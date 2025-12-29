@@ -66,17 +66,21 @@ scanRouter.post("/", async (c) => {
 
   // 1. Get branches
   const branches = getBranches(localPath);
+  const branchNames = branches.map((b) => b.name);
 
-  // 2. Get worktrees with heartbeat
+  // 2. Detect default branch dynamically
+  const defaultBranch = getDefaultBranch(localPath, branchNames);
+
+  // 3. Get worktrees with heartbeat
   const worktrees = getWorktrees(localPath);
 
-  // 3. Get PRs with detailed info
+  // 4. Get PRs with detailed info
   const prs = getPRs(localPath);
 
-  // 4. Build tree (infer parent-child relationships)
-  const { nodes, edges } = buildTree(branches, worktrees, prs, localPath);
+  // 5. Build tree (infer parent-child relationships)
+  const { nodes, edges } = buildTree(branches, worktrees, prs, localPath, defaultBranch);
 
-  // 5. Get branch naming rule
+  // 6. Get branch naming rule
   const rules = await db
     .select()
     .from(schema.projectRules)
@@ -93,7 +97,7 @@ scanRouter.post("/", async (c) => {
     ? (JSON.parse(ruleRecord.ruleJson) as BranchNamingRule)
     : null;
 
-  // 6. Get tree spec (設計ツリー)
+  // 7. Get tree spec (タスクツリー)
   const treeSpecs = await db
     .select()
     .from(schema.treeSpecs)
@@ -103,16 +107,17 @@ scanRouter.post("/", async (c) => {
     ? {
         id: treeSpecs[0].id,
         repoId: treeSpecs[0].repoId,
+        baseBranch: treeSpecs[0].baseBranch ?? defaultBranch,
         specJson: JSON.parse(treeSpecs[0].specJson),
         createdAt: treeSpecs[0].createdAt,
         updatedAt: treeSpecs[0].updatedAt,
       }
     : undefined;
 
-  // 7. Calculate warnings (including tree divergence)
-  const warnings = calculateWarnings(nodes, edges, branchNaming, treeSpec);
+  // 8. Calculate warnings (including tree divergence)
+  const warnings = calculateWarnings(nodes, edges, branchNaming, defaultBranch, treeSpec);
 
-  // 8. Generate restart info for active worktree
+  // 9. Generate restart info for active worktree
   const activeWorktree = worktrees.find((w) => w.branch !== "HEAD");
   const restart = activeWorktree
     ? generateRestartInfo(activeWorktree, nodes, warnings, branchNaming)
@@ -120,6 +125,8 @@ scanRouter.post("/", async (c) => {
 
   const snapshot: ScanSnapshot = {
     repoId,
+    defaultBranch,
+    branches: branchNames,
     nodes,
     edges,
     warnings,
@@ -227,6 +234,44 @@ ${gitStatus || "Clean working directory"}
     restartPromptMd: prompt,
   });
 });
+
+function getDefaultBranch(repoPath: string, branchNames: string[]): string {
+  // 1. Try to get origin's HEAD (most reliable)
+  try {
+    const output = execSync(
+      `cd "${repoPath}" && git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null`,
+      { encoding: "utf-8" }
+    ).trim();
+    // output is like "refs/remotes/origin/main"
+    const match = output.match(/refs\/remotes\/origin\/(.+)$/);
+    if (match && match[1] && branchNames.includes(match[1])) {
+      return match[1];
+    }
+  } catch {
+    // Ignore - try fallback methods
+  }
+
+  // 2. Try gh repo view to get default branch
+  try {
+    const output = execSync(
+      `cd "${repoPath}" && gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`,
+      { encoding: "utf-8" }
+    ).trim();
+    if (output && branchNames.includes(output)) {
+      return output;
+    }
+  } catch {
+    // Ignore - try fallback methods
+  }
+
+  // 3. Fallback priority: develop > main > master
+  if (branchNames.includes("develop")) return "develop";
+  if (branchNames.includes("main")) return "main";
+  if (branchNames.includes("master")) return "master";
+
+  // 4. Last resort: first branch or empty
+  return branchNames[0] ?? "main";
+}
 
 function getBranches(repoPath: string): BranchInfo[] {
   try {
@@ -344,15 +389,14 @@ function buildTree(
   branches: BranchInfo[],
   worktrees: WorktreeInfo[],
   prs: PRInfo[],
-  repoPath: string
+  repoPath: string,
+  defaultBranch: string
 ): { nodes: TreeNode[]; edges: TreeEdge[] } {
   const nodes: TreeNode[] = [];
   const edges: TreeEdge[] = [];
 
-  // Find main/master branch
-  const mainBranch = branches.find(
-    (b) => b.name === "main" || b.name === "master"
-  );
+  // Find default branch info
+  const baseBranch = branches.find((b) => b.name === defaultBranch);
 
   for (const branch of branches) {
     const worktree = worktrees.find((w) => w.branch === branch.name);
@@ -370,12 +414,12 @@ function buildTree(
       if (pr.reviewDecision === "CHANGES_REQUESTED") badges.push("changes-requested");
     }
 
-    // Calculate ahead/behind relative to main
+    // Calculate ahead/behind relative to default branch
     let aheadBehind: { ahead: number; behind: number } | undefined;
-    if (mainBranch && branch.name !== mainBranch.name) {
+    if (baseBranch && branch.name !== defaultBranch) {
       try {
         const output = execSync(
-          `cd "${repoPath}" && git rev-list --left-right --count ${mainBranch.name}...${branch.name}`,
+          `cd "${repoPath}" && git rev-list --left-right --count ${defaultBranch}...${branch.name}`,
           { encoding: "utf-8" }
         );
         const parts = output.trim().split(/\s+/);
@@ -398,9 +442,9 @@ function buildTree(
     nodes.push(node);
 
     // Infer parent relationship using merge-base
-    if (mainBranch && branch.name !== mainBranch.name) {
+    if (baseBranch && branch.name !== defaultBranch) {
       edges.push({
-        parent: mainBranch.name,
+        parent: defaultBranch,
         child: branch.name,
         confidence: "medium",
       });
@@ -414,6 +458,7 @@ function calculateWarnings(
   nodes: TreeNode[],
   edges: TreeEdge[],
   branchNaming: BranchNamingRule | null,
+  defaultBranch: string,
   treeSpec?: TreeSpec
 ): Warning[] {
   const warnings: Warning[] = [];
@@ -474,7 +519,7 @@ function calculateWarnings(
     // BRANCH_NAMING_VIOLATION
     if (
       branchPattern &&
-      !node.branchName.match(/^(main|master)$/) &&
+      node.branchName !== defaultBranch &&
       !branchPattern.test(node.branchName)
     ) {
       warnings.push({

@@ -255,8 +255,11 @@ export default function TreeDashboard() {
     api.getCurrentPlan(snapshot.repoId).then(setPlan).catch(console.error);
     wsClient.connect(snapshot.repoId);
 
-    const unsubScan = wsClient.on("scan.updated", (msg) => {
-      setSnapshot(msg.data as ScanSnapshot);
+    const unsubScan = wsClient.on("scan.updated", () => {
+      // Re-scan to get updated data (broadcast only sends repoId, not full snapshot)
+      if (selectedPin) {
+        api.scan(selectedPin.localPath).then(setSnapshot).catch(console.error);
+      }
     });
 
     const unsubChatMessage = wsClient.on("chat.message", (msg) => {
@@ -1348,7 +1351,7 @@ ${task.description ? `## タスク内容\n${task.description}\n` : ""}
                       placeholder="Task title..."
                       value={newTaskTitle}
                       onChange={(e) => setNewTaskTitle(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleAddWizardTask()}
+                      onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && handleAddWizardTask()}
                     />
                     <button onClick={handleAddWizardTask} disabled={!newTaskTitle.trim()}>
                       Add

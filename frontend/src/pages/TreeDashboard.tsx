@@ -4,6 +4,10 @@ import {
   DragOverlay,
   useDraggable,
   useDroppable,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -199,8 +203,7 @@ export default function TreeDashboard() {
   const [showChat, setShowChat] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
 
-  // Tree Spec wizard state (Task-based)
-  const [showTreeWizard, setShowTreeWizard] = useState(false);
+  // Tree Spec state (Task-based)
   const [wizardBaseBranch, setWizardBaseBranch] = useState<string>("main");
   const [wizardNodes, setWizardNodes] = useState<TreeSpecNode[]>([]);
   const [wizardEdges, setWizardEdges] = useState<TreeSpecEdge[]>([]);
@@ -219,6 +222,13 @@ export default function TreeDashboard() {
   const [settingsNewExample, setSettingsNewExample] = useState("");
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
+
+  // D&D sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
+  );
 
   // Load repo pins on mount
   useEffect(() => {
@@ -371,24 +381,22 @@ export default function TreeDashboard() {
     setChatMessages([]);
   };
 
-  // Tree Spec wizard functions (Task-based)
-  const handleOpenTreeWizard = () => {
-    // Initialize with existing tree spec if available
-    if (snapshot?.treeSpec) {
+  // Initialize tree spec state when snapshot changes
+  useEffect(() => {
+    if (!snapshot) return;
+    if (snapshot.treeSpec) {
       setWizardBaseBranch(snapshot.treeSpec.baseBranch);
       setWizardNodes(snapshot.treeSpec.specJson.nodes);
       setWizardEdges(snapshot.treeSpec.specJson.edges);
       setWizardStatus(snapshot.treeSpec.status);
     } else {
-      // Start fresh with detected default branch
-      const baseBranch = snapshot?.defaultBranch ?? "main";
+      const baseBranch = snapshot.defaultBranch ?? "main";
       setWizardBaseBranch(baseBranch);
       setWizardNodes([]);
       setWizardEdges([]);
       setWizardStatus("draft");
     }
-    setShowTreeWizard(true);
-  };
+  }, [snapshot?.repoId]);
 
   const generateTaskId = () => crypto.randomUUID();
 
@@ -478,52 +486,45 @@ export default function TreeDashboard() {
     (n) => !wizardEdges.some((e) => e.child === n.id)
   );
 
-  // Get tasks in tree (has parent edge or is root)
-  const treeTasks = wizardNodes.filter(
-    (n) => wizardEdges.some((e) => e.child === n.id)
-  );
-
-  // Build tree structure for display
-  const buildTreeStructure = () => {
-    // Find root tasks (in tree but no parent, or all tasks without parent edge)
-    const rootTasks = wizardNodes.filter(
-      (n) => !wizardEdges.some((e) => e.child === n.id)
-    );
-
-    const getChildren = (parentId: string): TreeSpecNode[] => {
-      const childEdges = wizardEdges.filter((e) => e.parent === parentId);
-      return childEdges.map((e) => wizardNodes.find((n) => n.id === e.child)!).filter(Boolean);
-    };
-
-    const renderTreeNode = (task: TreeSpecNode, depth: number): React.ReactNode => {
-      const children = getChildren(task.id);
-      return (
-        <div key={task.id} className="tree-builder__node" style={{ marginLeft: depth * 20 }}>
-          <DroppableTreeNode id={task.id}>
-            <DraggableTask task={task}>
-              <TaskCard
-                task={task}
-                onStatusChange={handleUpdateTaskStatus}
-                onRemove={handleRemoveWizardTask}
-                onStart={handleStartTask}
-                onClick={handleTaskNodeClick}
-                onConsult={handleConsultTask}
-                loading={loading}
-                compact
-                isLocked={isLocked}
-              />
-            </DraggableTask>
-          </DroppableTreeNode>
-          {children.length > 0 && (
-            <div className="tree-builder__children">
-              {children.map((child) => renderTreeNode(child, depth + 1))}
-            </div>
-          )}
-        </div>
+  // Helper to get children of a parent (null = root tasks)
+  const getChildren = (parentId: string | null): TreeSpecNode[] => {
+    if (parentId === null) {
+      // Root tasks: have no parent edge
+      return wizardNodes.filter(
+        (n) => !wizardEdges.some((e) => e.child === n.id)
       );
-    };
+    }
+    const childEdges = wizardEdges.filter((e) => e.parent === parentId);
+    return childEdges.map((e) => wizardNodes.find((n) => n.id === e.child)!).filter(Boolean);
+  };
 
-    return rootTasks.map((task) => renderTreeNode(task, 0));
+  // Render a tree node with its children
+  const renderTreeNode = (task: TreeSpecNode, depth: number): React.ReactNode => {
+    const children = getChildren(task.id);
+    return (
+      <div key={task.id} className="tree-builder__node" style={{ marginLeft: depth * 20 }}>
+        <DroppableTreeNode id={task.id}>
+          <DraggableTask task={task}>
+            <TaskCard
+              task={task}
+              onStatusChange={handleUpdateTaskStatus}
+              onRemove={handleRemoveWizardTask}
+              onStart={handleStartTask}
+              onClick={handleTaskNodeClick}
+              onConsult={handleConsultTask}
+              loading={loading}
+              compact
+              isLocked={isLocked}
+            />
+          </DraggableTask>
+        </DroppableTreeNode>
+        {children.length > 0 && (
+          <div className="tree-builder__children">
+            {children.map((child) => renderTreeNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const handleUpdateTaskStatus = (taskId: string, status: TaskStatus) => {
@@ -609,7 +610,6 @@ export default function TreeDashboard() {
       setSnapshot((prev) =>
         prev ? { ...prev, treeSpec: updatedSpec } : prev
       );
-      setShowTreeWizard(false);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -811,7 +811,6 @@ export default function TreeDashboard() {
           const messages = await api.getChatMessages(session.id);
           setChatMessages(messages);
           setShowChat(true);
-          setShowTreeWizard(false);
           return;
         }
       } catch (err) {
@@ -848,7 +847,6 @@ ${task.description ? `## Done Condition\n${task.description}` : ""}
       const messages = await api.getChatMessages(newSession.id);
       setChatMessages(messages);
       setShowChat(true);
-      setShowTreeWizard(false);
     } catch (err) {
       setError(`Failed to create chat session: ${(err as Error).message}`);
     }
@@ -883,7 +881,6 @@ ${task.description ? `## タスク内容\n${task.description}\n` : ""}
       const messages = await api.getChatMessages(newSession.id);
       setChatMessages(messages);
       setShowChat(true);
-      setShowTreeWizard(false);
     } catch (err) {
       setError(`Failed to create chat session: ${(err as Error).message}`);
     }
@@ -1666,175 +1663,6 @@ ${task.description ? `## タスク内容\n${task.description}\n` : ""}
             >
               {chatLoading ? "..." : "Send"}
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Task Tree Builder Modal */}
-      {showTreeWizard && (
-        <div className="wizard-overlay">
-          <div className="wizard-modal wizard-modal--wide">
-            <div className="wizard-header">
-              <h2>Task Tree Builder</h2>
-              <div className="wizard-header__controls">
-                <select
-                  value={wizardBaseBranch}
-                  onChange={(e) => setWizardBaseBranch(e.target.value)}
-                  className="wizard-base-select-inline"
-                  disabled={isLocked}
-                >
-                  {snapshot?.branches.map((branch) => (
-                    <option key={branch} value={branch}>
-                      {branch}
-                    </option>
-                  ))}
-                </select>
-                <button onClick={() => setShowTreeWizard(false)}>×</button>
-              </div>
-            </div>
-            {isLocked && (
-              <div className="wizard-locked-notice">
-                確定済みのため編集できません。編集するには「確定解除」してください。
-              </div>
-            )}
-            <DndContext onDragStart={isLocked ? undefined : handleDragStart} onDragEnd={isLocked ? undefined : handleDragEnd}>
-              <div className={`tree-builder ${isLocked ? "tree-builder--locked" : ""}`}>
-                {/* Left: Backlog */}
-                <div className="tree-builder__backlog">
-                  <h3>Backlog ({backlogTasks.length})</h3>
-                  <DroppableTreeNode id="backlog-zone">
-                    <div className="tree-builder__backlog-list">
-                      {backlogTasks.map((task) => (
-                        <DraggableTask key={task.id} task={task}>
-                          <TaskCard
-                            task={task}
-                            onStatusChange={handleUpdateTaskStatus}
-                            onRemove={handleRemoveWizardTask}
-                            onStart={handleStartTask}
-                            onClick={handleTaskNodeClick}
-                            onConsult={handleConsultTask}
-                            loading={loading}
-                            isLocked={isLocked}
-                          />
-                        </DraggableTask>
-                      ))}
-                      {backlogTasks.length === 0 && (
-                        <div className="tree-builder__empty">
-                          ドラッグしてここに戻す
-                        </div>
-                      )}
-                    </div>
-                  </DroppableTreeNode>
-                  {/* Add Task Form */}
-                  {!isLocked && (
-                    <div className="tree-builder__add-form">
-                      <input
-                        type="text"
-                        placeholder="新しいタスク名"
-                        value={newTaskTitle}
-                        onChange={(e) => setNewTaskTitle(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleAddWizardTask()}
-                      />
-                      <button onClick={handleAddWizardTask} disabled={!newTaskTitle.trim()}>
-                        追加
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Right: Tree */}
-                <div className="tree-builder__tree">
-                  <h3>Task Tree ({treeTasks.length})</h3>
-                  <DroppableTreeNode id="tree-root">
-                    <div className="tree-builder__tree-root">
-                      <div className="tree-builder__base-branch">
-                        {wizardBaseBranch}
-                      </div>
-                      <div className="tree-builder__tree-content">
-                        {buildTreeStructure()}
-                        {wizardNodes.length === 0 && (
-                          <div className="tree-builder__empty">
-                            左からドラッグしてタスクを配置
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </DroppableTreeNode>
-                </div>
-              </div>
-
-              {/* Drag Overlay */}
-              <DragOverlay>
-                {activeDragId ? (
-                  <div className="task-card task-card--dragging">
-                    {wizardNodes.find((n) => n.id === activeDragId)?.title}
-                  </div>
-                ) : null}
-              </DragOverlay>
-            </DndContext>
-
-            {/* Generation Logs */}
-            {showGenerateLogs && generateLogs.length > 0 && (
-              <div className="generate-logs">
-                <div className="generate-logs__header">
-                  <h4>Generation Log</h4>
-                  <button onClick={() => setShowGenerateLogs(false)}>×</button>
-                </div>
-                <div className="generate-logs__content">
-                  {generateLogs.map((log, i) => (
-                    <div key={i} className={`generate-logs__line ${log.includes('✗') ? 'generate-logs__line--error' : log.includes('✓') ? 'generate-logs__line--success' : ''}`}>
-                      {log}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="wizard-footer">
-              <div className="wizard-footer__left">
-                <span className={`wizard-status wizard-status--${wizardStatus}`}>
-                  {wizardStatus === "draft" && "下書き"}
-                  {wizardStatus === "confirmed" && "確定済み"}
-                  {wizardStatus === "generated" && "生成済み"}
-                </span>
-              </div>
-              <div className="wizard-footer__right">
-                <button className="btn-secondary" onClick={() => setShowTreeWizard(false)}>
-                  閉じる
-                </button>
-                {wizardStatus === "draft" && (
-                  <>
-                    <button className="btn-secondary" onClick={handleSaveTreeSpec} disabled={loading}>
-                      {loading ? "保存中..." : "下書き保存"}
-                    </button>
-                    <button
-                      className="btn-primary"
-                      onClick={handleConfirmTreeSpec}
-                      disabled={loading || !canConfirm}
-                      title={!canConfirm ? "確定するには: ベースブランチ選択、1つ以上のタスク、ルートタスクが必要" : ""}
-                    >
-                      {loading ? "確定中..." : "確定"}
-                    </button>
-                  </>
-                )}
-                {(wizardStatus === "confirmed" || wizardStatus === "generated") && (
-                  <>
-                    <button className="btn-secondary" onClick={handleUnconfirmTreeSpec} disabled={loading}>
-                      {loading ? "解除中..." : "確定解除"}
-                    </button>
-                    {tasksReadyForWorktrees > 0 && (
-                      <button
-                        className="btn-create-all"
-                        onClick={handleBatchCreateWorktrees}
-                        disabled={loading}
-                      >
-                        {loading ? "作成中..." : `Worktree生成 (${tasksReadyForWorktrees})`}
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       )}

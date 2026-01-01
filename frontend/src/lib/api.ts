@@ -518,7 +518,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ repoId, worktreePath, planId }),
     }),
-  createPlanningSession: (repoId: string, localPath: string) =>
+  createChatPlanningSession: (repoId: string, localPath: string) =>
     fetchJson<ChatSession>(`${API_BASE}/chat/sessions/planning`, {
       method: "POST",
       body: JSON.stringify({ repoId, localPath }),

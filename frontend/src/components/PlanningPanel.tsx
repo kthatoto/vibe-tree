@@ -1,5 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
+import {
   api,
   type PlanningSession,
   type TaskNode,
@@ -10,7 +21,148 @@ import {
 import { wsClient } from "../lib/ws";
 import { ChatPanel } from "./ChatPanel";
 import type { TaskSuggestion } from "../lib/task-parser";
+import githubIcon from "../assets/github.svg";
+import notionIcon from "../assets/notion.svg";
+import figmaIcon from "../assets/figma.svg";
+import linkIcon from "../assets/link.svg";
 import "./PlanningPanel.css";
+
+// Draggable task item component
+function DraggableTaskItem({
+  task,
+  parentName,
+  depth,
+  isDraft,
+  onRemove,
+  onRemoveParent,
+  onBranchNameChange,
+}: {
+  task: TaskNode;
+  parentName?: string;
+  depth: number;
+  isDraft: boolean;
+  onRemove: () => void;
+  onRemoveParent?: () => void;
+  onBranchNameChange?: (newName: string) => void;
+}) {
+  const [isEditingBranch, setIsEditingBranch] = useState(false);
+  const [editBranchValue, setEditBranchValue] = useState(task.branchName || "");
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
+    id: task.id,
+    disabled: !isDraft || isEditingBranch,
+  });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `drop-${task.id}`,
+    disabled: !isDraft,
+  });
+
+  const handleBranchSave = () => {
+    onBranchNameChange?.(editBranchValue);
+    setIsEditingBranch(false);
+  };
+
+  const handleBranchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleBranchSave();
+    } else if (e.key === "Escape") {
+      setEditBranchValue(task.branchName || "");
+      setIsEditingBranch(false);
+    }
+  };
+
+  const handleTaskClick = (e: React.MouseEvent) => {
+    // Don't toggle if clicking on interactive elements
+    if ((e.target as HTMLElement).closest("button, input, .planning-panel__task-branch--editable")) {
+      return;
+    }
+    setIsExpanded(!isExpanded);
+  };
+
+  // Generate default branch name from title if not set
+  const displayBranchName = task.branchName || `task/${task.title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").substring(0, 30)}`;
+
+  return (
+    <div
+      ref={(node) => {
+        setDragRef(node);
+        setDropRef(node);
+      }}
+      className={`planning-panel__task-item ${isOver ? "planning-panel__task-item--drop-target" : ""} ${isExpanded ? "planning-panel__task-item--expanded" : ""}`}
+      style={{ opacity: isDragging ? 0.5 : 1, marginLeft: depth * 16 }}
+      onClick={handleTaskClick}
+      {...(isEditingBranch ? {} : { ...attributes, ...listeners })}
+    >
+      {parentName && (
+        <div className="planning-panel__task-parent">
+          ↳ {parentName}
+          {isDraft && onRemoveParent && (
+            <button
+              className="planning-panel__task-parent-remove"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemoveParent();
+              }}
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
+      <div className="planning-panel__task-title">{task.title}</div>
+      <div className="planning-panel__task-branch-row">
+        {isEditingBranch ? (
+          <input
+            type="text"
+            value={editBranchValue}
+            onChange={(e) => setEditBranchValue(e.target.value)}
+            onBlur={handleBranchSave}
+            onKeyDown={handleBranchKeyDown}
+            className="planning-panel__task-branch-input"
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <div
+            className={`planning-panel__task-branch ${isDraft ? "planning-panel__task-branch--editable" : ""}`}
+            onClick={(e) => {
+              if (isDraft) {
+                e.stopPropagation();
+                setEditBranchValue(task.branchName || displayBranchName);
+                setIsEditingBranch(true);
+              }
+            }}
+          >
+            {displayBranchName}
+            {isDraft && <span className="planning-panel__task-branch-edit">✎</span>}
+          </div>
+        )}
+      </div>
+      {task.description && (
+        <div className="planning-panel__task-desc-wrapper">
+          <div className={`planning-panel__task-desc ${isExpanded ? "planning-panel__task-desc--expanded" : ""}`}>
+            {task.description}
+          </div>
+          <span className="planning-panel__task-expand-hint">
+            {isExpanded ? "▲" : "▼"}
+          </span>
+        </div>
+      )}
+      {isDraft && (
+        <button
+          className="planning-panel__task-remove"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+        >
+          x
+        </button>
+      )}
+    </div>
+  );
+}
 
 interface PlanningPanelProps {
   repoId: string;
@@ -43,9 +195,17 @@ export function PlanningPanel({
   const [newLinkUrl, setNewLinkUrl] = useState("");
   const [addingLink, setAddingLink] = useState(false);
 
-  // Chat messages for selected session
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [messagesLoading, setMessagesLoading] = useState(false);
+  // Chat messages for selected session (used internally in useEffect)
+  const [, setMessages] = useState<ChatMessage[]>([]);
+  const [, setMessagesLoading] = useState(false);
+
+  // Drag and drop for task parent-child relationships
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
+  );
 
   // Load sessions
   useEffect(() => {
@@ -99,10 +259,22 @@ export function PlanningPanel({
       }
     });
 
+    const unsubDiscarded = wsClient.on("planning.discarded", (msg) => {
+      if (msg.data && typeof msg.data === "object" && "id" in msg.data) {
+        const discarded = msg.data as PlanningSession;
+        setSessions((prev) => prev.map((s) => (s.id === discarded.id ? discarded : s)));
+        if (selectedSession?.id === discarded.id) {
+          setSelectedSession(discarded);
+          onSessionSelect?.(discarded);
+        }
+      }
+    });
+
     return () => {
       unsubCreated();
       unsubUpdated();
       unsubDeleted();
+      unsubDiscarded();
     };
   }, [repoId, selectedSession?.id]);
 
@@ -208,12 +380,13 @@ export function PlanningPanel({
 
   const handleDiscard = async () => {
     if (!selectedSession) return;
-    if (!confirm("Discard this planning session?")) return;
+    if (!confirm("このプランニングセッションを破棄しますか？")) return;
     setLoading(true);
     try {
-      await api.discardPlanningSession(selectedSession.id);
-      // Remove from list
-      setSessions((prev) => prev.filter((s) => s.id !== selectedSession.id));
+      const updated = await api.discardPlanningSession(selectedSession.id);
+      // Update status in list (keep it visible as discarded)
+      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      // Go back to list
       setSelectedSession(null);
       onSessionSelect?.(null);
     } catch (err) {
@@ -225,7 +398,7 @@ export function PlanningPanel({
 
   const handleDelete = async () => {
     if (!selectedSession) return;
-    if (!confirm("Delete this planning session permanently?")) return;
+    if (!confirm("このプランニングセッションを完全に削除しますか？")) return;
     setLoading(true);
     try {
       await api.deletePlanningSession(selectedSession.id);
@@ -269,11 +442,25 @@ export function PlanningPanel({
       id: crypto.randomUUID(),
       title: suggestion.label,
       description: suggestion.description,
+      branchName: suggestion.branchName,
     };
     const updatedNodes = [...selectedSession.nodes, newNode];
+
+    // Find parent by label if specified
+    let updatedEdges = [...selectedSession.edges];
+    if (suggestion.parentLabel) {
+      const parentNode = selectedSession.nodes.find(
+        (n) => n.title.toLowerCase() === suggestion.parentLabel?.toLowerCase()
+      );
+      if (parentNode) {
+        updatedEdges.push({ parent: parentNode.id, child: newNode.id });
+      }
+    }
+
     try {
       const updated = await api.updatePlanningSession(selectedSession.id, {
         nodes: updatedNodes,
+        edges: updatedEdges,
       });
       setSelectedSession(updated);
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
@@ -303,15 +490,119 @@ export function PlanningPanel({
     }
   };
 
-  const getLinkTypeIcon = (type: string) => {
-    switch (type) {
-      case "notion": return "N";
-      case "figma": return "F";
-      case "github_issue": return "#";
-      case "github_pr": return "PR";
-      default: return "URL";
+  // Drag and drop handlers for parent-child relationships
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(event.active.id as string);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveDragId(null);
+    const { active, over } = event;
+    if (!over || !selectedSession) return;
+
+    const draggedId = active.id as string;
+    const droppedOnId = (over.id as string).replace("drop-", "");
+
+    // Don't drop on self
+    if (draggedId === droppedOnId) return;
+
+    // Check for circular dependency
+    const wouldCreateCycle = (childId: string, parentId: string): boolean => {
+      const existingParent = selectedSession.edges.find((e) => e.child === parentId)?.parent;
+      if (!existingParent) return false;
+      if (existingParent === childId) return true;
+      return wouldCreateCycle(childId, existingParent);
+    };
+
+    if (wouldCreateCycle(draggedId, droppedOnId)) {
+      console.warn("Cannot create circular dependency");
+      return;
+    }
+
+    // Remove existing parent edge for this task
+    const updatedEdges = selectedSession.edges.filter((e) => e.child !== draggedId);
+    // Add new parent edge
+    updatedEdges.push({ parent: droppedOnId, child: draggedId });
+
+    try {
+      const updated = await api.updatePlanningSession(selectedSession.id, {
+        edges: updatedEdges,
+      });
+      setSelectedSession(updated);
+      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      onTasksChange?.(updated.nodes, updated.edges);
+    } catch (err) {
+      console.error("Failed to set parent:", err);
     }
   };
+
+  const handleRemoveParent = async (taskId: string) => {
+    if (!selectedSession) return;
+    const updatedEdges = selectedSession.edges.filter((e) => e.child !== taskId);
+    try {
+      const updated = await api.updatePlanningSession(selectedSession.id, {
+        edges: updatedEdges,
+      });
+      setSelectedSession(updated);
+      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      onTasksChange?.(updated.nodes, updated.edges);
+    } catch (err) {
+      console.error("Failed to remove parent:", err);
+    }
+  };
+
+  // Update branch name for a task
+  const handleBranchNameChange = async (taskId: string, newBranchName: string) => {
+    if (!selectedSession) return;
+    const updatedNodes = selectedSession.nodes.map((n) =>
+      n.id === taskId ? { ...n, branchName: newBranchName } : n
+    );
+    try {
+      const updated = await api.updatePlanningSession(selectedSession.id, {
+        nodes: updatedNodes,
+      });
+      setSelectedSession(updated);
+      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      onTasksChange?.(updated.nodes, updated.edges);
+    } catch (err) {
+      console.error("Failed to update branch name:", err);
+    }
+  };
+
+  // Get parent name for a task
+  const getParentName = (taskId: string): string | undefined => {
+    if (!selectedSession) return undefined;
+    const edge = selectedSession.edges.find((e) => e.child === taskId);
+    if (!edge) return undefined;
+    const parentTask = selectedSession.nodes.find((n) => n.id === edge.parent);
+    return parentTask?.title;
+  };
+
+  // Get depth of a task in the hierarchy
+  const getTaskDepth = (taskId: string): number => {
+    if (!selectedSession) return 0;
+    let depth = 0;
+    let currentId = taskId;
+    while (true) {
+      const edge = selectedSession.edges.find((e) => e.child === currentId);
+      if (!edge) break;
+      depth++;
+      currentId = edge.parent;
+    }
+    return depth;
+  };
+
+  const getLinkTypeIcon = (type: string): { iconSrc: string; className: string } => {
+    switch (type) {
+      case "notion": return { iconSrc: notionIcon, className: "planning-panel__link-icon--notion" };
+      case "figma": return { iconSrc: figmaIcon, className: "planning-panel__link-icon--figma" };
+      case "github_issue": return { iconSrc: githubIcon, className: "planning-panel__link-icon--github" };
+      case "github_pr": return { iconSrc: githubIcon, className: "planning-panel__link-icon--github" };
+      default: return { iconSrc: linkIcon, className: "" };
+    }
+  };
+
+  const [showLinkInput, setShowLinkInput] = useState(false);
 
   if (loading && sessions.length === 0) {
     return (
@@ -441,6 +732,7 @@ export function PlanningPanel({
             <ChatPanel
               sessionId={selectedSession.chatSessionId}
               onTaskSuggested={handleTaskSuggested}
+              existingTaskLabels={selectedSession.nodes.map((n) => n.title)}
               disabled={selectedSession.status !== "draft"}
             />
           )}
@@ -451,102 +743,137 @@ export function PlanningPanel({
           {/* External Links */}
           <div className="planning-panel__links">
             <h4>Links</h4>
-            {externalLinks.map((link) => (
-              <div key={link.id} className="planning-panel__link-item">
-                <span className="planning-panel__link-type">
-                  {getLinkTypeIcon(link.linkType)}
-                </span>
-                <a href={link.url} target="_blank" rel="noopener noreferrer">
-                  {link.title || link.url}
-                </a>
-                {selectedSession.status === "draft" && (
-                  <button
-                    className="planning-panel__link-remove"
-                    onClick={() => handleRemoveLink(link.id)}
+            <div className="planning-panel__links-list">
+              {externalLinks.map((link) => {
+                const { iconSrc, className } = getLinkTypeIcon(link.linkType);
+                return (
+                  <a
+                    key={link.id}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`planning-panel__link-icon ${className}`}
+                    title={link.title || link.url}
                   >
-                    x
-                  </button>
-                )}
-              </div>
-            ))}
-            {selectedSession.status === "draft" && (
-              <div className="planning-panel__link-add">
-                <input
-                  type="text"
-                  placeholder="Paste URL..."
-                  value={newLinkUrl}
-                  onChange={(e) => setNewLinkUrl(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddLink()}
-                />
-                <button onClick={handleAddLink} disabled={addingLink}>
-                  {addingLink ? "..." : "+"}
+                    <img src={iconSrc} alt={link.linkType} />
+                    {selectedSession.status === "draft" && (
+                      <span
+                        className="planning-panel__link-remove-overlay"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleRemoveLink(link.id);
+                        }}
+                      >
+                        ×
+                      </span>
+                    )}
+                  </a>
+                );
+              })}
+              {selectedSession.status === "draft" && (
+                <button
+                  className="planning-panel__link-add-icon"
+                  onClick={() => setShowLinkInput(!showLinkInput)}
+                  title="Add link"
+                >
+                  +
                 </button>
-              </div>
+              )}
+            </div>
+            {showLinkInput && selectedSession.status === "draft" && (
+              <input
+                type="text"
+                className="planning-panel__link-add-input"
+                placeholder="Paste URL and press Enter..."
+                value={newLinkUrl}
+                onChange={(e) => setNewLinkUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleAddLink();
+                    setShowLinkInput(false);
+                  } else if (e.key === "Escape") {
+                    setShowLinkInput(false);
+                    setNewLinkUrl("");
+                  }
+                }}
+                autoFocus
+              />
             )}
           </div>
 
           {/* Task list */}
           <div className="planning-panel__tasks">
             <h4>Tasks ({selectedSession.nodes.length})</h4>
-            {selectedSession.nodes.map((task) => (
-              <div key={task.id} className="planning-panel__task-item">
-                <div className="planning-panel__task-title">{task.title}</div>
-                {task.description && (
-                  <div className="planning-panel__task-desc">{task.description}</div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              {selectedSession.nodes.map((task) => (
+                <DraggableTaskItem
+                  key={task.id}
+                  task={task}
+                  parentName={getParentName(task.id)}
+                  depth={getTaskDepth(task.id)}
+                  isDraft={selectedSession.status === "draft"}
+                  onRemove={() => handleRemoveTask(task.id)}
+                  onRemoveParent={() => handleRemoveParent(task.id)}
+                  onBranchNameChange={(newName) => handleBranchNameChange(task.id, newName)}
+                />
+              ))}
+              <DragOverlay>
+                {activeDragId && (
+                  <div className="planning-panel__task-item planning-panel__task-item--dragging">
+                    {selectedSession.nodes.find((t) => t.id === activeDragId)?.title}
+                  </div>
                 )}
-                {selectedSession.status === "draft" && (
-                  <button
-                    className="planning-panel__task-remove"
-                    onClick={() => handleRemoveTask(task.id)}
-                  >
-                    x
-                  </button>
-                )}
-              </div>
-            ))}
+              </DragOverlay>
+            </DndContext>
             {selectedSession.nodes.length === 0 && (
               <div className="planning-panel__tasks-empty">
                 Chat with AI to suggest tasks
               </div>
             )}
           </div>
+
+          {/* Actions in sidebar */}
+          {selectedSession.status === "draft" && (
+            <div className="planning-panel__actions">
+              <button
+                className="planning-panel__discard-btn"
+                onClick={handleDiscard}
+                disabled={loading}
+              >
+                Discard
+              </button>
+              <button
+                className="planning-panel__confirm-btn"
+                onClick={handleConfirm}
+                disabled={loading || selectedSession.nodes.length === 0}
+              >
+                Confirm
+              </button>
+            </div>
+          )}
+
+          {selectedSession.status === "confirmed" && (
+            <div className="planning-panel__status-banner planning-panel__status-banner--confirmed">
+              Confirmed
+            </div>
+          )}
+
+          {selectedSession.status === "discarded" && (
+            <div className="planning-panel__status-banner planning-panel__status-banner--discarded">
+              Discarded
+              <button onClick={handleDelete} className="planning-panel__delete-btn">
+                Delete
+              </button>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Actions */}
-      {selectedSession.status === "draft" && (
-        <div className="planning-panel__actions">
-          <button
-            className="planning-panel__confirm-btn"
-            onClick={handleConfirm}
-            disabled={loading || selectedSession.nodes.length === 0}
-          >
-            Confirm & Create Branches
-          </button>
-          <button
-            className="planning-panel__discard-btn"
-            onClick={handleDiscard}
-            disabled={loading}
-          >
-            Discard
-          </button>
-        </div>
-      )}
-
-      {selectedSession.status === "confirmed" && (
-        <div className="planning-panel__status-banner planning-panel__status-banner--confirmed">
-          Planning confirmed. Branches will be created.
-        </div>
-      )}
-
-      {selectedSession.status === "discarded" && (
-        <div className="planning-panel__status-banner planning-panel__status-banner--discarded">
-          Planning discarded.
-          <button onClick={handleDelete} className="planning-panel__delete-btn">
-            Delete permanently
-          </button>
-        </div>
-      )}
     </div>
   );
 }

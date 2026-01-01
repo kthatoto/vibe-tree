@@ -31,10 +31,11 @@ interface LayoutEdge {
   isTentative?: boolean;
 }
 
-const NODE_WIDTH = 280;
-const NODE_HEIGHT = 36;
-const HORIZONTAL_GAP = 40;
-const VERTICAL_GAP = 28;
+const NODE_WIDTH = 320;
+const NODE_HEIGHT = 32;
+const TENTATIVE_NODE_HEIGHT = 48;
+const HORIZONTAL_GAP = 48;
+const VERTICAL_GAP = 20;
 const PADDING = 20;
 
 // Badge colors
@@ -154,7 +155,8 @@ export default function BranchGraph({
     if (tentativeNodes.length > 0 && tentativeBaseBranch) {
       const baseBranchNode = nodeMap.get(tentativeBaseBranch);
       const baseDepth = baseBranchNode?.depth ?? 0;
-      const baseX = baseBranchNode?.x ?? PADDING;
+      // baseX reserved for future horizontal positioning
+      void (baseBranchNode?.x ?? PADDING);
 
       // Build tentative children map
       const tentChildrenMap = new Map<string, string[]>();
@@ -261,7 +263,10 @@ export default function BranchGraph({
 
     // Calculate canvas size
     const maxX = Math.max(...layoutNodes.map((n) => n.x), 0) + NODE_WIDTH + PADDING;
-    const maxY = Math.max(...layoutNodes.map((n) => n.y), 0) + NODE_HEIGHT + PADDING;
+    const maxY = Math.max(
+      ...layoutNodes.map((n) => n.y + (n.isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT)),
+      0
+    ) + PADDING;
 
     return {
       layoutNodes,
@@ -273,10 +278,12 @@ export default function BranchGraph({
 
   const renderEdge = (edge: LayoutEdge, index: number) => {
     // Horizontal edge: from right side of parent to left side of child
+    const fromHeight = edge.from.isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT;
+    const toHeight = edge.to.isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT;
     const startX = edge.from.x + NODE_WIDTH;
-    const startY = edge.from.y + NODE_HEIGHT / 2;
+    const startY = edge.from.y + fromHeight / 2;
     const endX = edge.to.x;
-    const endY = edge.to.y + NODE_HEIGHT / 2;
+    const endY = edge.to.y + toHeight / 2;
 
     // Simple right-angle path: go right, then vertical, then right to target
     const cornerX = startX + 20;
@@ -342,9 +349,10 @@ export default function BranchGraph({
     }
 
     // For tentative nodes, show task title; for real nodes, show branch name
-    const displayText = isTentative && tentativeTitle
-      ? (tentativeTitle.length > 30 ? tentativeTitle.slice(0, 28) + "..." : tentativeTitle)
-      : (id.length > 30 ? id.slice(0, 28) + "..." : id);
+    const displayText = isTentative && tentativeTitle ? tentativeTitle : id;
+    // For tentative nodes, also show branch name
+    const branchNameDisplay = isTentative ? id : null;
+    const nodeHeight = isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT;
 
     return (
       <g
@@ -358,48 +366,69 @@ export default function BranchGraph({
           x={x}
           y={y}
           width={NODE_WIDTH}
-          height={NODE_HEIGHT}
-          rx={4}
-          ry={4}
+          height={nodeHeight}
+          rx={6}
+          ry={6}
           fill={fillColor}
           stroke={strokeColor}
           strokeWidth={isSelected ? 2 : 1.5}
           strokeDasharray={strokeDash}
         />
 
-        {/* Branch name or task title */}
-        <text
-          x={x + 10}
-          y={y + NODE_HEIGHT / 2 + 1}
-          textAnchor="start"
-          dominantBaseline="middle"
-          fontSize={11}
-          fontFamily={isTentative ? "sans-serif" : "monospace"}
-          fontWeight={isDefault ? "bold" : "normal"}
-          fontStyle={isTentative ? "italic" : "normal"}
-          fill={isTentative ? "#c084fc" : "#e5e7eb"}
+        {/* Branch name or task title using foreignObject for proper wrapping */}
+        <foreignObject
+          x={x + 8}
+          y={y + 2}
+          width={NODE_WIDTH - 16}
+          height={nodeHeight - 4}
         >
-          {displayText}
-        </text>
-        {/* Tentative label */}
-        {isTentative && (
-          <text
-            x={x + NODE_WIDTH - 55}
-            y={y + NODE_HEIGHT / 2 + 1}
-            textAnchor="end"
-            dominantBaseline="middle"
-            fontSize={9}
-            fill="#9c27b0"
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              overflow: "hidden",
+            }}
           >
-            (tentative)
-          </text>
-        )}
+            <div
+              style={{
+                fontSize: isTentative ? 11 : 12,
+                fontFamily: isTentative ? "sans-serif" : "monospace",
+                fontWeight: isDefault ? "bold" : isTentative ? 500 : "normal",
+                color: isTentative ? "#c084fc" : "#e5e7eb",
+                lineHeight: 1.2,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: isTentative ? "normal" : "nowrap",
+              }}
+            >
+              {displayText}
+            </div>
+            {branchNameDisplay && (
+              <div
+                style={{
+                  fontSize: 11,
+                  fontFamily: "monospace",
+                  color: "#9ca3af",
+                  marginTop: 2,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {branchNameDisplay}
+              </div>
+            )}
+          </div>
+        </foreignObject>
 
         {/* Status indicators on right side */}
         {hasWorktree && (
           <circle
             cx={x + NODE_WIDTH - 12}
-            cy={y + NODE_HEIGHT / 2}
+            cy={y + nodeHeight / 2}
             r={5}
             fill={node.worktree?.isActive ? "#4caf50" : "#9e9e9e"}
           />
@@ -487,7 +516,7 @@ export default function BranchGraph({
               <>
                 <rect
                   x={x + NODE_WIDTH / 2 - 24}
-                  y={y + NODE_HEIGHT + 4}
+                  y={y + nodeHeight + 4}
                   width={22}
                   height={14}
                   rx={3}
@@ -495,7 +524,7 @@ export default function BranchGraph({
                 />
                 <text
                   x={x + NODE_WIDTH / 2 - 13}
-                  y={y + NODE_HEIGHT + 12}
+                  y={y + nodeHeight + 12}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   fontSize={9}
@@ -510,7 +539,7 @@ export default function BranchGraph({
               <>
                 <rect
                   x={x + NODE_WIDTH / 2 + 2}
-                  y={y + NODE_HEIGHT + 4}
+                  y={y + nodeHeight + 4}
                   width={22}
                   height={14}
                   rx={3}
@@ -518,7 +547,7 @@ export default function BranchGraph({
                 />
                 <text
                   x={x + NODE_WIDTH / 2 + 13}
-                  y={y + NODE_HEIGHT + 12}
+                  y={y + nodeHeight + 12}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   fontSize={9}

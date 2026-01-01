@@ -5,9 +5,11 @@ import { extractTaskSuggestions, removeTaskTags, type TaskSuggestion } from "../
 interface ChatPanelProps {
   sessionId: string;
   onTaskSuggested?: (task: TaskSuggestion) => void;
+  existingTaskLabels?: string[];
+  disabled?: boolean;
 }
 
-export function ChatPanel({ sessionId, onTaskSuggested }: ChatPanelProps) {
+export function ChatPanel({ sessionId, onTaskSuggested, existingTaskLabels = [], disabled = false }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -99,7 +101,8 @@ export function ChatPanel({ sessionId, onTaskSuggested }: ChatPanelProps) {
           <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
             {suggestions.map((task, i) => {
               const key = `${task.label}-${i}`;
-              const isAdded = addedTasks.has(key);
+              const isAlreadyExisting = existingTaskLabels.includes(task.label);
+              const isAdded = addedTasks.has(key) || isAlreadyExisting;
               return (
                 <div
                   key={i}
@@ -111,8 +114,18 @@ export function ChatPanel({ sessionId, onTaskSuggested }: ChatPanelProps) {
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                    <div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {task.parentLabel && (
+                        <p style={{ margin: "0 0 4px", fontSize: 11, color: "#a78bfa" }}>
+                          ↳ {task.parentLabel}
+                        </p>
+                      )}
                       <p style={{ margin: 0, fontWeight: 500, color: "#f3f4f6" }}>{task.label}</p>
+                      {task.branchName && (
+                        <p style={{ margin: "2px 0 0", fontSize: 11, color: "#6b7280", fontFamily: "monospace" }}>
+                          {task.branchName}
+                        </p>
+                      )}
                       {task.description && (
                         <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9ca3af" }}>{task.description}</p>
                       )}
@@ -222,46 +235,47 @@ export function ChatPanel({ sessionId, onTaskSuggested }: ChatPanelProps) {
       <div style={{
         borderTop: "1px solid #374151",
         padding: 12,
+        display: "flex",
+        gap: 8,
       }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type a message... (⌘+Enter to send)"
-            style={{
-              flex: 1,
-              resize: "none",
-              border: "1px solid #374151",
-              borderRadius: 4,
-              padding: "8px 12px",
-              fontSize: 14,
-              fontFamily: "inherit",
-              outline: "none",
-              background: "#1f2937",
-              color: "#f3f4f6",
-            }}
-            rows={2}
-            disabled={loading}
-          />
-          <button
-            onClick={sendMessage}
-            disabled={!input.trim() || loading}
-            style={{
-              padding: "8px 16px",
-              background: !input.trim() || loading ? "#4b5563" : "#3b82f6",
-              color: "white",
-              border: "none",
-              borderRadius: 4,
-              cursor: !input.trim() || loading ? "not-allowed" : "pointer",
-              fontWeight: 500,
-              fontSize: 13,
-            }}
-          >
-            Send
-          </button>
-        </div>
+        <textarea
+          ref={inputRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Type a message... (⌘+Enter to send)"
+          style={{
+            flex: 1,
+            resize: "none",
+            border: "1px solid #374151",
+            borderRadius: 4,
+            padding: "8px 12px",
+            fontSize: 14,
+            fontFamily: "inherit",
+            outline: "none",
+            background: "#1f2937",
+            color: "#f3f4f6",
+            minHeight: 80,
+          }}
+          disabled={loading || disabled}
+        />
+        <button
+          onClick={sendMessage}
+          disabled={!input.trim() || loading || disabled}
+          style={{
+            padding: "12px 16px",
+            background: !input.trim() || loading || disabled ? "#4b5563" : "#3b82f6",
+            color: "white",
+            border: "none",
+            borderRadius: 4,
+            cursor: !input.trim() || loading || disabled ? "not-allowed" : "pointer",
+            fontWeight: 500,
+            fontSize: 13,
+            alignSelf: "flex-end",
+          }}
+        >
+          Send
+        </button>
       </div>
 
       <style>{`

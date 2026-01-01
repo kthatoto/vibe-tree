@@ -1,13 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import {
-  DndContext,
-  DragOverlay,
-  closestCenter,
   PointerSensor,
   useSensor,
   useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
 } from "@dnd-kit/core";
 import {
   api,
@@ -20,24 +16,26 @@ import {
   type TaskStatus,
   type TreeSpecStatus,
   type BranchNamingRule,
-  type ExternalLink,
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import BranchGraph from "../components/BranchGraph";
 import { TerminalPanel } from "../components/TerminalPanel";
-import { ChatPanel } from "../components/ChatPanel";
 import { TaskCard } from "../components/TaskCard";
 import { DraggableTask, DroppableTreeNode } from "../components/DndComponents";
 import { PlanningPanel } from "../components/PlanningPanel";
-import type { TaskSuggestion } from "../lib/task-parser";
 import type { PlanningSession, TaskNode, TaskEdge } from "../lib/api";
 
 export default function TreeDashboard() {
+  const { pinId: urlPinId } = useParams<{ pinId?: string }>();
+  const navigate = useNavigate();
+
   // Repo pins state
   const [repoPins, setRepoPins] = useState<RepoPin[]>([]);
-  const [selectedPinId, setSelectedPinId] = useState<number | null>(null);
   const [newLocalPath, setNewLocalPath] = useState("");
   const [showAddNew, setShowAddNew] = useState(false);
+
+  // Selected pin derived from URL
+  const selectedPinId = urlPinId ? parseInt(urlPinId, 10) : null;
 
   // Main state
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -64,12 +62,7 @@ export default function TreeDashboard() {
   const [wizardBaseBranch, setWizardBaseBranch] = useState<string>("main");
   const [wizardNodes, setWizardNodes] = useState<TreeSpecNode[]>([]);
   const [wizardEdges, setWizardEdges] = useState<TreeSpecEdge[]>([]);
-  const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [newTaskDescription, setNewTaskDescription] = useState("");
-  const [newTaskParent, setNewTaskParent] = useState("");
-  const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [wizardStatus, setWizardStatus] = useState<TreeSpecStatus>("draft");
-  const [createPrsOnGenerate, setCreatePrsOnGenerate] = useState(false);
 
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
@@ -81,8 +74,8 @@ export default function TreeDashboard() {
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
 
-  // D&D sensors
-  const sensors = useSensors(
+  // D&D sensors (reserved for future drag-and-drop)
+  void useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     })
@@ -161,7 +154,7 @@ export default function TreeDashboard() {
     try {
       const pin = await api.createRepoPin(newLocalPath.trim());
       setRepoPins((prev) => [pin, ...prev]);
-      setSelectedPinId(pin.id);
+      navigate(`/project/${pin.id}`);
       setNewLocalPath("");
       setShowAddNew(false);
       setSnapshot(null); // Will trigger auto-scan via useEffect
@@ -171,7 +164,7 @@ export default function TreeDashboard() {
   };
 
   const handleSelectPin = async (id: number) => {
-    setSelectedPinId(id);
+    navigate(`/project/${id}`);
     setSnapshot(null); // Reset to trigger new scan
     try {
       await api.useRepoPin(id);
@@ -185,32 +178,12 @@ export default function TreeDashboard() {
       await api.deleteRepoPin(id);
       setRepoPins((prev) => prev.filter((p) => p.id !== id));
       if (selectedPinId === id) {
-        setSelectedPinId(repoPins[0]?.id ?? null);
+        const remaining = repoPins.filter((p) => p.id !== id);
+        navigate(remaining.length > 0 ? `/project/${remaining[0].id}` : "/");
         setSnapshot(null);
       }
     } catch (err) {
       setError((err as Error).message);
-    }
-  };
-
-  // Chat task suggestion handler
-  const handleChatTaskSuggested = (suggestion: TaskSuggestion) => {
-    const newNode: TreeSpecNode = {
-      id: crypto.randomUUID(),
-      title: suggestion.label,
-      description: suggestion.description,
-      status: "todo" as TaskStatus,
-    };
-    const updatedNodes = [...wizardNodes, newNode];
-    setWizardNodes(updatedNodes);
-    // Auto-save
-    if (snapshot?.repoId) {
-      api.updateTreeSpec({
-        repoId: snapshot.repoId,
-        baseBranch: wizardBaseBranch,
-        nodes: updatedNodes,
-        edges: wizardEdges,
-      }).catch(console.error);
     }
   };
 
@@ -246,26 +219,6 @@ export default function TreeDashboard() {
     }
   }, [snapshot?.repoId]);
 
-  const generateTaskId = () => crypto.randomUUID();
-
-  const handleAddWizardTask = () => {
-    if (!newTaskTitle.trim()) return;
-    const newNode: TreeSpecNode = {
-      id: generateTaskId(),
-      title: newTaskTitle.trim(),
-      description: newTaskDescription.trim() || undefined,
-      status: "todo" as TaskStatus,
-      branchName: undefined,
-    };
-    setWizardNodes((prev) => [...prev, newNode]);
-    if (newTaskParent) {
-      setWizardEdges((prev) => [...prev, { parent: newTaskParent, child: newNode.id }]);
-    }
-    setNewTaskTitle("");
-    setNewTaskDescription("");
-    setNewTaskParent("");
-  };
-
   const handleRemoveWizardTask = async (taskId: string) => {
     const newNodes = wizardNodes.filter((n) => n.id !== taskId);
     const newEdges = wizardEdges.filter((e) => e.parent !== taskId && e.child !== taskId);
@@ -286,53 +239,6 @@ export default function TreeDashboard() {
       }
     }
   };
-
-  // Drag and drop handlers
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveDragId(event.active.id as string);
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    setActiveDragId(null);
-
-    if (!over) return;
-
-    const taskId = active.id as string;
-    const targetId = over.id as string;
-
-    // Don't drop on itself
-    if (taskId === targetId) return;
-
-    // Handle dropping on "backlog" zone - remove from tree
-    if (targetId === "backlog-zone") {
-      setWizardEdges((prev) => prev.filter((e) => e.child !== taskId));
-      return;
-    }
-
-    // Handle dropping on "tree-root" - make it a root task (child of base branch)
-    if (targetId === "tree-root") {
-      // Remove existing parent edge if any
-      setWizardEdges((prev) => prev.filter((e) => e.child !== taskId));
-      return;
-    }
-
-    // Handle dropping on another task - set that task as parent
-    const targetTask = wizardNodes.find((n) => n.id === targetId);
-    if (targetTask) {
-      // Remove existing parent edge
-      setWizardEdges((prev) => {
-        const filtered = prev.filter((e) => e.child !== taskId);
-        // Add new edge
-        return [...filtered, { parent: targetId, child: taskId }];
-      });
-    }
-  };
-
-  // Get tasks for backlog (no parent edge)
-  const backlogTasks = wizardNodes.filter(
-    (n) => !wizardEdges.some((e) => e.child === n.id)
-  );
 
   // Helper to get children of a parent (null = root tasks)
   const getChildren = (parentId: string | null): TreeSpecNode[] => {
@@ -452,213 +358,6 @@ export default function TreeDashboard() {
     }
   };
 
-  const handleSaveTreeSpec = async () => {
-    if (!snapshot?.repoId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const updatedSpec = await api.updateTreeSpec({
-        repoId: snapshot.repoId,
-        baseBranch: wizardBaseBranch,
-        nodes: wizardNodes,
-        edges: wizardEdges,
-      });
-      // Update local snapshot with new treeSpec (no rescan needed)
-      setSnapshot((prev) =>
-        prev ? { ...prev, treeSpec: updatedSpec } : prev
-      );
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // State for generation logs
-  const [generateLogs, setGenerateLogs] = useState<string[]>([]);
-  const [showGenerateLogs, setShowGenerateLogs] = useState(false);
-
-  // Topological sort for nodes (parent → child order)
-  const topologicalSort = (nodes: TreeSpecNode[], edges: TreeSpecEdge[]): TreeSpecNode[] => {
-    const nodeMap = new Map(nodes.map(n => [n.id, n]));
-    const inDegree = new Map<string, number>();
-    const children = new Map<string, string[]>();
-
-    // Initialize
-    nodes.forEach(n => {
-      inDegree.set(n.id, 0);
-      children.set(n.id, []);
-    });
-
-    // Build graph
-    edges.forEach(e => {
-      inDegree.set(e.child, (inDegree.get(e.child) || 0) + 1);
-      children.get(e.parent)?.push(e.child);
-    });
-
-    // Find roots (nodes with no incoming edges)
-    const queue = nodes.filter(n => (inDegree.get(n.id) || 0) === 0);
-    const sorted: TreeSpecNode[] = [];
-
-    while (queue.length > 0) {
-      const node = queue.shift()!;
-      sorted.push(node);
-
-      for (const childId of children.get(node.id) || []) {
-        const newDegree = (inDegree.get(childId) || 1) - 1;
-        inDegree.set(childId, newDegree);
-        if (newDegree === 0) {
-          const childNode = nodeMap.get(childId);
-          if (childNode) queue.push(childNode);
-        }
-      }
-    }
-
-    return sorted;
-  };
-
-  // Batch create worktrees for all tasks
-  const handleBatchCreateWorktrees = async () => {
-    if (!selectedPin || !snapshot) return;
-
-    // Filter tasks that need worktrees (no worktreePath yet)
-    const tasksNeedingWorktrees = wizardNodes.filter(
-      (n) => !n.worktreePath
-    );
-
-    if (tasksNeedingWorktrees.length === 0) {
-      setError("No tasks to create worktrees for");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setGenerateLogs([]);
-    setShowGenerateLogs(true);
-
-    const addLog = (msg: string) => {
-      setGenerateLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
-    };
-
-    try {
-      addLog(`Starting generation for ${tasksNeedingWorktrees.length} tasks...`);
-
-      // Sort tasks in topological order (parent → child)
-      const sortedTasks = topologicalSort(tasksNeedingWorktrees, wizardEdges);
-      addLog(`Topological order: ${sortedTasks.map(t => t.title).join(' → ')}`);
-
-      // Track generated branch names for parent lookup
-      const generatedBranchNames = new Map<string, string>();
-
-      // Build task list with branch names and parent branches
-      const tasks = sortedTasks.map((task) => {
-        // Generate branch name if not set
-        const branchName = task.branchName || generateBranchName(task.title, task.id);
-        generatedBranchNames.set(task.id, branchName);
-
-        // Find parent branch: check if this task has a parent edge
-        const parentEdge = wizardEdges.find((e) => e.child === task.id);
-        let parentBranch = wizardBaseBranch;
-        if (parentEdge) {
-          // Use the generated branch name of the parent
-          const parentBranchName = generatedBranchNames.get(parentEdge.parent);
-          if (parentBranchName) {
-            parentBranch = parentBranchName;
-          }
-        }
-
-        addLog(`Task "${task.title}": branch=${branchName}, parent=${parentBranch}`);
-
-        // Generate worktree name from branch name (replace / with -)
-        const worktreeName = branchName.replace(/\//g, "-");
-
-        return {
-          id: task.id,
-          branchName,
-          parentBranch,
-          worktreeName,
-          title: task.title,
-          description: task.description,
-        };
-      });
-
-      addLog(`Creating branches and worktrees${createPrsOnGenerate ? " + PRs" : ""}...`);
-
-      // Call API to create branches and worktrees
-      const result = await api.createTree(
-        snapshot.repoId,
-        selectedPin.localPath,
-        tasks,
-        { createPrs: createPrsOnGenerate, baseBranch: wizardBaseBranch }
-      );
-
-      // Log results
-      for (const r of result.results) {
-        if (r.success) {
-          const prInfo = r.prUrl ? ` (PR: ${r.prUrl})` : "";
-          addLog(`✓ ${r.branchName} → ${r.worktreePath}${prInfo}`);
-        } else {
-          addLog(`✗ ${r.branchName}: ${r.error}`);
-        }
-      }
-
-      // Update wizard nodes with results
-      const updatedNodes = wizardNodes.map((node) => {
-        const taskResult = result.results.find((r) => r.taskId === node.id);
-        if (taskResult && taskResult.success) {
-          return {
-            ...node,
-            branchName: taskResult.branchName,
-            worktreePath: taskResult.worktreePath,
-            chatSessionId: taskResult.chatSessionId,
-            prUrl: taskResult.prUrl,
-            prNumber: taskResult.prNumber,
-            status: "doing" as TaskStatus,
-          };
-        }
-        // Even if failed, set branchName if it was generated
-        const taskData = tasks.find(t => t.id === node.id);
-        if (taskData && !node.branchName) {
-          return { ...node, branchName: taskData.branchName };
-        }
-        return node;
-      });
-      setWizardNodes(updatedNodes);
-      setWizardStatus("generated");
-
-      // Save tree spec and update local snapshot
-      const updatedSpec = await api.updateTreeSpec({
-        repoId: snapshot.repoId,
-        baseBranch: wizardBaseBranch,
-        nodes: updatedNodes,
-        edges: wizardEdges,
-      });
-      setSnapshot((prev) =>
-        prev ? { ...prev, treeSpec: { ...updatedSpec, status: "generated" } } : prev
-      );
-
-      addLog(`Done! Created ${result.summary.success}/${result.summary.total} worktrees.`);
-
-      // Show error summary if any failed
-      if (result.summary.failed > 0) {
-        setError(`${result.summary.failed} worktrees failed to create. Check logs for details.`);
-      }
-
-      // Rescan in background to update branch graph
-      handleScan(selectedPin.localPath);
-    } catch (err) {
-      addLog(`Error: ${(err as Error).message}`);
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Count tasks that can have worktrees created
-  const tasksReadyForWorktrees = wizardNodes.filter(
-    (n) => !n.worktreePath
-  ).length;
-
   // Handle clicking a task node to open its terminal
   const handleTaskNodeClick = (task: TreeSpecNode) => {
     if (!task.worktreePath) return;
@@ -682,52 +381,8 @@ export default function TreeDashboard() {
   // Check if can confirm: has base branch, has nodes, has at least one root
   const childIds = new Set(wizardEdges.map((e) => e.child));
   const rootNodes = wizardNodes.filter((n) => !childIds.has(n.id));
-  const canConfirm = wizardBaseBranch && wizardNodes.length > 0 && rootNodes.length > 0;
+  void (wizardBaseBranch && wizardNodes.length > 0 && rootNodes.length > 0); // canConfirm reserved for future use
   const isLocked = wizardStatus === "confirmed" || wizardStatus === "generated";
-
-  // Confirm tree spec
-  const handleConfirmTreeSpec = async () => {
-    if (!snapshot?.repoId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      // First save current state
-      await api.updateTreeSpec({
-        repoId: snapshot.repoId,
-        baseBranch: wizardBaseBranch,
-        nodes: wizardNodes,
-        edges: wizardEdges,
-      });
-      // Then confirm
-      const updatedSpec = await api.confirmTreeSpec(snapshot.repoId);
-      setWizardStatus(updatedSpec.status);
-      setSnapshot((prev) =>
-        prev ? { ...prev, treeSpec: updatedSpec } : prev
-      );
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Unconfirm tree spec
-  const handleUnconfirmTreeSpec = async () => {
-    if (!snapshot?.repoId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const updatedSpec = await api.unconfirmTreeSpec(snapshot.repoId);
-      setWizardStatus(updatedSpec.status);
-      setSnapshot((prev) =>
-        prev ? { ...prev, treeSpec: updatedSpec } : prev
-      );
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleLogInstruction = async () => {
     if (!snapshot?.repoId || !instruction.trim()) return;
@@ -999,7 +654,7 @@ export default function TreeDashboard() {
       <aside className="sidebar">
         <div className="sidebar__header">
           <button className="sidebar__back" onClick={() => {
-            setSelectedPinId(null);
+            navigate("/");
             setSnapshot(null);
           }}>
             ← Projects

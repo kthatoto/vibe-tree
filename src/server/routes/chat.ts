@@ -530,8 +530,15 @@ const PLANNING_SYSTEM_PROMPT = `あなたはプロジェクト計画のアシス
 
 ## 役割
 1. ユーザーの要件を理解するために積極的に質問する
-2. URLやドキュメントの内容を整理する
+2. **共有されたリンク・ドキュメントがあれば、その内容を確認・整理してタスクに反映する**
 3. タスクを分解して提案する
+4. タスク間の親子関係を考慮して提案する
+
+## 重要：共有リンクの活用
+ユーザーがリンク（Notion、GitHub Issue、Figma、その他URL）を共有した場合：
+- リンクの内容を確認し、要件を抽出する
+- 内容に基づいてタスクを提案する
+- 不明点があれば質問する
 
 ## 質問例（状況に応じて使う）
 - "どんな機能が必要ですか？"
@@ -544,18 +551,39 @@ const PLANNING_SYSTEM_PROMPT = `あなたはプロジェクト計画のアシス
 タスクを提案する際は、必ず以下の形式を使ってください：
 
 <<TASK>>
-{"label": "タスク名", "description": "タスクの説明（完了条件など）"}
+{"label": "タスク名", "description": "タスクの説明", "parent": "親タスク名（任意）", "branch": "feature/branch-name（任意）"}
 <</TASK>>
 
-例：
+### フィールド説明：
+- label: タスクの名前（必須）
+- description: タスクの説明、完了条件など（必須）
+- parent: このタスクの親となるタスク名。親子関係がある場合に指定（任意）
+- branch: このタスクのブランチ名。指定しない場合は自動生成される（任意）
+
+### 例：
+
+単独タスク:
 <<TASK>>
-{"label": "認証機能の実装", "description": "ログイン・ログアウト・セッション管理を実装する"}
+{"label": "認証機能の実装", "description": "ログイン・ログアウト・セッション管理を実装する", "branch": "feature/auth"}
+<</TASK>>
+
+親子関係あり:
+<<TASK>>
+{"label": "認証機能の実装", "description": "認証システム全体の親タスク"}
+<</TASK>>
+<<TASK>>
+{"label": "ログインフォーム作成", "description": "メール/パスワードでのログインUIを作成", "parent": "認証機能の実装", "branch": "feature/auth-login-form"}
+<</TASK>>
+<<TASK>>
+{"label": "セッション管理", "description": "JWTトークンの発行と検証", "parent": "認証機能の実装", "branch": "feature/auth-session"}
 <</TASK>>
 
 ## 注意点
 - 1つのメッセージで複数のタスクを提案してOK
 - タスクは具体的に、1〜2日で完了できる粒度に
-- 依存関係がある場合は説明に含める
+- 関連するタスクは親子関係を設定する
+- ブランチ名は英数字とハイフンのみ、feature/ や fix/ などのプレフィックスを推奨
+- ユーザーがブランチ名の変更を依頼したら、新しいタスク提案で修正版を提示する
 - ユーザーが情報を共有したら、まず内容を理解・整理してから質問やタスク提案を行う
 `;
 
@@ -635,24 +663,28 @@ ${gitStatus || "Clean working directory"}
       .where(eq(schema.externalLinks.planningSessionId, planningSessionId));
 
     if (links.length > 0) {
-      const linksContext = links
-        .filter((link) => link.contentCache)
-        .map((link) => {
-          const typeLabel = {
-            notion: "Notion",
-            figma: "Figma",
-            github_issue: "GitHub Issue",
-            github_pr: "GitHub PR",
-            url: "URL",
-          }[link.linkType] || link.linkType;
-          return `### ${link.title || typeLabel}\nSource: ${link.url}\n\n${link.contentCache}`;
-        });
+      const linksContext = links.map((link) => {
+        const typeLabel = {
+          notion: "Notion",
+          figma: "Figma",
+          github_issue: "GitHub Issue",
+          github_pr: "GitHub PR",
+          url: "URL",
+        }[link.linkType] || link.linkType;
 
-      if (linksContext.length > 0) {
-        parts.push(`## External References
+        if (link.contentCache) {
+          return `### ${link.title || typeLabel}\nSource: ${link.url}\n\n${link.contentCache}`;
+        } else {
+          // Still include the link even without cached content
+          return `### ${link.title || typeLabel}\nSource: ${link.url}\n\n(コンテンツ未取得 - このリンクを参照してタスクを検討してください)`;
+        }
+      });
+
+      parts.push(`## 共有されたリンク・ドキュメント
+以下のリンクがユーザーから共有されています。これらを参考にしてタスクを提案してください。
+
 ${linksContext.join("\n\n---\n\n")}
 `);
-      }
     }
   }
 

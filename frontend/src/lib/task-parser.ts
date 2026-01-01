@@ -1,6 +1,8 @@
 export interface TaskSuggestion {
   label: string;
   description: string;
+  parentLabel?: string; // Optional parent task label for hierarchy
+  branchName?: string; // Optional branch name suggestion
 }
 
 const TASK_REGEX = /<<TASK>>([\s\S]*?)<<\/TASK>>/g;
@@ -17,6 +19,8 @@ export function extractTaskSuggestions(content: string): TaskSuggestion[] {
         suggestions.push({
           label: parsed.label,
           description: parsed.description || "",
+          parentLabel: parsed.parent || undefined,
+          branchName: parsed.branch || undefined,
         });
       }
     } catch {

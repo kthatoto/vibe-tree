@@ -54,14 +54,6 @@ export function PlanningPanel({
     api.getPlanningSessions(repoId)
       .then((data) => {
         setSessions(data);
-        // Auto-select first draft session if none selected
-        if (!selectedSession) {
-          const draftSession = data.find((s) => s.status === "draft");
-          if (draftSession) {
-            setSelectedSession(draftSession);
-            onSessionSelect?.(draftSession);
-          }
-        }
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));

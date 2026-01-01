@@ -28,7 +28,9 @@ import { TerminalPanel } from "../components/TerminalPanel";
 import { ChatPanel } from "../components/ChatPanel";
 import { TaskCard } from "../components/TaskCard";
 import { DraggableTask, DroppableTreeNode } from "../components/DndComponents";
+import { PlanningPanel } from "../components/PlanningPanel";
 import type { TaskSuggestion } from "../lib/task-parser";
+import type { PlanningSession, TaskNode, TaskEdge } from "../lib/api";
 
 export default function TreeDashboard() {
   // Repo pins state
@@ -47,14 +49,10 @@ export default function TreeDashboard() {
   const [copied, setCopied] = useState<string | null>(null);
 
 
-  // Planning Chat state
-  const [planningSessionId, setPlanningSessionId] = useState<string | null>(null);
-  const [planningSessionLoading, setPlanningSessionLoading] = useState(false);
-
-  // External Links state
-  const [externalLinks, setExternalLinks] = useState<ExternalLink[]>([]);
-  const [newLinkUrl, setNewLinkUrl] = useState("");
-  const [addingLink, setAddingLink] = useState(false);
+  // Multi-session planning state
+  const [selectedPlanningSession, setSelectedPlanningSession] = useState<PlanningSession | null>(null);
+  const [tentativeNodes, setTentativeNodes] = useState<TaskNode[]>([]);
+  const [tentativeEdges, setTentativeEdges] = useState<TaskEdge[]>([]);
 
   // Terminal state
   const [showTerminal, setShowTerminal] = useState(false);
@@ -127,71 +125,22 @@ export default function TreeDashboard() {
     };
   }, [snapshot?.repoId]);
 
-  // Create planning session when snapshot is loaded
-  useEffect(() => {
-    if (!snapshot?.repoId || !selectedPin?.localPath) {
-      return;
+  // Planning session handlers
+  const handlePlanningSessionSelect = useCallback((session: PlanningSession | null) => {
+    setSelectedPlanningSession(session);
+    if (session) {
+      setTentativeNodes(session.nodes);
+      setTentativeEdges(session.edges);
+    } else {
+      setTentativeNodes([]);
+      setTentativeEdges([]);
     }
-    if (planningSessionId || planningSessionLoading) {
-      return;
-    }
+  }, []);
 
-    setPlanningSessionLoading(true);
-    api.createPlanningSession(snapshot.repoId, selectedPin.localPath)
-      .then((session) => {
-        setPlanningSessionId(session.id);
-      })
-      .catch((err) => {
-        console.error("Failed to create planning session:", err);
-      })
-      .finally(() => {
-        setPlanningSessionLoading(false);
-      });
-  }, [snapshot?.repoId, selectedPin?.localPath, planningSessionId, planningSessionLoading]);
-
-  // Load external links when snapshot is loaded
-  useEffect(() => {
-    if (!snapshot?.repoId) {
-      setExternalLinks([]);
-      return;
-    }
-    api.getExternalLinks(snapshot.repoId)
-      .then(setExternalLinks)
-      .catch(console.error);
-  }, [snapshot?.repoId]);
-
-  // External link handlers
-  const handleAddLink = async () => {
-    if (!newLinkUrl.trim() || !snapshot?.repoId || addingLink) return;
-    setAddingLink(true);
-    try {
-      const link = await api.addExternalLink(snapshot.repoId, newLinkUrl.trim());
-      setExternalLinks((prev) => [...prev, link]);
-      setNewLinkUrl("");
-    } catch (err) {
-      console.error("Failed to add link:", err);
-    } finally {
-      setAddingLink(false);
-    }
-  };
-
-  const handleRemoveLink = async (id: number) => {
-    try {
-      await api.deleteExternalLink(id);
-      setExternalLinks((prev) => prev.filter((l) => l.id !== id));
-    } catch (err) {
-      console.error("Failed to remove link:", err);
-    }
-  };
-
-  const handleRefreshLink = async (id: number) => {
-    try {
-      const updated = await api.refreshExternalLink(id);
-      setExternalLinks((prev) => prev.map((l) => (l.id === id ? updated : l)));
-    } catch (err) {
-      console.error("Failed to refresh link:", err);
-    }
-  };
+  const handlePlanningTasksChange = useCallback((nodes: TaskNode[], edges: TaskEdge[]) => {
+    setTentativeNodes(nodes);
+    setTentativeEdges(edges);
+  }, []);
 
   const handleScan = useCallback(async (localPath: string) => {
     if (!localPath) return;
@@ -1140,6 +1089,9 @@ export default function TreeDashboard() {
                       const node = snapshot.nodes.find((n) => n.branchName === branchName);
                       setSelectedNode(node ?? null);
                     }}
+                    tentativeNodes={tentativeNodes}
+                    tentativeEdges={tentativeEdges}
+                    tentativeBaseBranch={selectedPlanningSession?.baseBranch}
                   />
                 </div>
               </div>
@@ -1158,256 +1110,15 @@ export default function TreeDashboard() {
                 </div>
               )}
 
-              {/* Planning Panel - Chat + Task Tree */}
+              {/* Planning Panel - Multi-session */}
               <div className="panel panel--planning">
-                <div className="panel__header">
-                  <h3>Planning</h3>
-                  <div className="panel__header-actions">
-                    <span className={`status-badge status-badge--${wizardStatus}`}>
-                      {wizardStatus}
-                    </span>
-                    <span className="panel__count">{wizardNodes.length} tasks</span>
-                  </div>
-                </div>
-
-                <div className="planning-panel__layout">
-                  {/* Left: Chat */}
-                  <div className="planning-panel__chat">
-                    {planningSessionId ? (
-                      <ChatPanel
-                        sessionId={planningSessionId}
-                        onTaskSuggested={handleChatTaskSuggested}
-                      />
-                    ) : planningSessionLoading ? (
-                      <div className="planning-chat-loading">
-                        <div className="spinner" />
-                        <span>Loading...</span>
-                      </div>
-                    ) : (
-                      <div className="planning-chat-placeholder">
-                        <span>Initializing chat...</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right: Task Tree */}
-                  <div className="planning-panel__tree">
-                    {/* External Links */}
-                    <div className="external-links">
-                      <div className="external-links__header">
-                        <span className="external-links__title">External Links</span>
-                        <span className="external-links__count">{externalLinks.length}</span>
-                      </div>
-                      <div className="external-links__add">
-                        <input
-                          type="text"
-                          placeholder="Paste URL (Notion, Figma, GitHub Issue...)"
-                          value={newLinkUrl}
-                          onChange={(e) => setNewLinkUrl(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && handleAddLink()}
-                          disabled={addingLink}
-                        />
-                        <button onClick={handleAddLink} disabled={!newLinkUrl.trim() || addingLink}>
-                          {addingLink ? "..." : "+"}
-                        </button>
-                      </div>
-                      {externalLinks.length > 0 && (
-                        <div className="external-links__list">
-                          {externalLinks.map((link) => (
-                            <div key={link.id} className="external-link-item">
-                              <span className={`external-link-item__type external-link-item__type--${link.linkType}`}>
-                                {link.linkType === "notion" && "N"}
-                                {link.linkType === "figma" && "F"}
-                                {link.linkType === "github_issue" && "#"}
-                                {link.linkType === "github_pr" && "PR"}
-                                {link.linkType === "url" && "🔗"}
-                              </span>
-                              <a
-                                href={link.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="external-link-item__title"
-                                title={link.url}
-                              >
-                                {link.title || link.url.slice(0, 40)}
-                              </a>
-                              <button
-                                className="external-link-item__refresh"
-                                onClick={() => handleRefreshLink(link.id)}
-                                title="Refresh content"
-                              >
-                                ↻
-                              </button>
-                              <button
-                                className="external-link-item__remove"
-                                onClick={() => handleRemoveLink(link.id)}
-                                title="Remove"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Base Branch Selector */}
-                    <div className="task-tree-panel__settings">
-                      <label>Base Branch:</label>
-                      <select
-                        value={wizardBaseBranch}
-                        onChange={(e) => setWizardBaseBranch(e.target.value)}
-                        disabled={isLocked}
-                      >
-                        {snapshot.branches.map((b) => (
-                          <option key={b} value={b}>{b}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Add Task Form */}
-                    {!isLocked && (
-                      <div className="task-tree-panel__add">
-                        <input
-                          type="text"
-                          placeholder="Task title..."
-                          value={newTaskTitle}
-                          onChange={(e) => setNewTaskTitle(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && handleAddWizardTask()}
-                        />
-                        <button onClick={handleAddWizardTask} disabled={!newTaskTitle.trim()}>
-                          Add
-                        </button>
-                      </div>
-                    )}
-
-                    {/* D&D Task Tree */}
-                    <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                >
-                  <div className="task-tree-panel__content">
-                    {/* Tree Area */}
-                    <DroppableTreeNode id="tree-root">
-                      <div className="task-tree-panel__tree">
-                        <div className="tree-label">
-                          {wizardBaseBranch} (base)
-                        </div>
-                        {getChildren(null).map((task) => renderTreeNode(task, 0))}
-                        {getChildren(null).length === 0 && (
-                          <div className="tree-empty">ドラッグしてタスクを配置</div>
-                        )}
-                      </div>
-                    </DroppableTreeNode>
-
-                    {/* Backlog */}
-                    <DroppableTreeNode id="backlog-zone">
-                      <div className="task-tree-panel__backlog">
-                        <div className="backlog-label">Backlog ({backlogTasks.length})</div>
-                        {backlogTasks.map((task) => (
-                          <DraggableTask key={task.id} task={task}>
-                            <TaskCard
-                              task={task}
-                              onStatusChange={handleUpdateTaskStatus}
-                              onRemove={handleRemoveWizardTask}
-                              onStart={handleStartTask}
-                              onClick={handleTaskNodeClick}
-                              onConsult={handleConsultTask}
-                              loading={loading}
-                              isLocked={isLocked}
-                              showClaudeButton={true}
-                            />
-                          </DraggableTask>
-                        ))}
-                      </div>
-                    </DroppableTreeNode>
-                  </div>
-
-                  <DragOverlay>
-                    {activeDragId && (
-                      <div className="task-card task-card--dragging">
-                        {wizardNodes.find((n) => n.id === activeDragId)?.title}
-                      </div>
-                    )}
-                  </DragOverlay>
-                </DndContext>
-
-                {/* Generation Logs */}
-                {showGenerateLogs && (
-                  <div className="generate-logs">
-                    <div className="generate-logs__header">
-                      <span>Generation Logs</span>
-                      <button onClick={() => setShowGenerateLogs(false)}>×</button>
-                    </div>
-                    <div className="generate-logs__content">
-                      {generateLogs.map((log, i) => (
-                        <div key={i} className="generate-logs__line">{log}</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="task-tree-panel__actions">
-                  {wizardStatus === "draft" && (
-                    <>
-                      <button
-                        className="btn-secondary"
-                        onClick={handleSaveTreeSpec}
-                        disabled={loading}
-                      >
-                        下書き保存
-                      </button>
-                      <button
-                        className="btn-primary"
-                        onClick={handleConfirmTreeSpec}
-                        disabled={loading || !canConfirm}
-                        title={!canConfirm ? "Base branch, at least one task required" : ""}
-                      >
-                        確定
-                      </button>
-                    </>
-                  )}
-                  {wizardStatus === "confirmed" && (
-                    <>
-                      <button
-                        className="btn-secondary"
-                        onClick={handleUnconfirmTreeSpec}
-                        disabled={loading}
-                      >
-                        編集に戻す
-                      </button>
-                      <label className="checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={createPrsOnGenerate}
-                          onChange={(e) => setCreatePrsOnGenerate(e.target.checked)}
-                        />
-                        PRも作成
-                      </label>
-                      <button
-                        className="btn-primary"
-                        onClick={handleBatchCreateWorktrees}
-                        disabled={loading || tasksReadyForWorktrees === 0}
-                      >
-                        {createPrsOnGenerate ? "Worktree + PR生成" : "Worktree生成"} ({tasksReadyForWorktrees})
-                      </button>
-                    </>
-                  )}
-                  {wizardStatus === "generated" && (
-                    <button
-                      className="btn-secondary"
-                      onClick={handleUnconfirmTreeSpec}
-                      disabled={loading}
-                    >
-                      編集に戻す
-                    </button>
-                  )}
-                </div>
-                  </div>{/* planning-panel__tree */}
-                </div>{/* planning-panel__layout */}
+                <PlanningPanel
+                  repoId={snapshot.repoId}
+                  branches={snapshot.branches}
+                  defaultBranch={snapshot.defaultBranch}
+                  onTasksChange={handlePlanningTasksChange}
+                  onSessionSelect={handlePlanningSessionSelect}
+                />
               </div>{/* panel--planning */}
             </div>
 

@@ -30,7 +30,7 @@ export function handleWsMessage(ws: WSClient, message: string | Buffer) {
   }
 }
 
-export function broadcast(message: { type: string; repoId?: string; data?: unknown }) {
+export function broadcast(message: { type: string; repoId?: string; planningSessionId?: string; data?: unknown }) {
   const json = JSON.stringify(message);
   for (const client of clients) {
     // Send to all clients or only to clients subscribed to this repo

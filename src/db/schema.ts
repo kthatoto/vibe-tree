@@ -49,13 +49,27 @@ export const instructionsLog = sqliteTable("instructions_log", {
   createdAt: text("created_at").notNull(),
 });
 
-// 設計ツリー (Design Tree / Task Tree)
+// 設計ツリー (Design Tree / Task Tree) - DEPRECATED: use planningSessions
 export const treeSpecs = sqliteTable("tree_specs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   repoId: text("repo_id").notNull(),
   baseBranch: text("base_branch"), // default branch (develop, main, master, etc.)
   status: text("status").notNull().default("draft"), // 'draft' | 'confirmed' | 'generated'
   specJson: text("spec_json").notNull(), // JSON: { nodes: TreeSpecNode[], edges: TreeSpecEdge[] }
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// Planning sessions (複数のプランニングセッション)
+export const planningSessions = sqliteTable("planning_sessions", {
+  id: text("id").primaryKey(), // uuid
+  repoId: text("repo_id").notNull(),
+  title: text("title").notNull().default("Untitled"),
+  baseBranch: text("base_branch").notNull(),
+  status: text("status").notNull().default("draft"), // 'draft' | 'confirmed' | 'discarded'
+  nodesJson: text("nodes_json").notNull().default("[]"), // JSON array of task nodes
+  edgesJson: text("edges_json").notNull().default("[]"), // JSON array of task edges
+  chatSessionId: text("chat_session_id"), // linked chat session
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
@@ -157,10 +171,10 @@ export const requirementsNotes = sqliteTable("requirements_notes", {
   updatedAt: text("updated_at").notNull(),
 });
 
-// External links (Notion, Figma, GitHub Issue, etc.)
+// External links (Notion, Figma, GitHub Issue, etc.) - per planning session
 export const externalLinks = sqliteTable("external_links", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  repoId: text("repo_id").notNull(),
+  planningSessionId: text("planning_session_id").notNull(), // references planning_sessions.id
   linkType: text("link_type").notNull(), // 'notion' | 'figma' | 'github_issue' | 'github_pr' | 'url'
   url: text("url").notNull(),
   title: text("title"), // extracted or user-provided title

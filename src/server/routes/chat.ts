@@ -609,30 +609,35 @@ ${gitStatus || "Clean working directory"}
 `);
   }
 
-  // 3. External links context
-  const links = await db
-    .select()
-    .from(schema.externalLinks)
-    .where(eq(schema.externalLinks.repoId, session.repoId));
+  // 3. External links context (for planning sessions)
+  if (isPlanningSession) {
+    // Extract planning session ID from worktreePath (format: "planning:{sessionId}")
+    const planningSessionId = session.worktreePath.replace("planning:", "");
 
-  if (links.length > 0) {
-    const linksContext = links
-      .filter((link) => link.contentCache)
-      .map((link) => {
-        const typeLabel = {
-          notion: "Notion",
-          figma: "Figma",
-          github_issue: "GitHub Issue",
-          github_pr: "GitHub PR",
-          url: "URL",
-        }[link.linkType] || link.linkType;
-        return `### ${link.title || typeLabel}\nSource: ${link.url}\n\n${link.contentCache}`;
-      });
+    const links = await db
+      .select()
+      .from(schema.externalLinks)
+      .where(eq(schema.externalLinks.planningSessionId, planningSessionId));
 
-    if (linksContext.length > 0) {
-      parts.push(`## External References
+    if (links.length > 0) {
+      const linksContext = links
+        .filter((link) => link.contentCache)
+        .map((link) => {
+          const typeLabel = {
+            notion: "Notion",
+            figma: "Figma",
+            github_issue: "GitHub Issue",
+            github_pr: "GitHub PR",
+            url: "URL",
+          }[link.linkType] || link.linkType;
+          return `### ${link.title || typeLabel}\nSource: ${link.url}\n\n${link.contentCache}`;
+        });
+
+      if (linksContext.length > 0) {
+        parts.push(`## External References
 ${linksContext.join("\n\n---\n\n")}
 `);
+      }
     }
   }
 

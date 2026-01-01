@@ -266,12 +266,40 @@ export type ExternalLinkType = "notion" | "figma" | "github_issue" | "github_pr"
 
 export interface ExternalLink {
   id: number;
-  repoId: string;
+  planningSessionId: string;
   linkType: ExternalLinkType;
   url: string;
   title: string | null;
   contentCache: string | null;
   lastFetchedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Planning Session types
+export type PlanningSessionStatus = "draft" | "confirmed" | "discarded";
+
+export interface TaskNode {
+  id: string;
+  title: string;
+  description?: string;
+  branchName?: string;
+}
+
+export interface TaskEdge {
+  parent: string;
+  child: string;
+}
+
+export interface PlanningSession {
+  id: string;
+  repoId: string;
+  title: string;
+  baseBranch: string;
+  status: PlanningSessionStatus;
+  nodes: TaskNode[];
+  edges: TaskEdge[];
+  chatSessionId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -578,12 +606,12 @@ export const api = {
     ),
 
   // External Links
-  getExternalLinks: (repoId: string) =>
-    fetchJson<ExternalLink[]>(`${API_BASE}/external-links?repoId=${encodeURIComponent(repoId)}`),
-  addExternalLink: (repoId: string, url: string, title?: string) =>
+  getExternalLinks: (planningSessionId: string) =>
+    fetchJson<ExternalLink[]>(`${API_BASE}/external-links?planningSessionId=${encodeURIComponent(planningSessionId)}`),
+  addExternalLink: (planningSessionId: string, url: string, title?: string) =>
     fetchJson<ExternalLink>(`${API_BASE}/external-links`, {
       method: "POST",
-      body: JSON.stringify({ repoId, url, title }),
+      body: JSON.stringify({ planningSessionId, url, title }),
     }),
   refreshExternalLink: (id: number) =>
     fetchJson<ExternalLink>(`${API_BASE}/external-links/${id}/refresh`, {
@@ -596,6 +624,39 @@ export const api = {
     }),
   deleteExternalLink: (id: number) =>
     fetchJson<{ success: boolean }>(`${API_BASE}/external-links/${id}`, {
+      method: "DELETE",
+    }),
+
+  // Planning Sessions
+  getPlanningSessions: (repoId: string) =>
+    fetchJson<PlanningSession[]>(`${API_BASE}/planning-sessions?repoId=${encodeURIComponent(repoId)}`),
+  getPlanningSession: (id: string) =>
+    fetchJson<PlanningSession>(`${API_BASE}/planning-sessions/${id}`),
+  createPlanningSession: (repoId: string, baseBranch: string, title?: string) =>
+    fetchJson<PlanningSession>(`${API_BASE}/planning-sessions`, {
+      method: "POST",
+      body: JSON.stringify({ repoId, baseBranch, title }),
+    }),
+  updatePlanningSession: (id: string, data: {
+    title?: string;
+    baseBranch?: string;
+    nodes?: TaskNode[];
+    edges?: TaskEdge[];
+  }) =>
+    fetchJson<PlanningSession>(`${API_BASE}/planning-sessions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  confirmPlanningSession: (id: string) =>
+    fetchJson<PlanningSession>(`${API_BASE}/planning-sessions/${id}/confirm`, {
+      method: "POST",
+    }),
+  discardPlanningSession: (id: string) =>
+    fetchJson<PlanningSession>(`${API_BASE}/planning-sessions/${id}/discard`, {
+      method: "POST",
+    }),
+  deletePlanningSession: (id: string) =>
+    fetchJson<{ success: boolean }>(`${API_BASE}/planning-sessions/${id}`, {
       method: "DELETE",
     }),
 };

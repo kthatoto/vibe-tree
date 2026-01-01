@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { TreeNode, TreeEdge } from "../lib/api";
+import type { TreeNode, TreeEdge, TaskNode, TaskEdge } from "../lib/api";
 
 interface BranchGraphProps {
   nodes: TreeNode[];
@@ -7,6 +7,10 @@ interface BranchGraphProps {
   defaultBranch: string;
   selectedBranch: string | null;
   onSelectBranch: (branchName: string) => void;
+  // Tentative nodes/edges from planning sessions
+  tentativeNodes?: TaskNode[];
+  tentativeEdges?: TaskEdge[];
+  tentativeBaseBranch?: string;
 }
 
 interface LayoutNode {
@@ -16,12 +20,15 @@ interface LayoutNode {
   node: TreeNode;
   depth: number;
   row: number;
+  isTentative?: boolean;
+  tentativeTitle?: string;
 }
 
 interface LayoutEdge {
   from: LayoutNode;
   to: LayoutNode;
   isDesigned: boolean;
+  isTentative?: boolean;
 }
 
 const NODE_WIDTH = 280;
@@ -50,9 +57,12 @@ export default function BranchGraph({
   defaultBranch,
   selectedBranch,
   onSelectBranch,
+  tentativeNodes = [],
+  tentativeEdges = [],
+  tentativeBaseBranch,
 }: BranchGraphProps) {
   const { layoutNodes, layoutEdges, width, height } = useMemo(() => {
-    if (nodes.length === 0) {
+    if (nodes.length === 0 && tentativeNodes.length === 0) {
       return { layoutNodes: [], layoutEdges: [], width: 400, height: 200 };
     }
 
@@ -139,6 +149,101 @@ export default function BranchGraph({
       }
     });
 
+    // Add tentative nodes from planning session
+    const tentativeLayoutEdges: LayoutEdge[] = [];
+    if (tentativeNodes.length > 0 && tentativeBaseBranch) {
+      const baseBranchNode = nodeMap.get(tentativeBaseBranch);
+      const baseDepth = baseBranchNode?.depth ?? 0;
+      const baseX = baseBranchNode?.x ?? PADDING;
+
+      // Build tentative children map
+      const tentChildrenMap = new Map<string, string[]>();
+      tentativeEdges.forEach((edge) => {
+        const children = tentChildrenMap.get(edge.parent) || [];
+        children.push(edge.child);
+        tentChildrenMap.set(edge.parent, children);
+      });
+
+      // Find tentative root tasks (not child of any task)
+      const tentChildSet = new Set(tentativeEdges.map((e) => e.child));
+      const tentRootTasks = tentativeNodes.filter((t) => !tentChildSet.has(t.id));
+
+      // Helper to generate tentative branch name
+      const generateTentBranchName = (title: string, id: string): string => {
+        let slug = title
+          .toLowerCase()
+          .replace(/\s+/g, "-")
+          .replace(/[^a-z0-9-]/g, "")
+          .replace(/-+/g, "-")
+          .replace(/^-|-$/g, "")
+          .substring(0, 30);
+        if (!slug) slug = id.substring(0, 8);
+        return `task/${slug}`;
+      };
+
+      // Layout tentative subtree
+      function layoutTentativeSubtree(
+        taskId: string,
+        parentLayoutNode: LayoutNode | null,
+        depth: number,
+        minRow: number
+      ): number {
+        const task = tentativeNodes.find((t) => t.id === taskId);
+        if (!task) return minRow;
+
+        const branchName = task.branchName || generateTentBranchName(task.title, task.id);
+        if (nodeMap.has(branchName)) return minRow; // Already exists as real branch
+
+        const row = minRow;
+        const tentDummyNode: TreeNode = {
+          branchName,
+          badges: [],
+          lastCommitAt: "",
+        };
+
+        const layoutNode: LayoutNode = {
+          id: branchName,
+          x: PADDING + depth * (NODE_WIDTH + HORIZONTAL_GAP),
+          y: PADDING + row * (NODE_HEIGHT + VERTICAL_GAP),
+          node: tentDummyNode,
+          depth,
+          row,
+          isTentative: true,
+          tentativeTitle: task.title,
+        };
+
+        layoutNodes.push(layoutNode);
+        nodeMap.set(branchName, layoutNode);
+
+        // Add edge from parent
+        if (parentLayoutNode) {
+          tentativeLayoutEdges.push({
+            from: parentLayoutNode,
+            to: layoutNode,
+            isDesigned: false,
+            isTentative: true,
+          });
+        }
+
+        // Layout children
+        const children = tentChildrenMap.get(taskId) || [];
+        let currentRow = minRow + 1;
+        children.forEach((childId) => {
+          currentRow = layoutTentativeSubtree(childId, layoutNode, depth + 1, currentRow);
+        });
+
+        return Math.max(currentRow, minRow + 1);
+      }
+
+      // Layout from tentative roots, connected to base branch
+      tentRootTasks.forEach((task) => {
+        const fromNode = baseBranchNode || layoutNodes[0];
+        if (fromNode) {
+          nextRow = layoutTentativeSubtree(task.id, fromNode, baseDepth + 1, nextRow);
+        }
+      });
+    }
+
     // Create layout edges
     const layoutEdges: LayoutEdge[] = edges
       .map((edge) => {
@@ -151,9 +256,12 @@ export default function BranchGraph({
       })
       .filter(Boolean) as LayoutEdge[];
 
+    // Add tentative edges
+    layoutEdges.push(...tentativeLayoutEdges);
+
     // Calculate canvas size
-    const maxX = Math.max(...layoutNodes.map((n) => n.x)) + NODE_WIDTH + PADDING;
-    const maxY = Math.max(...layoutNodes.map((n) => n.y)) + NODE_HEIGHT + PADDING;
+    const maxX = Math.max(...layoutNodes.map((n) => n.x), 0) + NODE_WIDTH + PADDING;
+    const maxY = Math.max(...layoutNodes.map((n) => n.y), 0) + NODE_HEIGHT + PADDING;
 
     return {
       layoutNodes,
@@ -161,7 +269,7 @@ export default function BranchGraph({
       width: Math.max(400, maxX),
       height: Math.max(150, maxY),
     };
-  }, [nodes, edges, defaultBranch]);
+  }, [nodes, edges, defaultBranch, tentativeNodes, tentativeEdges, tentativeBaseBranch]);
 
   const renderEdge = (edge: LayoutEdge, index: number) => {
     // Horizontal edge: from right side of parent to left side of child
@@ -174,25 +282,30 @@ export default function BranchGraph({
     const cornerX = startX + 20;
     const path = `M ${startX} ${startY} L ${cornerX} ${startY} L ${cornerX} ${endY} L ${endX} ${endY}`;
 
+    // Tentative edges use dashed lines with purple color
+    const strokeColor = edge.isTentative ? "#9c27b0" : edge.isDesigned ? "#9c27b0" : "#ccc";
+    const strokeDash = edge.isTentative ? "4,4" : undefined;
+
     return (
-      <g key={`edge-${index}`}>
+      <g key={`edge-${index}`} opacity={edge.isTentative ? 0.7 : 1}>
         <path
           d={path}
           fill="none"
-          stroke={edge.isDesigned ? "#9c27b0" : "#ccc"}
-          strokeWidth={edge.isDesigned ? 2 : 1.5}
+          stroke={strokeColor}
+          strokeWidth={edge.isDesigned || edge.isTentative ? 2 : 1.5}
+          strokeDasharray={strokeDash}
         />
         {/* Arrow head pointing right */}
         <polygon
           points={`${endX},${endY} ${endX - 6},${endY - 3} ${endX - 6},${endY + 3}`}
-          fill={edge.isDesigned ? "#9c27b0" : "#ccc"}
+          fill={strokeColor}
         />
       </g>
     );
   };
 
   const renderNode = (layoutNode: LayoutNode) => {
-    const { id, x, y, node } = layoutNode;
+    const { id, x, y, node, isTentative, tentativeTitle } = layoutNode;
     const isSelected = selectedBranch === id;
     const isDefault = id === defaultBranch;
     const hasWorktree = !!node.worktree;
@@ -201,8 +314,14 @@ export default function BranchGraph({
     // Determine node color
     let fillColor = "#fff";
     let strokeColor = "#ddd";
+    let strokeDash: string | undefined;
 
-    if (isDefault) {
+    if (isTentative) {
+      // Tentative nodes have dashed purple border
+      fillColor = "#f3e5f5";
+      strokeColor = "#9c27b0";
+      strokeDash = "4,4";
+    } else if (isDefault) {
       fillColor = "#e3f2fd";
       strokeColor = "#2196f3";
     } else if (node.worktree?.isActive) {
@@ -222,14 +341,17 @@ export default function BranchGraph({
       strokeColor = "#1976d2";
     }
 
-    // Truncate branch name if too long
-    const displayName = id.length > 30 ? id.slice(0, 28) + "..." : id;
+    // For tentative nodes, show task title; for real nodes, show branch name
+    const displayText = isTentative && tentativeTitle
+      ? (tentativeTitle.length > 30 ? tentativeTitle.slice(0, 28) + "..." : tentativeTitle)
+      : (id.length > 30 ? id.slice(0, 28) + "..." : id);
 
     return (
       <g
         key={id}
-        onClick={() => onSelectBranch(id)}
-        style={{ cursor: "pointer" }}
+        onClick={() => !isTentative && onSelectBranch(id)}
+        style={{ cursor: isTentative ? "default" : "pointer" }}
+        opacity={isTentative ? 0.8 : 1}
       >
         {/* Node rectangle */}
         <rect
@@ -242,21 +364,36 @@ export default function BranchGraph({
           fill={fillColor}
           stroke={strokeColor}
           strokeWidth={isSelected ? 2 : 1.5}
+          strokeDasharray={strokeDash}
         />
 
-        {/* Branch name */}
+        {/* Branch name or task title */}
         <text
           x={x + 10}
           y={y + NODE_HEIGHT / 2 + 1}
           textAnchor="start"
           dominantBaseline="middle"
           fontSize={11}
-          fontFamily="monospace"
+          fontFamily={isTentative ? "sans-serif" : "monospace"}
           fontWeight={isDefault ? "bold" : "normal"}
-          fill="#333"
+          fontStyle={isTentative ? "italic" : "normal"}
+          fill={isTentative ? "#7b1fa2" : "#333"}
         >
-          {displayName}
+          {displayText}
         </text>
+        {/* Tentative label */}
+        {isTentative && (
+          <text
+            x={x + NODE_WIDTH - 55}
+            y={y + NODE_HEIGHT / 2 + 1}
+            textAnchor="end"
+            dominantBaseline="middle"
+            fontSize={9}
+            fill="#9c27b0"
+          >
+            (tentative)
+          </text>
+        )}
 
         {/* Status indicators on right side */}
         {hasWorktree && (

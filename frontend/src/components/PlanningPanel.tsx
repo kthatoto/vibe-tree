@@ -411,6 +411,16 @@ export function PlanningPanel({
     }
   };
 
+  const handleDeleteFromList = async (sessionId: string) => {
+    if (!confirm("このプランニングセッションを完全に削除しますか？")) return;
+    try {
+      await api.deletePlanningSession(sessionId);
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   // External link handlers
   const handleAddLink = async () => {
     if (!newLinkUrl.trim() || !selectedSession || addingLink) return;
@@ -630,7 +640,14 @@ export function PlanningPanel({
         {error && <div className="planning-panel__error">{error}</div>}
 
         {showNewForm && (
-          <div className="planning-panel__new-form">
+          <div
+            className="planning-panel__new-form"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !creating) {
+                handleCreateSession();
+              }
+            }}
+          >
             <input
               type="text"
               placeholder="Title (optional)"
@@ -649,7 +666,7 @@ export function PlanningPanel({
             </select>
             <div className="planning-panel__form-actions">
               <button onClick={handleCreateSession} disabled={creating}>
-                {creating ? "Creating..." : "Create"}
+                {creating ? "Creating..." : "Create (⌘↵)"}
               </button>
               <button onClick={() => setShowNewForm(false)}>Cancel</button>
             </div>
@@ -681,6 +698,18 @@ export function PlanningPanel({
                   <span className="planning-panel__session-tasks">
                     {session.nodes.length} tasks
                   </span>
+                  {session.status === "discarded" && (
+                    <button
+                      className="planning-panel__session-delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteFromList(session.id);
+                      }}
+                      title="Delete"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               </div>
             ))
@@ -771,7 +800,12 @@ export function PlanningPanel({
                   </a>
                 );
               })}
-              {selectedSession.status === "draft" && (
+              {addingLink && (
+                <div className="planning-panel__link-icon planning-panel__link-icon--loading">
+                  <div className="planning-panel__link-skeleton" />
+                </div>
+              )}
+              {selectedSession.status === "draft" && !addingLink && (
                 <button
                   className="planning-panel__link-add-icon"
                   onClick={() => setShowLinkInput(!showLinkInput)}

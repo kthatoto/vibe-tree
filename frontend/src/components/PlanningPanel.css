@@ -235,6 +235,23 @@
   color: #6b7280;
 }
 
+.planning-panel__session-delete {
+  margin-left: auto;
+  padding: 2px 8px;
+  background: transparent;
+  color: #6b7280;
+  border: none;
+  border-radius: 3px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.planning-panel__session-delete:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}
+
 /* Detail view */
 .planning-panel--detail {
   display: flex;
@@ -333,6 +350,25 @@
 
 .planning-panel__link-icon--github img {
   filter: invert(1);
+}
+
+.planning-panel__link-icon--loading {
+  background: #1e293b;
+  border-color: #475569;
+}
+
+.planning-panel__link-skeleton {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .planning-panel__link-icon .planning-panel__link-remove-overlay {

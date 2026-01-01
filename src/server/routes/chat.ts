@@ -654,37 +654,47 @@ ${gitStatus || "Clean working directory"}
 
   // 3. External links context (for planning sessions)
   if (isPlanningSession) {
-    // Extract planning session ID from worktreePath (format: "planning:{sessionId}")
-    const planningSessionId = session.worktreePath.replace("planning:", "");
-
-    const links = await db
+    // Find the planning session that has this chat session linked
+    const planningSession = await db
       .select()
-      .from(schema.externalLinks)
-      .where(eq(schema.externalLinks.planningSessionId, planningSessionId));
+      .from(schema.planningSessions)
+      .where(eq(schema.planningSessions.chatSessionId, session.id))
+      .limit(1);
 
-    if (links.length > 0) {
-      const linksContext = links.map((link) => {
-        const typeLabel = {
-          notion: "Notion",
-          figma: "Figma",
-          github_issue: "GitHub Issue",
-          github_pr: "GitHub PR",
-          url: "URL",
-        }[link.linkType] || link.linkType;
+    if (planningSession[0]) {
+      const links = await db
+        .select()
+        .from(schema.externalLinks)
+        .where(eq(schema.externalLinks.planningSessionId, planningSession[0].id));
 
-        if (link.contentCache) {
-          return `### ${link.title || typeLabel}\nSource: ${link.url}\n\n${link.contentCache}`;
-        } else {
-          // Still include the link even without cached content
-          return `### ${link.title || typeLabel}\nSource: ${link.url}\n\n(コンテンツ未取得 - このリンクを参照してタスクを検討してください)`;
-        }
-      });
+      console.log(`[Chat] Found ${links.length} external links for planning session ${planningSession[0].id}`);
 
-      parts.push(`## 共有されたリンク・ドキュメント
-以下のリンクがユーザーから共有されています。これらを参考にしてタスクを提案してください。
+      if (links.length > 0) {
+        const linksContext = links.map((link) => {
+          const typeLabel = {
+            notion: "Notion",
+            figma: "Figma",
+            github_issue: "GitHub Issue",
+            github_pr: "GitHub PR",
+            url: "URL",
+          }[link.linkType] || link.linkType;
+
+          if (link.contentCache) {
+            return `### ${link.title || typeLabel}\nSource: ${link.url}\n\n${link.contentCache}`;
+          } else {
+            // Still include the link even without cached content
+            return `### ${link.title || typeLabel}\nSource: ${link.url}\n\n(コンテンツ未取得 - このリンクを参照してタスクを検討してください)`;
+          }
+        });
+
+        parts.push(`## 共有されたリンク・ドキュメント
+以下のリンクがユーザーから共有されています。これらの内容を読んで、タスクを提案してください。
 
 ${linksContext.join("\n\n---\n\n")}
 `);
+      }
+    } else {
+      console.log(`[Chat] No planning session found with chatSessionId=${session.id}`);
     }
   }
 

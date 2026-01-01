@@ -46,11 +46,21 @@ scanRouter.post("/", async (c) => {
   const branchNames = branches.map((b) => b.name);
 
   // 2. Check if user has saved a preferred base branch in repo_pins
+  // Query by localPath (unique) instead of repoId (can change)
   const repoPinRecords = await db
     .select()
     .from(schema.repoPins)
-    .where(eq(schema.repoPins.repoId, repoId));
-  const savedBaseBranch = repoPinRecords[0]?.baseBranch;
+    .where(eq(schema.repoPins.localPath, localPath));
+  const repoPin = repoPinRecords[0];
+  const savedBaseBranch = repoPin?.baseBranch;
+
+  // Update repoId in repo_pins if it has changed (ensures consistency)
+  if (repoPin && repoPin.repoId !== repoId) {
+    await db
+      .update(schema.repoPins)
+      .set({ repoId })
+      .where(eq(schema.repoPins.id, repoPin.id));
+  }
 
   // 3. Detect default branch dynamically (use saved if available and valid)
   const defaultBranch = savedBaseBranch && branchNames.includes(savedBaseBranch)

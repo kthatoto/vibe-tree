@@ -260,9 +260,24 @@ chatRouter.post("/send", async (c) => {
 
   // Handle planning sessions (worktreePath starts with "planning:")
   const isPlanningSession = session.worktreePath.startsWith("planning:");
-  const worktreePath = isPlanningSession
-    ? session.worktreePath.replace("planning:", "")
-    : session.worktreePath;
+  let worktreePath: string;
+
+  if (isPlanningSession) {
+    // For planning sessions, get the local path from repo_pins
+    const repoPins = await db
+      .select()
+      .from(schema.repoPins)
+      .where(eq(schema.repoPins.repoId, session.repoId))
+      .limit(1);
+
+    const repoPin = repoPins[0];
+    if (!repoPin) {
+      throw new BadRequestError(`Repo pin not found for repoId: ${session.repoId}`);
+    }
+    worktreePath = repoPin.localPath;
+  } else {
+    worktreePath = session.worktreePath;
+  }
 
   if (!existsSync(worktreePath)) {
     throw new BadRequestError(`Path does not exist: ${worktreePath}`);

@@ -71,7 +71,7 @@ export function ChatPanel({ sessionId, onTaskSuggested }: ChatPanelProps) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       sendMessage();
     }
@@ -229,7 +229,7 @@ export function ChatPanel({ sessionId, onTaskSuggested }: ChatPanelProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a message... (Shift+Enter for new line)"
+            placeholder="Type a message... (⌘+Enter to send)"
             style={{
               flex: 1,
               resize: "none",

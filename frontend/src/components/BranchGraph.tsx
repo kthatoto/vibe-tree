@@ -283,7 +283,7 @@ export default function BranchGraph({
     const path = `M ${startX} ${startY} L ${cornerX} ${startY} L ${cornerX} ${endY} L ${endX} ${endY}`;
 
     // Tentative edges use dashed lines with purple color
-    const strokeColor = edge.isTentative ? "#9c27b0" : edge.isDesigned ? "#9c27b0" : "#ccc";
+    const strokeColor = edge.isTentative ? "#9c27b0" : edge.isDesigned ? "#9c27b0" : "#4b5563";
     const strokeDash = edge.isTentative ? "4,4" : undefined;
 
     return (
@@ -311,34 +311,34 @@ export default function BranchGraph({
     const hasWorktree = !!node.worktree;
     const hasPR = !!node.pr;
 
-    // Determine node color
-    let fillColor = "#fff";
-    let strokeColor = "#ddd";
+    // Determine node color (dark mode)
+    let fillColor = "#1f2937";
+    let strokeColor = "#4b5563";
     let strokeDash: string | undefined;
 
     if (isTentative) {
       // Tentative nodes have dashed purple border
-      fillColor = "#f3e5f5";
+      fillColor = "#2d1f3d";
       strokeColor = "#9c27b0";
       strokeDash = "4,4";
     } else if (isDefault) {
-      fillColor = "#e3f2fd";
-      strokeColor = "#2196f3";
+      fillColor = "#1e3a5f";
+      strokeColor = "#3b82f6";
     } else if (node.worktree?.isActive) {
-      fillColor = "#e8f5e9";
-      strokeColor = "#4caf50";
+      fillColor = "#14532d";
+      strokeColor = "#22c55e";
     } else if (hasPR) {
       if (node.pr?.state === "MERGED") {
-        fillColor = "#f3e5f5";
+        fillColor = "#2d1f3d";
         strokeColor = "#9c27b0";
       } else if (node.pr?.state === "OPEN") {
-        fillColor = "#fff3e0";
-        strokeColor = "#ff9800";
+        fillColor = "#422006";
+        strokeColor = "#f59e0b";
       }
     }
 
     if (isSelected) {
-      strokeColor = "#1976d2";
+      strokeColor = "#3b82f6";
     }
 
     // For tentative nodes, show task title; for real nodes, show branch name
@@ -377,7 +377,7 @@ export default function BranchGraph({
           fontFamily={isTentative ? "sans-serif" : "monospace"}
           fontWeight={isDefault ? "bold" : "normal"}
           fontStyle={isTentative ? "italic" : "normal"}
-          fill={isTentative ? "#7b1fa2" : "#333"}
+          fill={isTentative ? "#c084fc" : "#e5e7eb"}
         >
           {displayText}
         </text>

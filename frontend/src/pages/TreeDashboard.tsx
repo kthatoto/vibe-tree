@@ -864,7 +864,7 @@ export default function TreeDashboard() {
         <style>{`
           .project-list-page {
             min-height: 100vh;
-            background: #f5f5f5;
+            background: #0f172a;
             padding: 60px 20px;
             max-width: 600px;
             margin: 0 auto;
@@ -876,11 +876,11 @@ export default function TreeDashboard() {
           .project-list-header h1 {
             margin: 0 0 8px;
             font-size: 32px;
-            color: #333;
+            color: #e5e7eb;
           }
           .project-list-header p {
             margin: 0;
-            color: #666;
+            color: #9ca3af;
           }
           .project-list {
             display: flex;
@@ -889,18 +889,18 @@ export default function TreeDashboard() {
             margin-bottom: 24px;
           }
           .project-card {
-            background: white;
+            background: #1f2937;
             border-radius: 12px;
             padding: 20px;
             cursor: pointer;
-            border: 2px solid transparent;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            border: 1px solid #374151;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             position: relative;
             transition: all 0.2s;
           }
           .project-card:hover {
-            border-color: #2196f3;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            border-color: #3b82f6;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
           }
           .project-card__name {
             font-weight: 600;
@@ -909,15 +909,15 @@ export default function TreeDashboard() {
           }
           .project-card__path {
             font-size: 13px;
-            color: #888;
+            color: #6b7280;
             font-family: monospace;
           }
           .project-card__delete {
             position: absolute;
             top: 12px;
             right: 12px;
-            background: #fee;
-            color: #c00;
+            background: #7f1d1d;
+            color: #f87171;
             border: none;
             border-radius: 6px;
             padding: 4px 10px;
@@ -932,7 +932,7 @@ export default function TreeDashboard() {
           .project-list__empty {
             text-align: center;
             padding: 40px;
-            color: #999;
+            color: #6b7280;
           }
           .add-project-btn {
             width: 100%;
@@ -949,22 +949,24 @@ export default function TreeDashboard() {
             background: #1976d2;
           }
           .add-project-form {
-            background: white;
+            background: #111827;
             border-radius: 12px;
             padding: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
           }
           .add-project-form input {
             width: 100%;
             padding: 14px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid #374151;
             border-radius: 8px;
             font-size: 16px;
             margin-bottom: 12px;
+            background: #111827;
+            color: #e5e7eb;
           }
           .add-project-form input:focus {
             outline: none;
-            border-color: #2196f3;
+            border-color: #3b82f6;
           }
           .add-project-form__buttons {
             display: flex;
@@ -981,8 +983,8 @@ export default function TreeDashboard() {
           .project-list__error {
             margin-top: 16px;
             padding: 12px;
-            background: #fee;
-            color: #c00;
+            background: #7f1d1d;
+            color: #f87171;
             border-radius: 8px;
             text-align: center;
           }
@@ -1352,7 +1354,7 @@ export default function TreeDashboard() {
       <style>{`
         .dashboard {
           min-height: 100vh;
-          background: #f5f5f5;
+          background: #0f172a;
         }
         .dashboard--with-sidebar {
           display: flex;
@@ -1362,8 +1364,8 @@ export default function TreeDashboard() {
         .sidebar {
           width: 280px;
           min-width: 280px;
-          background: white;
-          border-right: 1px solid #ddd;
+          background: #111827;
+          border-right: 1px solid #374151;
           display: flex;
           flex-direction: column;
           height: 100vh;
@@ -1373,23 +1375,23 @@ export default function TreeDashboard() {
         }
         .sidebar__header {
           padding: 16px 20px;
-          border-bottom: 1px solid #eee;
+          border-bottom: 1px solid #374151;
         }
         .sidebar__header h1 {
           margin: 0;
           font-size: 18px;
-          color: #333;
+          color: #e5e7eb;
         }
         .sidebar__back {
           background: none;
           border: none;
-          color: #666;
+          color: #9ca3af;
           font-size: 13px;
           cursor: pointer;
           padding: 0;
         }
         .sidebar__back:hover {
-          color: #333;
+          color: #e5e7eb;
         }
         .sidebar__project-name {
           font-weight: 600;
@@ -1398,18 +1400,18 @@ export default function TreeDashboard() {
         }
         .sidebar__section {
           padding: 16px 20px;
-          border-bottom: 1px solid #eee;
+          border-bottom: 1px solid #374151;
         }
         .sidebar__section h3 {
           margin: 0 0 10px;
           font-size: 12px;
           font-weight: 600;
-          color: #666;
+          color: #9ca3af;
           text-transform: uppercase;
         }
         .sidebar__path {
           font-size: 11px;
-          color: #888;
+          color: #6b7280;
           margin-top: 8px;
           word-break: break-all;
           font-family: monospace;
@@ -1417,16 +1419,16 @@ export default function TreeDashboard() {
         .sidebar__btn {
           width: 100%;
           padding: 10px 16px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 6px;
-          background: white;
-          color: #333;
+          background: #111827;
+          color: #e5e7eb;
           cursor: pointer;
           font-size: 14px;
           margin-bottom: 8px;
         }
         .sidebar__btn:hover {
-          background: #f5f5f5;
+          background: #0f172a;
         }
         .sidebar__btn:disabled {
           opacity: 0.5;
@@ -1441,8 +1443,8 @@ export default function TreeDashboard() {
           background: #0052a3;
         }
         .sidebar__btn--primary:disabled {
-          background: #ccc;
-          border-color: #ccc;
+          background: #4b5563;
+          border-color: #4b5563;
         }
         .sidebar__plan {
           font-size: 13px;
@@ -1467,13 +1469,13 @@ export default function TreeDashboard() {
           align-items: center;
           justify-content: space-between;
           padding: 6px 10px;
-          background: #f5f5f5;
+          background: #0f172a;
           border-radius: 4px;
           font-size: 12px;
         }
         .sidebar__worktree--active {
-          background: #e8f5e9;
-          border-left: 3px solid #28a745;
+          background: #14532d;
+          border-left: 3px solid #22c55e;
         }
         .sidebar__worktree-branch {
           font-family: monospace;
@@ -1503,7 +1505,7 @@ export default function TreeDashboard() {
         .repo-selector select {
           flex: 1;
           padding: 8px 10px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 4px;
           font-size: 13px;
         }
@@ -1513,7 +1515,7 @@ export default function TreeDashboard() {
         .add-repo-form input {
           width: 100%;
           padding: 8px 10px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 4px;
           font-size: 13px;
           margin-bottom: 8px;
@@ -1525,11 +1527,11 @@ export default function TreeDashboard() {
         .add-repo-form__buttons button {
           flex: 1;
           padding: 6px 12px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 4px;
           cursor: pointer;
           font-size: 12px;
-          background: white;
+          background: #111827;
         }
         .add-repo-form__buttons button:first-child {
           background: #0066cc;
@@ -1538,9 +1540,9 @@ export default function TreeDashboard() {
         }
         .btn-delete {
           padding: 4px 8px;
-          background: #fee;
-          color: #c00;
-          border: 1px solid #fcc;
+          background: #7f1d1d;
+          color: #f87171;
+          border: 1px solid #991b1b;
           border-radius: 4px;
           cursor: pointer;
           font-size: 14px;
@@ -1554,8 +1556,8 @@ export default function TreeDashboard() {
           overflow-y: auto;
         }
         .dashboard__error {
-          background: #fee;
-          color: #c00;
+          background: #7f1d1d;
+          color: #f87171;
           padding: 12px 16px;
           border-radius: 6px;
           margin-bottom: 16px;
@@ -1563,12 +1565,12 @@ export default function TreeDashboard() {
         .empty-state {
           text-align: center;
           padding: 60px 20px;
-          color: #666;
+          color: #9ca3af;
         }
         .empty-state h2 {
           margin: 0 0 8px;
           font-size: 18px;
-          color: #333;
+          color: #e5e7eb;
         }
         .empty-state p {
           margin: 0;
@@ -1580,7 +1582,7 @@ export default function TreeDashboard() {
           align-items: center;
           justify-content: center;
           padding: 80px 20px;
-          color: #666;
+          color: #9ca3af;
         }
         .loading-state__spinner {
           margin-bottom: 16px;
@@ -1625,7 +1627,7 @@ export default function TreeDashboard() {
         .graph-container {
           flex: 1;
           overflow: auto;
-          background: #fafafa;
+          background: #1f2937;
           border-radius: 4px;
           min-height: 300px;
         }
@@ -1637,19 +1639,19 @@ export default function TreeDashboard() {
           align-items: center;
           justify-content: center;
           height: 200px;
-          color: #999;
+          color: #6b7280;
         }
         .branch-graph__svg {
           display: block;
         }
         .panel {
-          background: white;
-          border: 1px solid #ddd;
+          background: #111827;
+          border: 1px solid #374151;
           border-radius: 8px;
           padding: 16px;
         }
         .panel--warnings {
-          border-color: #f90;
+          border-color: #f59e0b;
         }
         .panel--planning {
           flex: 1;
@@ -1671,8 +1673,6 @@ export default function TreeDashboard() {
         .planning-panel__chat {
           flex: 1;
           min-width: 0;
-          border: 1px solid #e5e7eb;
-          border-radius: 8px;
           overflow: hidden;
           display: flex;
           flex-direction: column;
@@ -1689,7 +1689,7 @@ export default function TreeDashboard() {
           flex-shrink: 0;
           margin-bottom: 12px;
           padding-bottom: 12px;
-          border-bottom: 1px solid #eee;
+          border-bottom: 1px solid #374151;
         }
         .external-links__header {
           display: flex;
@@ -1700,14 +1700,14 @@ export default function TreeDashboard() {
         .external-links__title {
           font-size: 12px;
           font-weight: 600;
-          color: #666;
+          color: #9ca3af;
         }
         .external-links__count {
           font-size: 11px;
-          background: #e0e0e0;
+          background: #374151;
           padding: 1px 6px;
           border-radius: 10px;
-          color: #666;
+          color: #9ca3af;
         }
         .external-links__add {
           display: flex;
@@ -1717,7 +1717,7 @@ export default function TreeDashboard() {
         .external-links__add input {
           flex: 1;
           padding: 6px 10px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 4px;
           font-size: 12px;
         }
@@ -1731,7 +1731,7 @@ export default function TreeDashboard() {
           cursor: pointer;
         }
         .external-links__add button:disabled {
-          background: #ccc;
+          background: #4b5563;
           cursor: not-allowed;
         }
         .external-links__list {
@@ -1744,7 +1744,7 @@ export default function TreeDashboard() {
           align-items: center;
           gap: 8px;
           padding: 4px 8px;
-          background: #f5f5f5;
+          background: #0f172a;
           border-radius: 4px;
           font-size: 12px;
         }
@@ -1770,7 +1770,7 @@ export default function TreeDashboard() {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          color: #333;
+          color: #e5e7eb;
           text-decoration: none;
         }
         .external-link-item__title:hover {
@@ -1784,14 +1784,14 @@ export default function TreeDashboard() {
           background: transparent;
           cursor: pointer;
           font-size: 12px;
-          color: #999;
+          color: #6b7280;
           display: flex;
           align-items: center;
           justify-content: center;
           border-radius: 3px;
         }
         .external-link-item__refresh:hover {
-          background: #e0e0e0;
+          background: #374151;
           color: #2196f3;
         }
         .external-link-item__remove:hover {
@@ -1804,16 +1804,16 @@ export default function TreeDashboard() {
           gap: 8px;
           margin-bottom: 12px;
           padding-bottom: 12px;
-          border-bottom: 1px solid #eee;
+          border-bottom: 1px solid #374151;
         }
         .task-tree-panel__settings label {
           font-size: 13px;
-          color: #666;
+          color: #9ca3af;
         }
         .task-tree-panel__settings select {
           flex: 1;
           padding: 6px 8px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 4px;
           font-size: 13px;
         }
@@ -1825,7 +1825,7 @@ export default function TreeDashboard() {
         .task-tree-panel__add input {
           flex: 1;
           padding: 8px 12px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 4px;
           font-size: 13px;
         }
@@ -1839,7 +1839,7 @@ export default function TreeDashboard() {
           font-size: 13px;
         }
         .task-tree-panel__add button:disabled {
-          background: #ccc;
+          background: #4b5563;
           cursor: not-allowed;
         }
         .task-tree-panel__settings,
@@ -1856,30 +1856,30 @@ export default function TreeDashboard() {
         .task-tree-panel__tree {
           flex: 2;
           padding: 12px;
-          background: #f8f9fa;
-          border: 2px dashed #ddd;
+          background: #1f2937;
+          border: 2px dashed #374151;
           border-radius: 8px;
           overflow-y: auto;
         }
         .task-tree-panel__backlog {
           flex: 1;
           padding: 12px;
-          background: #fff3e0;
-          border: 2px dashed #ffcc80;
+          background: #422006;
+          border: 2px dashed #a16207;
           border-radius: 8px;
           overflow-y: auto;
         }
         .tree-label, .backlog-label {
           font-size: 12px;
           font-weight: 600;
-          color: #666;
+          color: #9ca3af;
           margin-bottom: 8px;
           padding-bottom: 6px;
-          border-bottom: 1px solid #ddd;
+          border-bottom: 1px solid #374151;
         }
         .tree-empty {
           font-size: 12px;
-          color: #999;
+          color: #6b7280;
           text-align: center;
           padding: 20px;
         }
@@ -1889,7 +1889,7 @@ export default function TreeDashboard() {
           gap: 8px;
           margin-top: 12px;
           padding-top: 12px;
-          border-top: 1px solid #eee;
+          border-top: 1px solid #374151;
           align-items: center;
         }
         .checkbox-label {
@@ -1899,11 +1899,11 @@ export default function TreeDashboard() {
           font-size: 12px;
           cursor: pointer;
           padding: 4px 8px;
-          background: #f5f5f5;
+          background: #0f172a;
           border-radius: 4px;
         }
         .checkbox-label:hover {
-          background: #e8e8e8;
+          background: #4b5563;
         }
         .checkbox-label input {
           cursor: pointer;
@@ -1918,20 +1918,20 @@ export default function TreeDashboard() {
           font-size: 13px;
         }
         .btn-primary:disabled {
-          background: #ccc;
+          background: #4b5563;
           cursor: not-allowed;
         }
         .btn-secondary {
           padding: 8px 16px;
-          background: white;
-          color: #333;
-          border: 1px solid #ddd;
+          background: #111827;
+          color: #e5e7eb;
+          border: 1px solid #374151;
           border-radius: 4px;
           cursor: pointer;
           font-size: 13px;
         }
         .btn-secondary:hover {
-          background: #f5f5f5;
+          background: #0f172a;
         }
         .status-badge {
           padding: 2px 8px;
@@ -1941,23 +1941,23 @@ export default function TreeDashboard() {
           text-transform: uppercase;
         }
         .status-badge--draft {
-          background: #e0e0e0;
-          color: #666;
+          background: #374151;
+          color: #9ca3af;
         }
         .status-badge--confirmed {
-          background: #fff3e0;
-          color: #e65100;
+          background: #422006;
+          color: #fb923c;
         }
         .status-badge--generated {
-          background: #e8f5e9;
-          color: #2e7d32;
+          background: #14532d;
+          color: #4ade80;
         }
         .panel--restart {
-          background: #e8f4f8;
-          border-color: #b8d4e8;
+          background: #1e3a5f;
+          border-color: #1e40af;
         }
         .panel--placeholder {
-          color: #999;
+          color: #6b7280;
           text-align: center;
           padding: 40px;
         }
@@ -1974,7 +1974,7 @@ export default function TreeDashboard() {
         }
         .panel__count {
           font-size: 12px;
-          color: #666;
+          color: #9ca3af;
         }
         .tree-list {
           font-family: monospace;
@@ -1983,16 +1983,16 @@ export default function TreeDashboard() {
         .tree-node {
           padding: 8px 12px;
           margin-bottom: 4px;
-          background: #f9f9f9;
+          background: #1f2937;
           border-radius: 4px;
           cursor: pointer;
           border-left: 3px solid transparent;
         }
         .tree-node:hover {
-          background: #f0f0f0;
+          background: #374151;
         }
         .tree-node--selected {
-          background: #e8f4fc;
+          background: #1e3a5f;
           border-left-color: #0066cc;
         }
         .tree-node--active {
@@ -2073,7 +2073,7 @@ export default function TreeDashboard() {
           gap: 8px;
           margin-top: 4px;
           font-size: 11px;
-          color: #666;
+          color: #9ca3af;
         }
         .tree-node__stat {
           font-family: monospace;
@@ -2082,7 +2082,7 @@ export default function TreeDashboard() {
           color: #28a745;
         }
         .tree-node__label {
-          background: #e0e0e0;
+          background: #374151;
           padding: 1px 4px;
           border-radius: 2px;
         }
@@ -2093,10 +2093,10 @@ export default function TreeDashboard() {
           font-size: 13px;
         }
         .warning--warn {
-          background: #fff8e8;
+          background: #422006;
         }
         .warning--error {
-          background: #fee;
+          background: #7f1d1d;
         }
         .detail-section {
           margin-bottom: 16px;
@@ -2105,7 +2105,7 @@ export default function TreeDashboard() {
           margin: 0 0 8px;
           font-size: 12px;
           font-weight: 600;
-          color: #666;
+          color: #9ca3af;
           text-transform: uppercase;
         }
         .detail-section a {
@@ -2117,7 +2117,7 @@ export default function TreeDashboard() {
         }
         .detail-section code {
           display: block;
-          background: #f5f5f5;
+          background: #0f172a;
           padding: 8px;
           border-radius: 4px;
           font-size: 12px;
@@ -2143,14 +2143,14 @@ export default function TreeDashboard() {
         }
         .copy-row button {
           padding: 4px 12px;
-          background: #e0e0e0;
+          background: #374151;
           border: none;
           border-radius: 4px;
           cursor: pointer;
           font-size: 12px;
         }
         .restart-prompt {
-          background: white;
+          background: #111827;
           padding: 12px;
           border-radius: 4px;
           font-size: 11px;
@@ -2163,7 +2163,7 @@ export default function TreeDashboard() {
           width: 100%;
           min-height: 80px;
           padding: 8px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 4px;
           font-family: inherit;
           font-size: 13px;
@@ -2179,7 +2179,7 @@ export default function TreeDashboard() {
           cursor: pointer;
         }
         .btn-primary:disabled {
-          background: #ccc;
+          background: #4b5563;
           cursor: not-allowed;
         }
         .btn-chat-small {
@@ -2201,10 +2201,10 @@ export default function TreeDashboard() {
           bottom: 20px;
           width: 450px;
           max-height: 600px;
-          background: white;
-          border: 1px solid #ddd;
+          background: #111827;
+          border: 1px solid #374151;
           border-radius: 12px;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.5);
           display: flex;
           flex-direction: column;
           z-index: 1000;
@@ -2246,10 +2246,10 @@ export default function TreeDashboard() {
           overflow-y: auto;
           padding: 12px;
           max-height: 400px;
-          background: #f8f9fa;
+          background: #1f2937;
         }
         .chat-panel__empty {
-          color: #999;
+          color: #6b7280;
           text-align: center;
           padding: 40px 20px;
           font-size: 13px;
@@ -2266,8 +2266,8 @@ export default function TreeDashboard() {
           margin-left: auto;
         }
         .chat-message--assistant {
-          background: white;
-          border: 1px solid #e0e0e0;
+          background: #111827;
+          border: 1px solid #374151;
         }
         .chat-message--system {
           background: #fff3cd;
@@ -2275,8 +2275,8 @@ export default function TreeDashboard() {
           font-size: 12px;
         }
         .chat-message--loading {
-          background: #e8e8e8;
-          color: #666;
+          background: #4b5563;
+          color: #9ca3af;
         }
         .chat-message__role {
           font-size: 10px;
@@ -2308,14 +2308,14 @@ export default function TreeDashboard() {
           display: flex;
           gap: 8px;
           padding: 12px;
-          border-top: 1px solid #e0e0e0;
-          background: white;
+          border-top: 1px solid #374151;
+          background: #111827;
           border-radius: 0 0 12px 12px;
         }
         .chat-panel__input textarea {
           flex: 1;
           padding: 10px 12px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 8px;
           font-size: 13px;
           font-family: inherit;
@@ -2337,7 +2337,7 @@ export default function TreeDashboard() {
           font-weight: 500;
         }
         .chat-panel__input button:disabled {
-          background: #ccc;
+          background: #4b5563;
           cursor: not-allowed;
         }
         .chat-panel__input button:hover:not(:disabled) {
@@ -2360,7 +2360,7 @@ export default function TreeDashboard() {
           align-items: center;
           justify-content: center;
           gap: 12px;
-          color: #666;
+          color: #9ca3af;
           font-size: 14px;
         }
         /* Terminal Panel */
@@ -2371,7 +2371,7 @@ export default function TreeDashboard() {
           width: 700px;
           height: 450px;
           z-index: 1000;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.6);
           border-radius: 8px;
           overflow: hidden;
         }
@@ -2402,20 +2402,20 @@ export default function TreeDashboard() {
           z-index: 2000;
         }
         .wizard-modal {
-          background: white;
+          background: #111827;
           border-radius: 12px;
           width: 500px;
           max-height: 80vh;
           display: flex;
           flex-direction: column;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.6);
         }
         .wizard-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
           padding: 16px 20px;
-          border-bottom: 1px solid #e0e0e0;
+          border-bottom: 1px solid #374151;
         }
         .wizard-header h2 {
           margin: 0;
@@ -2426,7 +2426,7 @@ export default function TreeDashboard() {
           border: none;
           font-size: 20px;
           cursor: pointer;
-          color: #666;
+          color: #9ca3af;
         }
         .wizard-content {
           flex: 1;
@@ -2440,7 +2440,7 @@ export default function TreeDashboard() {
           margin: 0 0 12px;
           font-size: 14px;
           font-weight: 600;
-          color: #333;
+          color: #e5e7eb;
         }
         .wizard-nodes {
           display: flex;
@@ -2452,7 +2452,7 @@ export default function TreeDashboard() {
           align-items: center;
           gap: 8px;
           padding: 8px 12px;
-          background: #f5f5f5;
+          background: #0f172a;
           border-radius: 6px;
         }
         .wizard-node__name {
@@ -2461,12 +2461,12 @@ export default function TreeDashboard() {
         }
         .wizard-node__parent {
           font-size: 12px;
-          color: #666;
+          color: #9ca3af;
         }
         .wizard-node__remove {
           margin-left: auto;
-          background: #fee;
-          color: #c00;
+          background: #7f1d1d;
+          color: #f87171;
           border: none;
           border-radius: 4px;
           padding: 2px 8px;
@@ -2480,13 +2480,13 @@ export default function TreeDashboard() {
         .wizard-add-form input {
           flex: 1;
           padding: 8px 12px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 6px;
           font-size: 14px;
         }
         .wizard-add-form select {
           padding: 8px 12px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 6px;
           font-size: 14px;
         }
@@ -2499,13 +2499,13 @@ export default function TreeDashboard() {
           cursor: pointer;
         }
         .wizard-add-form button:disabled {
-          background: #ccc;
+          background: #4b5563;
           cursor: not-allowed;
         }
         .wizard-base-select {
           width: 100%;
           padding: 10px 12px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 6px;
           font-size: 14px;
         }
@@ -2518,7 +2518,7 @@ export default function TreeDashboard() {
         }
         .wizard-task {
           padding: 12px;
-          background: #f5f5f5;
+          background: #0f172a;
           border-radius: 8px;
           border-left: 4px solid #9e9e9e;
         }
@@ -2527,11 +2527,11 @@ export default function TreeDashboard() {
         }
         .wizard-task--doing {
           border-left-color: #2196f3;
-          background: #e3f2fd;
+          background: #1e3a5f;
         }
         .wizard-task--done {
           border-left-color: #4caf50;
-          background: #e8f5e9;
+          background: #14532d;
         }
         .wizard-task__header {
           display: flex;
@@ -2540,10 +2540,10 @@ export default function TreeDashboard() {
         }
         .wizard-task__status {
           padding: 4px 8px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 4px;
           font-size: 12px;
-          background: white;
+          background: #111827;
         }
         .wizard-task__title {
           flex: 1;
@@ -2564,12 +2564,12 @@ export default function TreeDashboard() {
           background: #45a049;
         }
         .wizard-task__start:disabled {
-          background: #ccc;
+          background: #4b5563;
           cursor: not-allowed;
         }
         .wizard-task__remove {
-          background: #fee;
-          color: #c00;
+          background: #7f1d1d;
+          color: #f87171;
           border: none;
           border-radius: 4px;
           padding: 2px 8px;
@@ -2579,7 +2579,7 @@ export default function TreeDashboard() {
         .wizard-task__description {
           margin-top: 6px;
           font-size: 12px;
-          color: #666;
+          color: #9ca3af;
           padding-left: 8px;
         }
         .wizard-task__meta {
@@ -2587,14 +2587,14 @@ export default function TreeDashboard() {
           gap: 12px;
           margin-top: 8px;
           font-size: 11px;
-          color: #888;
+          color: #6b7280;
         }
         .wizard-task__parent {
           font-style: italic;
         }
         .wizard-task__branch {
           font-family: monospace;
-          background: #e0e0e0;
+          background: #374151;
           padding: 1px 4px;
           border-radius: 3px;
         }
@@ -2618,7 +2618,7 @@ export default function TreeDashboard() {
         }
         .wizard-base-select-inline {
           padding: 6px 10px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 4px;
           font-size: 13px;
         }
@@ -2639,7 +2639,7 @@ export default function TreeDashboard() {
         .tree-builder__tree {
           display: flex;
           flex-direction: column;
-          background: #f8f9fa;
+          background: #1f2937;
           border-radius: 8px;
           padding: 12px;
         }
@@ -2647,7 +2647,7 @@ export default function TreeDashboard() {
         .tree-builder__tree h3 {
           margin: 0 0 12px;
           font-size: 14px;
-          color: #666;
+          color: #9ca3af;
         }
         .tree-builder__backlog-list,
         .tree-builder__tree-content {
@@ -2674,8 +2674,8 @@ export default function TreeDashboard() {
         .tree-builder__empty {
           padding: 40px 20px;
           text-align: center;
-          color: #999;
-          border: 2px dashed #ddd;
+          color: #6b7280;
+          border: 2px dashed #374151;
           border-radius: 8px;
           font-size: 13px;
         }
@@ -2684,12 +2684,12 @@ export default function TreeDashboard() {
           gap: 8px;
           margin-top: 12px;
           padding-top: 12px;
-          border-top: 1px solid #e0e0e0;
+          border-top: 1px solid #374151;
         }
         .tree-builder__add-form input {
           flex: 1;
           padding: 8px 10px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 6px;
           font-size: 13px;
         }
@@ -2703,45 +2703,45 @@ export default function TreeDashboard() {
           font-weight: 500;
         }
         .tree-builder__add-form button:disabled {
-          background: #ccc;
+          background: #4b5563;
           cursor: not-allowed;
         }
         .tree-builder__node {
           margin-bottom: 4px;
         }
         .tree-builder__children {
-          border-left: 2px solid #e0e0e0;
+          border-left: 2px solid #374151;
           margin-left: 12px;
           padding-left: 8px;
         }
 
         /* Task Card styles */
         .task-card {
-          background: white;
+          background: #111827;
           border-radius: 8px;
           padding: 10px 12px;
           border-left: 4px solid #9e9e9e;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }
         .task-card--todo {
           border-left-color: #9e9e9e;
         }
         .task-card--doing {
           border-left-color: #2196f3;
-          background: #e3f2fd;
+          background: #1e3a5f;
         }
         .task-card--done {
           border-left-color: #4caf50;
-          background: #e8f5e9;
+          background: #14532d;
         }
         .task-card--compact {
           padding: 6px 10px;
         }
         .task-card--dragging {
-          background: white;
+          background: #111827;
           padding: 10px 12px;
           border-radius: 8px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.4);
           font-weight: 600;
         }
         .task-card__header {
@@ -2751,10 +2751,10 @@ export default function TreeDashboard() {
         }
         .task-card__status {
           padding: 2px 6px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 4px;
           font-size: 11px;
-          background: white;
+          background: #111827;
         }
         .task-card__title {
           flex: 1;
@@ -2775,11 +2775,11 @@ export default function TreeDashboard() {
           font-size: 11px;
         }
         .task-card__start:disabled {
-          background: #ccc;
+          background: #4b5563;
         }
         .task-card__remove {
-          background: #fee;
-          color: #c00;
+          background: #7f1d1d;
+          color: #f87171;
           border: none;
           border-radius: 4px;
           padding: 2px 6px;
@@ -2789,7 +2789,7 @@ export default function TreeDashboard() {
         .task-card__description {
           margin-top: 6px;
           font-size: 12px;
-          color: #666;
+          color: #9ca3af;
         }
         .task-card__meta {
           display: flex;
@@ -2799,7 +2799,7 @@ export default function TreeDashboard() {
         }
         .task-card__branch {
           font-family: monospace;
-          background: #e0e0e0;
+          background: #374151;
           padding: 1px 4px;
           border-radius: 3px;
         }
@@ -2856,7 +2856,7 @@ export default function TreeDashboard() {
         /* Generation logs */
         .generate-logs {
           margin: 12px 0;
-          border: 1px solid #e0e0e0;
+          border: 1px solid #374151;
           border-radius: 8px;
           background: #1e1e1e;
           color: #d4d4d4;
@@ -2879,7 +2879,7 @@ export default function TreeDashboard() {
         .generate-logs__header button {
           background: none;
           border: none;
-          color: #999;
+          color: #6b7280;
           cursor: pointer;
           font-size: 16px;
         }
@@ -2910,7 +2910,7 @@ export default function TreeDashboard() {
 
         .wizard-empty {
           text-align: center;
-          color: #999;
+          color: #6b7280;
           padding: 20px;
           font-size: 13px;
         }
@@ -2934,7 +2934,7 @@ export default function TreeDashboard() {
           align-items: center;
           gap: 12px;
           padding: 16px 20px;
-          border-top: 1px solid #e0e0e0;
+          border-top: 1px solid #374151;
         }
         .wizard-footer__left {
           display: flex;
@@ -2951,20 +2951,20 @@ export default function TreeDashboard() {
           font-weight: 600;
         }
         .wizard-status--draft {
-          background: #fff3e0;
-          color: #e65100;
+          background: #422006;
+          color: #fb923c;
         }
         .wizard-status--confirmed {
-          background: #e3f2fd;
+          background: #1e3a5f;
           color: #1565c0;
         }
         .wizard-status--generated {
-          background: #e8f5e9;
-          color: #2e7d32;
+          background: #14532d;
+          color: #4ade80;
         }
         .wizard-locked-notice {
-          background: #fff3e0;
-          color: #e65100;
+          background: #422006;
+          color: #fb923c;
           padding: 8px 12px;
           border-radius: 6px;
           font-size: 12px;
@@ -2973,14 +2973,14 @@ export default function TreeDashboard() {
         }
         .btn-secondary {
           padding: 10px 20px;
-          background: #f5f5f5;
-          color: #333;
-          border: 1px solid #ddd;
+          background: #0f172a;
+          color: #e5e7eb;
+          border: 1px solid #374151;
           border-radius: 6px;
           cursor: pointer;
         }
         .btn-secondary:hover {
-          background: #e8e8e8;
+          background: #4b5563;
         }
         .btn-create-all {
           padding: 10px 20px;
@@ -2995,7 +2995,7 @@ export default function TreeDashboard() {
           background: #f57c00;
         }
         .btn-create-all:disabled {
-          background: #ccc;
+          background: #4b5563;
           cursor: not-allowed;
         }
 
@@ -3010,20 +3010,20 @@ export default function TreeDashboard() {
           z-index: 2000;
         }
         .modal {
-          background: white;
+          background: #111827;
           border-radius: 12px;
           width: 500px;
           max-height: 80vh;
           display: flex;
           flex-direction: column;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.6);
         }
         .modal__header {
           display: flex;
           justify-content: space-between;
           align-items: center;
           padding: 16px 20px;
-          border-bottom: 1px solid #e0e0e0;
+          border-bottom: 1px solid #374151;
         }
         .modal__header h2 {
           margin: 0;
@@ -3034,7 +3034,7 @@ export default function TreeDashboard() {
           border: none;
           font-size: 20px;
           cursor: pointer;
-          color: #666;
+          color: #9ca3af;
         }
         .modal__content {
           flex: 1;
@@ -3044,16 +3044,16 @@ export default function TreeDashboard() {
         .modal__loading {
           text-align: center;
           padding: 40px;
-          color: #666;
+          color: #9ca3af;
         }
         .modal__error {
-          color: #c00;
+          color: #f87171;
           text-align: center;
           padding: 20px;
         }
         .modal__success {
-          background: #e8f5e9;
-          color: #2e7d32;
+          background: #14532d;
+          color: #4ade80;
           padding: 12px 16px;
           border-radius: 6px;
           margin-bottom: 16px;
@@ -3064,7 +3064,7 @@ export default function TreeDashboard() {
           justify-content: flex-end;
           gap: 12px;
           padding: 16px 20px;
-          border-top: 1px solid #e0e0e0;
+          border-top: 1px solid #374151;
         }
 
         /* Settings styles */
@@ -3075,14 +3075,14 @@ export default function TreeDashboard() {
           display: block;
           font-size: 12px;
           font-weight: 600;
-          color: #666;
+          color: #9ca3af;
           text-transform: uppercase;
           margin-bottom: 8px;
         }
         .settings-section input[type="text"] {
           width: 100%;
           padding: 10px 12px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 6px;
           font-size: 14px;
         }
@@ -3090,7 +3090,7 @@ export default function TreeDashboard() {
           width: 100%;
           min-height: 80px;
           padding: 10px 12px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 6px;
           font-size: 14px;
           font-family: inherit;
@@ -3100,7 +3100,7 @@ export default function TreeDashboard() {
           display: block;
           margin-top: 4px;
           font-size: 11px;
-          color: #888;
+          color: #6b7280;
         }
         .settings-examples {
           display: flex;
@@ -3113,7 +3113,7 @@ export default function TreeDashboard() {
           align-items: center;
           gap: 4px;
           padding: 4px 8px;
-          background: #f0f0f0;
+          background: #374151;
           border-radius: 4px;
           font-size: 12px;
         }
@@ -3123,7 +3123,7 @@ export default function TreeDashboard() {
         .settings-example button {
           background: none;
           border: none;
-          color: #c00;
+          color: #f87171;
           cursor: pointer;
           padding: 0 4px;
           font-size: 14px;
@@ -3135,7 +3135,7 @@ export default function TreeDashboard() {
         .settings-add-example input {
           flex: 1;
           padding: 8px 10px;
-          border: 1px solid #ddd;
+          border: 1px solid #374151;
           border-radius: 4px;
           font-size: 13px;
         }
@@ -3167,7 +3167,7 @@ export default function TreeDashboard() {
         .spinner {
           width: 24px;
           height: 24px;
-          border: 3px solid #e0e0e0;
+          border: 3px solid #374151;
           border-top-color: #2196f3;
           border-radius: 50%;
           animation: spin 1s linear infinite;

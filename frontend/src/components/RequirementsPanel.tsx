@@ -352,7 +352,7 @@ export function RequirementsPanel({
           display: flex;
           flex-direction: column;
           height: 100%;
-          background: #f8fafc;
+          background: #0f172a;
           overflow: hidden;
         }
         .requirements-panel__header {
@@ -376,10 +376,10 @@ export function RequirementsPanel({
         }
 
         .req-section {
-          background: white;
+          background: #1f2937;
           border-radius: 8px;
           margin-bottom: 12px;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }
         .req-section__toggle {
           width: 100%;
@@ -393,28 +393,28 @@ export function RequirementsPanel({
           text-align: left;
           font-size: 14px;
           font-weight: 500;
-          color: #334155;
+          color: #e5e7eb;
         }
         .req-section__toggle:hover {
-          background: #f1f5f9;
+          background: #374151;
         }
         .req-section__icon {
           font-size: 10px;
-          color: #94a3b8;
+          color: #6b7280;
         }
         .req-section__title {
           flex: 1;
         }
         .req-section__count {
-          background: #e2e8f0;
-          color: #64748b;
+          background: #374151;
+          color: #9ca3af;
           font-size: 11px;
           padding: 2px 8px;
           border-radius: 10px;
         }
         .req-section__badge {
-          background: #fef3c7;
-          color: #d97706;
+          background: #422006;
+          color: #fbbf24;
           font-size: 10px;
           padding: 2px 6px;
           border-radius: 4px;
@@ -426,15 +426,15 @@ export function RequirementsPanel({
         .req-input {
           width: 100%;
           padding: 10px 12px;
-          border: 1px solid #e2e8f0;
+          border: 1px solid #374151;
           border-radius: 6px;
           font-size: 13px;
           margin-bottom: 8px;
         }
         .req-input:focus {
           outline: none;
-          border-color: #667eea;
-          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+          border-color: #818cf8;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
         }
         .req-input--title {
           font-size: 15px;
@@ -448,7 +448,7 @@ export function RequirementsPanel({
         .req-textarea {
           width: 100%;
           padding: 10px 12px;
-          border: 1px solid #e2e8f0;
+          border: 1px solid #374151;
           border-radius: 6px;
           font-size: 13px;
           font-family: inherit;
@@ -457,8 +457,8 @@ export function RequirementsPanel({
         }
         .req-textarea:focus {
           outline: none;
-          border-color: #667eea;
-          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+          border-color: #818cf8;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
         }
         .req-textarea--tasks {
           font-family: monospace;
@@ -479,11 +479,11 @@ export function RequirementsPanel({
           font-size: 13px;
           font-weight: 500;
           cursor: pointer;
-          background: #e2e8f0;
-          color: #475569;
+          background: #374151;
+          color: #d1d5db;
         }
         .req-btn:hover:not(:disabled) {
-          background: #cbd5e1;
+          background: #4b5563;
         }
         .req-btn:disabled {
           opacity: 0.5;
@@ -494,27 +494,27 @@ export function RequirementsPanel({
           color: white;
         }
         .req-btn--primary:hover:not(:disabled) {
-          background: #5a67d8;
+          background: #4f46e5;
         }
         .req-btn--secondary {
           background: #10b981;
           color: white;
         }
         .req-btn--secondary:hover:not(:disabled) {
-          background: #059669;
+          background: #047857;
         }
 
         .req-empty {
           text-align: center;
           padding: 20px;
-          color: #94a3b8;
+          color: #6b7280;
           font-size: 13px;
         }
 
         .req-hint {
           margin: 12px 0 0 0;
           font-size: 11px;
-          color: #94a3b8;
+          color: #6b7280;
         }
 
         .req-links {
@@ -527,14 +527,14 @@ export function RequirementsPanel({
           align-items: center;
           gap: 8px;
           padding: 8px 0;
-          border-bottom: 1px solid #f1f5f9;
+          border-bottom: 1px solid #374151;
         }
         .req-link:last-child {
           border-bottom: none;
         }
         .req-link a {
           flex: 1;
-          color: #667eea;
+          color: #818cf8;
           text-decoration: none;
           font-size: 13px;
         }
@@ -544,13 +544,13 @@ export function RequirementsPanel({
         .req-link__delete {
           background: none;
           border: none;
-          color: #94a3b8;
+          color: #6b7280;
           cursor: pointer;
           font-size: 14px;
           padding: 4px;
         }
         .req-link__delete:hover {
-          color: #ef4444;
+          color: #f87171;
         }
 
         .req-link-form {
@@ -570,7 +570,7 @@ export function RequirementsPanel({
         }
         .req-note {
           padding: 12px;
-          background: #f8fafc;
+          background: #0f172a;
           border-radius: 6px;
           font-size: 13px;
         }
@@ -586,7 +586,7 @@ export function RequirementsPanel({
         .req-note__delete {
           margin-top: 8px;
           font-size: 11px;
-          color: #ef4444;
+          color: #f87171;
           background: none;
           border: none;
           cursor: pointer;

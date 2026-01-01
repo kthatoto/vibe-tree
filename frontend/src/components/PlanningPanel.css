@@ -2,7 +2,8 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #1a1a2e;
+  background: #1f2937;
+  border: 1px solid #374151;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -12,14 +13,14 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #888;
+  color: #9ca3af;
 }
 
 .planning-panel__spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid #333;
-  border-top-color: #646cff;
+  border: 2px solid #374151;
+  border-top-color: #3b82f6;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -33,20 +34,20 @@
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: #16162a;
-  border-bottom: 1px solid #333;
+  background: #111827;
+  border-bottom: 1px solid #374151;
 }
 
 .planning-panel__header h3 {
   margin: 0;
   font-size: 16px;
-  color: #fff;
+  color: #e5e7eb;
   flex: 1;
 }
 
 .planning-panel__new-btn {
   padding: 6px 12px;
-  background: #646cff;
+  background: #3b82f6;
   color: #fff;
   border: none;
   border-radius: 4px;
@@ -55,59 +56,59 @@
 }
 
 .planning-panel__new-btn:hover {
-  background: #5558dd;
+  background: #2563eb;
 }
 
 .planning-panel__back-btn {
   padding: 4px 8px;
   background: transparent;
-  color: #888;
-  border: 1px solid #333;
+  color: #9ca3af;
+  border: 1px solid #374151;
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
 }
 
 .planning-panel__back-btn:hover {
-  color: #fff;
-  border-color: #555;
+  color: #e5e7eb;
+  border-color: #4b5563;
 }
 
 .planning-panel__title-input {
   flex: 1;
   padding: 6px 10px;
-  background: #0d0d1a;
-  color: #fff;
-  border: 1px solid #333;
+  background: #0f172a;
+  color: #e5e7eb;
+  border: 1px solid #374151;
   border-radius: 4px;
   font-size: 14px;
 }
 
 .planning-panel__title-input:focus {
   outline: none;
-  border-color: #646cff;
+  border-color: #3b82f6;
 }
 
 .planning-panel__branch-select {
   padding: 6px 10px;
-  background: #0d0d1a;
-  color: #fff;
-  border: 1px solid #333;
+  background: #0f172a;
+  color: #e5e7eb;
+  border: 1px solid #374151;
   border-radius: 4px;
   font-size: 13px;
 }
 
 .planning-panel__error {
   padding: 8px 16px;
-  background: #3a1a1a;
-  color: #ff6b6b;
+  background: #7f1d1d;
+  color: #f87171;
   font-size: 13px;
 }
 
 .planning-panel__new-form {
   padding: 16px;
-  background: #0d0d1a;
-  border-bottom: 1px solid #333;
+  background: #0f172a;
+  border-bottom: 1px solid #374151;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -116,9 +117,9 @@
 .planning-panel__input,
 .planning-panel__select {
   padding: 8px 12px;
-  background: #1a1a2e;
-  color: #fff;
-  border: 1px solid #333;
+  background: #1f2937;
+  color: #e5e7eb;
+  border: 1px solid #374151;
   border-radius: 4px;
   font-size: 14px;
 }
@@ -126,7 +127,7 @@
 .planning-panel__input:focus,
 .planning-panel__select:focus {
   outline: none;
-  border-color: #646cff;
+  border-color: #3b82f6;
 }
 
 .planning-panel__form-actions {
@@ -143,17 +144,17 @@
 }
 
 .planning-panel__form-actions button:first-child {
-  background: #646cff;
+  background: #3b82f6;
   color: #fff;
 }
 
 .planning-panel__form-actions button:first-child:hover {
-  background: #5558dd;
+  background: #2563eb;
 }
 
 .planning-panel__form-actions button:last-child {
-  background: #333;
-  color: #888;
+  background: #374151;
+  color: #9ca3af;
 }
 
 .planning-panel__list {
@@ -165,38 +166,38 @@
 .planning-panel__empty {
   padding: 32px 16px;
   text-align: center;
-  color: #666;
+  color: #6b7280;
   font-size: 14px;
 }
 
 .planning-panel__session-item {
   padding: 12px;
   margin-bottom: 8px;
-  background: #0d0d1a;
-  border: 1px solid #333;
+  background: #0f172a;
+  border: 1px solid #374151;
   border-radius: 6px;
   cursor: pointer;
   transition: border-color 0.2s;
 }
 
 .planning-panel__session-item:hover {
-  border-color: #646cff;
+  border-color: #3b82f6;
 }
 
 .planning-panel__session-item--confirmed {
-  border-color: #4caf50;
+  border-color: #22c55e;
   opacity: 0.8;
 }
 
 .planning-panel__session-item--discarded {
-  border-color: #666;
+  border-color: #6b7280;
   opacity: 0.5;
 }
 
 .planning-panel__session-title {
   font-size: 14px;
   font-weight: 500;
-  color: #fff;
+  color: #e5e7eb;
   margin-bottom: 6px;
 }
 
@@ -204,11 +205,11 @@
   display: flex;
   gap: 12px;
   font-size: 12px;
-  color: #888;
+  color: #9ca3af;
 }
 
 .planning-panel__session-base {
-  color: #9775fa;
+  color: #a78bfa;
 }
 
 .planning-panel__session-status {
@@ -216,22 +217,22 @@
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 3px;
-  background: #333;
+  background: #374151;
 }
 
 .planning-panel__session-status--draft {
-  background: #333;
-  color: #fff;
+  background: #374151;
+  color: #e5e7eb;
 }
 
 .planning-panel__session-status--confirmed {
-  background: #1e3a1e;
-  color: #4caf50;
+  background: #14532d;
+  color: #4ade80;
 }
 
 .planning-panel__session-status--discarded {
-  background: #2a2a2a;
-  color: #666;
+  background: #374151;
+  color: #6b7280;
 }
 
 /* Detail view */
@@ -252,7 +253,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #333;
+  border-right: 1px solid #374151;
 }
 
 .planning-panel__sidebar {
@@ -269,7 +270,7 @@
 }
 
 .planning-panel__links {
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid #374151;
   max-height: 200px;
 }
 
@@ -282,7 +283,7 @@
   margin: 0 0 12px 0;
   font-size: 13px;
   font-weight: 500;
-  color: #888;
+  color: #9ca3af;
   text-transform: uppercase;
 }
 
@@ -292,7 +293,7 @@
   gap: 8px;
   margin-bottom: 8px;
   padding: 6px 8px;
-  background: #0d0d1a;
+  background: #0f172a;
   border-radius: 4px;
   font-size: 13px;
 }
@@ -303,16 +304,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #333;
+  background: #374151;
   border-radius: 4px;
   font-size: 10px;
   font-weight: bold;
-  color: #888;
+  color: #9ca3af;
 }
 
 .planning-panel__link-item a {
   flex: 1;
-  color: #9775fa;
+  color: #a78bfa;
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -320,14 +321,14 @@
 }
 
 .planning-panel__link-item a:hover {
-  color: #b794f6;
+  color: #c4b5fd;
 }
 
 .planning-panel__link-remove,
 .planning-panel__task-remove {
   padding: 2px 6px;
   background: transparent;
-  color: #666;
+  color: #6b7280;
   border: none;
   cursor: pointer;
   font-size: 12px;
@@ -335,7 +336,7 @@
 
 .planning-panel__link-remove:hover,
 .planning-panel__task-remove:hover {
-  color: #ff6b6b;
+  color: #f87171;
 }
 
 .planning-panel__link-add {
@@ -347,49 +348,49 @@
 .planning-panel__link-add input {
   flex: 1;
   padding: 6px 8px;
-  background: #0d0d1a;
-  color: #fff;
-  border: 1px solid #333;
+  background: #0f172a;
+  color: #e5e7eb;
+  border: 1px solid #374151;
   border-radius: 4px;
   font-size: 12px;
 }
 
 .planning-panel__link-add input:focus {
   outline: none;
-  border-color: #646cff;
+  border-color: #3b82f6;
 }
 
 .planning-panel__link-add button {
   padding: 6px 10px;
-  background: #333;
-  color: #fff;
+  background: #374151;
+  color: #e5e7eb;
   border: none;
   border-radius: 4px;
   cursor: pointer;
 }
 
 .planning-panel__link-add button:hover {
-  background: #444;
+  background: #4b5563;
 }
 
 .planning-panel__task-item {
   position: relative;
   padding: 10px;
   margin-bottom: 8px;
-  background: #0d0d1a;
-  border: 1px solid #333;
+  background: #0f172a;
+  border: 1px solid #374151;
   border-radius: 6px;
 }
 
 .planning-panel__task-title {
   font-size: 13px;
-  color: #fff;
+  color: #e5e7eb;
   margin-bottom: 4px;
 }
 
 .planning-panel__task-desc {
   font-size: 12px;
-  color: #888;
+  color: #9ca3af;
 }
 
 .planning-panel__task-item .planning-panel__task-remove {
@@ -401,7 +402,7 @@
 .planning-panel__tasks-empty {
   padding: 16px;
   text-align: center;
-  color: #666;
+  color: #6b7280;
   font-size: 13px;
 }
 
@@ -409,14 +410,14 @@
   display: flex;
   gap: 12px;
   padding: 16px;
-  background: #16162a;
-  border-top: 1px solid #333;
+  background: #111827;
+  border-top: 1px solid #374151;
 }
 
 .planning-panel__confirm-btn {
   flex: 1;
   padding: 12px 20px;
-  background: #4caf50;
+  background: #22c55e;
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -426,28 +427,28 @@
 }
 
 .planning-panel__confirm-btn:hover:not(:disabled) {
-  background: #43a047;
+  background: #16a34a;
 }
 
 .planning-panel__confirm-btn:disabled {
-  background: #2a3a2a;
-  color: #666;
+  background: #14532d;
+  color: #6b7280;
   cursor: not-allowed;
 }
 
 .planning-panel__discard-btn {
   padding: 12px 20px;
   background: transparent;
-  color: #888;
-  border: 1px solid #333;
+  color: #9ca3af;
+  border: 1px solid #374151;
   border-radius: 6px;
   font-size: 14px;
   cursor: pointer;
 }
 
 .planning-panel__discard-btn:hover:not(:disabled) {
-  color: #ff6b6b;
-  border-color: #ff6b6b;
+  color: #f87171;
+  border-color: #f87171;
 }
 
 .planning-panel__status-banner {
@@ -457,13 +458,13 @@
 }
 
 .planning-panel__status-banner--confirmed {
-  background: #1e3a1e;
-  color: #4caf50;
+  background: #14532d;
+  color: #4ade80;
 }
 
 .planning-panel__status-banner--discarded {
-  background: #2a2a2a;
-  color: #888;
+  background: #374151;
+  color: #9ca3af;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -473,14 +474,14 @@
 .planning-panel__delete-btn {
   padding: 4px 10px;
   background: transparent;
-  color: #ff6b6b;
-  border: 1px solid #ff6b6b;
+  color: #f87171;
+  border: 1px solid #f87171;
   border-radius: 4px;
   font-size: 12px;
   cursor: pointer;
 }
 
 .planning-panel__delete-btn:hover {
-  background: #ff6b6b;
+  background: #f87171;
   color: #fff;
 }

@@ -86,17 +86,18 @@ export default function SettingsPage() {
   };
 
   return (
-    <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto" }}>
-      <h1>Project Settings</h1>
+    <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto", minHeight: "100vh", background: "#0f172a" }}>
+      <h1 style={{ color: "#e5e7eb" }}>Project Settings</h1>
 
       <div style={{ marginBottom: "20px" }}>
-        <Link to="/">← Back to Dashboard</Link>
+        <Link to="/" style={{ color: "#60a5fa" }}>← Back to Dashboard</Link>
       </div>
 
       {error && (
         <div
           style={{
-            background: "#fee",
+            background: "#7f1d1d",
+            color: "#f87171",
             padding: "10px",
             marginBottom: "20px",
             borderRadius: "4px",
@@ -109,7 +110,8 @@ export default function SettingsPage() {
       {saved && (
         <div
           style={{
-            background: "#efe",
+            background: "#14532d",
+            color: "#4ade80",
             padding: "10px",
             marginBottom: "20px",
             borderRadius: "4px",
@@ -124,15 +126,16 @@ export default function SettingsPage() {
         style={{
           marginBottom: "20px",
           padding: "15px",
-          background: "#f5f5f5",
+          background: "#1f2937",
           borderRadius: "8px",
+          border: "1px solid #374151",
         }}
       >
-        <h3>Select Repository</h3>
+        <h3 style={{ color: "#e5e7eb" }}>Select Repository</h3>
         <select
           value={selectedRepoId || ""}
           onChange={(e) => setSelectedRepoId(e.target.value || null)}
-          style={{ padding: "8px", minWidth: "300px" }}
+          style={{ padding: "8px", minWidth: "300px", background: "#111827", color: "#e5e7eb", border: "1px solid #374151", borderRadius: "4px" }}
         >
           <option value="">-- Select a repo --</option>
           {repos.map((r) => (
@@ -147,15 +150,15 @@ export default function SettingsPage() {
         <div
           style={{
             padding: "20px",
-            background: "#fff",
-            border: "1px solid #ddd",
+            background: "#1f2937",
+            border: "1px solid #374151",
             borderRadius: "8px",
           }}
         >
-          <h3>Branch Naming Rule</h3>
+          <h3 style={{ color: "#e5e7eb" }}>Branch Naming Rule</h3>
 
           <div style={{ marginBottom: "15px" }}>
-            <label>
+            <label style={{ color: "#e5e7eb" }}>
               <strong>Pattern:</strong>
             </label>
             <input
@@ -168,15 +171,19 @@ export default function SettingsPage() {
                 padding: "8px",
                 marginTop: "5px",
                 fontFamily: "monospace",
+                background: "#111827",
+                color: "#e5e7eb",
+                border: "1px solid #374151",
+                borderRadius: "4px",
               }}
             />
-            <small style={{ color: "#666" }}>
+            <small style={{ color: "#9ca3af" }}>
               Use {"{planId}"} and {"{taskSlug}"} as placeholders
             </small>
           </div>
 
           <div style={{ marginBottom: "15px" }}>
-            <label>
+            <label style={{ color: "#e5e7eb" }}>
               <strong>Description:</strong>
             </label>
             <textarea
@@ -188,12 +195,16 @@ export default function SettingsPage() {
                 padding: "8px",
                 marginTop: "5px",
                 minHeight: "60px",
+                background: "#111827",
+                color: "#e5e7eb",
+                border: "1px solid #374151",
+                borderRadius: "4px",
               }}
             />
           </div>
 
           <div style={{ marginBottom: "15px" }}>
-            <label>
+            <label style={{ color: "#e5e7eb" }}>
               <strong>Examples:</strong>
             </label>
             <div style={{ marginTop: "5px" }}>
@@ -202,11 +213,12 @@ export default function SettingsPage() {
                   key={i}
                   style={{
                     display: "inline-block",
-                    background: "#e8f4f8",
+                    background: "#374151",
                     padding: "4px 8px",
                     marginRight: "8px",
                     marginBottom: "8px",
                     borderRadius: "4px",
+                    color: "#e5e7eb",
                   }}
                 >
                   <code>{ex}</code>
@@ -217,7 +229,7 @@ export default function SettingsPage() {
                       background: "none",
                       border: "none",
                       cursor: "pointer",
-                      color: "#999",
+                      color: "#9ca3af",
                     }}
                   >
                     ×
@@ -231,10 +243,10 @@ export default function SettingsPage() {
                 value={newExample}
                 onChange={(e) => setNewExample(e.target.value)}
                 placeholder="Add example..."
-                style={{ padding: "6px", marginRight: "8px" }}
+                style={{ padding: "6px", marginRight: "8px", background: "#111827", color: "#e5e7eb", border: "1px solid #374151", borderRadius: "4px" }}
                 onKeyDown={(e) => e.key === "Enter" && handleAddExample()}
               />
-              <button onClick={handleAddExample}>Add</button>
+              <button onClick={handleAddExample} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "4px", padding: "6px 12px", cursor: "pointer" }}>Add</button>
             </div>
           </div>
 
@@ -243,11 +255,12 @@ export default function SettingsPage() {
             style={{
               marginBottom: "20px",
               padding: "15px",
-              background: "#f9f9f9",
+              background: "#111827",
               borderRadius: "4px",
+              border: "1px solid #374151",
             }}
           >
-            <label>
+            <label style={{ color: "#e5e7eb" }}>
               <strong>Preview:</strong>
             </label>
             <div style={{ marginTop: "10px", display: "flex", gap: "10px" }}>
@@ -256,22 +269,23 @@ export default function SettingsPage() {
                 value={previewPlanId}
                 onChange={(e) => setPreviewPlanId(e.target.value)}
                 placeholder="planId"
-                style={{ width: "80px", padding: "6px" }}
+                style={{ width: "80px", padding: "6px", background: "#1f2937", color: "#e5e7eb", border: "1px solid #374151", borderRadius: "4px" }}
               />
               <input
                 type="text"
                 value={previewSlug}
                 onChange={(e) => setPreviewSlug(e.target.value)}
                 placeholder="taskSlug"
-                style={{ width: "150px", padding: "6px" }}
+                style={{ width: "150px", padding: "6px", background: "#1f2937", color: "#e5e7eb", border: "1px solid #374151", borderRadius: "4px" }}
               />
               <code
                 style={{
                   flex: 1,
                   padding: "6px 10px",
-                  background: "#fff",
-                  border: "1px solid #ddd",
+                  background: "#1f2937",
+                  border: "1px solid #374151",
                   borderRadius: "4px",
+                  color: "#e5e7eb",
                 }}
               >
                 {generatePreview()}
@@ -284,7 +298,7 @@ export default function SettingsPage() {
             disabled={loading}
             style={{
               padding: "10px 20px",
-              background: "#4CAF50",
+              background: "#22c55e",
               color: "white",
               border: "none",
               borderRadius: "4px",

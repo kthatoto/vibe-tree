@@ -560,3 +560,31 @@
   flex-shrink: 0;
   user-select: none;
 }
+
+/* Default Branch View */
+.task-detail-panel__default-branch {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: #9ca3af;
+}
+
+.task-detail-panel__default-branch-badge {
+  padding: 6px 12px;
+  background: #374151;
+  color: #9ca3af;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.task-detail-panel__default-branch p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}

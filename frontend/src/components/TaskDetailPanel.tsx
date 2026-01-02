@@ -13,6 +13,7 @@ interface TaskDetailPanelProps {
   localPath: string;
   branchName: string;
   node: TreeNode | null;
+  defaultBranch?: string;
   onClose: () => void;
   onWorktreeCreated?: () => void;
 }
@@ -22,9 +23,11 @@ export function TaskDetailPanel({
   localPath,
   branchName,
   node,
+  defaultBranch,
   onClose,
   onWorktreeCreated,
 }: TaskDetailPanelProps) {
+  const isDefaultBranch = branchName === defaultBranch;
   const [instruction, setInstruction] = useState<TaskInstruction | null>(null);
   const [editingInstruction, setEditingInstruction] = useState(false);
   const [instructionDraft, setInstructionDraft] = useState("");
@@ -231,7 +234,7 @@ export function TaskDetailPanel({
     }
   }, [chatSessionId, chatInput, chatLoading, instruction, chatMode]);
 
-  if (loading) {
+  if (loading && !isDefaultBranch) {
     return (
       <div className="task-detail-panel">
         <div className="task-detail-panel__header">
@@ -239,6 +242,22 @@ export function TaskDetailPanel({
           <button onClick={onClose} className="task-detail-panel__close">x</button>
         </div>
         <div className="task-detail-panel__loading">Loading...</div>
+      </div>
+    );
+  }
+
+  // Default branch: show simplified view without Planning/Execution
+  if (isDefaultBranch) {
+    return (
+      <div className="task-detail-panel">
+        <div className="task-detail-panel__header">
+          <h3>{branchName}</h3>
+          <button onClick={onClose} className="task-detail-panel__close">x</button>
+        </div>
+        <div className="task-detail-panel__default-branch">
+          <span className="task-detail-panel__default-branch-badge">Default Branch</span>
+          <p>This is the default branch. Task planning and execution are not available here.</p>
+        </div>
       </div>
     );
   }

@@ -861,6 +861,7 @@ export default function TreeDashboard() {
                   localPath={selectedPin.localPath}
                   branchName={selectedNode.branchName}
                   node={selectedNode}
+                  defaultBranch={snapshot.defaultBranch}
                   onClose={() => setSelectedNode(null)}
                   onWorktreeCreated={() => handleScan(selectedPin.localPath)}
                 />

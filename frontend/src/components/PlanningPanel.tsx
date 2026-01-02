@@ -332,7 +332,7 @@ export function PlanningPanel({
         newBaseBranch.trim(),
         newTitle.trim() || undefined
       );
-      setSessions((prev) => [session, ...prev]);
+      // State will be updated via WebSocket planning.created event
       setSelectedSession(session);
       onSessionSelect?.(session);
       setShowNewForm(false);

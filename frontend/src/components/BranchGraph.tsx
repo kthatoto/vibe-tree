@@ -31,11 +31,11 @@ interface LayoutEdge {
   isTentative?: boolean;
 }
 
-const NODE_WIDTH = 320;
-const NODE_HEIGHT = 32;
-const TENTATIVE_NODE_HEIGHT = 48;
-const HORIZONTAL_GAP = 48;
-const VERTICAL_GAP = 20;
+const NODE_WIDTH = 180;
+const NODE_HEIGHT = 40;
+const TENTATIVE_NODE_HEIGHT = 52;
+const HORIZONTAL_GAP = 32;
+const VERTICAL_GAP = 16;
 const PADDING = 20;
 
 // Badge colors
@@ -394,14 +394,16 @@ export default function BranchGraph({
           >
             <div
               style={{
-                fontSize: isTentative ? 11 : 12,
+                fontSize: isTentative ? 10 : 11,
                 fontFamily: isTentative ? "sans-serif" : "monospace",
                 fontWeight: isDefault ? "bold" : isTentative ? 500 : "normal",
                 color: isTentative ? "#c084fc" : "#e5e7eb",
-                lineHeight: 1.2,
+                lineHeight: 1.3,
                 overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: isTentative ? "normal" : "nowrap",
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical" as const,
+                wordBreak: "break-all",
               }}
             >
               {displayText}
@@ -409,7 +411,7 @@ export default function BranchGraph({
             {branchNameDisplay && (
               <div
                 style={{
-                  fontSize: 11,
+                  fontSize: 9,
                   fontFamily: "monospace",
                   color: "#9ca3af",
                   marginTop: 2,

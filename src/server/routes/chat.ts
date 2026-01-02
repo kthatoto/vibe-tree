@@ -646,41 +646,14 @@ async function buildPrompt(
   if (isPlanningSession) {
     // Add branch naming rules FIRST for planning sessions (most important)
     if (branchNaming && branchNaming.pattern) {
-      // Generate example from pattern by replacing placeholders
-      const exampleBranch = branchNaming.pattern
-        .replace("{issueId}", "123")
-        .replace("{taskSlug}", "add-login")
-        .replace("{type}", "feat")
-        .replace("{scope}", "auth")
-        .replace("{description}", "add-login")
-        .replace("{username}", "user");
+      parts.push(`# ブランチ命名規則【厳守】
 
-      parts.push(`# ブランチ命名規則【最重要・厳守】
+ブランチ名は以下のパターンに従ってください:
 
-## ブランチ名のパターン
-\`${branchNaming.pattern}\`
+${branchNaming.pattern}
 
-## 生成ルール
-1. "feat_" で始める（アンダースコア）
-2. 次にIssue番号（例: 001, 002）
-3. アンダースコア "_" で区切る
-4. 最後にタスク内容をケバブケースで
-
-## 正しいブランチ名の例
-- feat_001_add-github-actions
-- feat_002_setup-ruby-check
-- feat_003_implement-echo-test
-
-## 絶対に使ってはいけない形式
-- ❌ 001/add-xxx （スラッシュ禁止）
-- ❌ feature/xxx （feature/禁止）
-- ❌ feat/xxx （スラッシュ禁止）
-- ❌ add-xxx （feat_が必要）
-
-## 重要
-- スラッシュ "/" は使わない
-- 区切りは全てアンダースコア "_" またはハイフン "-"
-- 必ず "feat_" から始める
+{} で囲まれた部分をタスクに応じて置換してください。
+${branchNaming.examples?.length ? `\n例: ${branchNaming.examples.join(", ")}` : ""}
 `);
     }
 

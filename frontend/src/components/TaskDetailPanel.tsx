@@ -614,9 +614,9 @@ export function TaskDetailPanel({
           if (!pr) {
             return <div className="task-detail-panel__no-links">No PR linked</div>;
           }
-          const labels = pr.labels ? JSON.parse(pr.labels) as string[] : [];
-          const reviewers = pr.reviewers ? JSON.parse(pr.reviewers) as string[] : [];
-          const checks: GitHubCheck[] = pr.checks ? JSON.parse(pr.checks) : [];
+          const labels = pr.labels ? ((): string[] => { try { return JSON.parse(pr.labels!) } catch { return [] } })() : [];
+          const reviewers = pr.reviewers ? ((): string[] => { try { return JSON.parse(pr.reviewers!) } catch { return [] } })() : [];
+          const checks: GitHubCheck[] = pr.checks ? ((): GitHubCheck[] => { try { return JSON.parse(pr.checks!) } catch { return [] } })() : [];
           const passedChecks = checks.filter((c) => c.conclusion === "SUCCESS").length;
           const totalChecks = checks.length;
           return (
@@ -885,7 +885,7 @@ export function TaskDetailPanel({
       {/* CI Details Modal */}
       {showCIModal && (() => {
         const pr = branchLinks.find((l) => l.linkType === "pr");
-        const checks: GitHubCheck[] = pr?.checks ? JSON.parse(pr.checks) : [];
+        const checks: GitHubCheck[] = pr?.checks ? ((): GitHubCheck[] => { try { return JSON.parse(pr.checks!) } catch { return [] } })() : [];
         return (
           <div className="task-detail-panel__modal-overlay" onClick={() => setShowCIModal(false)}>
             <div className="task-detail-panel__modal task-detail-panel__modal--ci" onClick={(e) => e.stopPropagation()}>

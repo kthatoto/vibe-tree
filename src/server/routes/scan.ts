@@ -131,6 +131,93 @@ scanRouter.post("/", async (c) => {
     edges.push(...filteredEdges);
   }
 
+  // 8.5. Merge confirmed planning session edges
+  const confirmedSessions = await db
+    .select()
+    .from(schema.planningSessions)
+    .where(
+      and(
+        eq(schema.planningSessions.repoId, repoId),
+        eq(schema.planningSessions.status, "confirmed")
+      )
+    );
+
+  for (const session of confirmedSessions) {
+    const sessionNodes = JSON.parse(session.nodesJson) as Array<{
+      id: string;
+      title: string;
+      branchName?: string;
+    }>;
+    const sessionEdges = JSON.parse(session.edgesJson) as Array<{
+      parent: string;
+      child: string;
+    }>;
+
+    // Build taskId -> branchName map
+    const taskToBranch = new Map<string, string>();
+    for (const node of sessionNodes) {
+      if (node.branchName) {
+        taskToBranch.set(node.id, node.branchName);
+      }
+    }
+
+    // Convert task edges to branch edges
+    for (const edge of sessionEdges) {
+      const parentBranch = taskToBranch.get(edge.parent);
+      const childBranch = taskToBranch.get(edge.child);
+
+      if (parentBranch && childBranch) {
+        // Check if this child already has an edge
+        const existingIndex = edges.findIndex((e) => e.child === childBranch);
+        if (existingIndex >= 0) {
+          // Replace with planning session edge (higher priority)
+          edges[existingIndex] = {
+            parent: parentBranch,
+            child: childBranch,
+            confidence: "high" as const,
+            isDesigned: true,
+          };
+        } else {
+          // Add new edge
+          edges.push({
+            parent: parentBranch,
+            child: childBranch,
+            confidence: "high" as const,
+            isDesigned: true,
+          });
+        }
+      } else if (childBranch && !parentBranch) {
+        // Child has branch but parent doesn't - connect to base branch
+        const existingIndex = edges.findIndex((e) => e.child === childBranch);
+        if (existingIndex < 0) {
+          edges.push({
+            parent: session.baseBranch,
+            child: childBranch,
+            confidence: "high" as const,
+            isDesigned: true,
+          });
+        }
+      }
+    }
+
+    // Also add edges for root tasks (tasks without parent edge) to base branch
+    const childTaskIds = new Set(sessionEdges.map((e) => e.child));
+    for (const node of sessionNodes) {
+      if (node.branchName && !childTaskIds.has(node.id)) {
+        // This is a root task - connect to base branch if not already connected
+        const existingIndex = edges.findIndex((e) => e.child === node.branchName);
+        if (existingIndex < 0) {
+          edges.push({
+            parent: session.baseBranch,
+            child: node.branchName,
+            confidence: "high" as const,
+            isDesigned: true,
+          });
+        }
+      }
+    }
+  }
+
   // 9. Calculate warnings (including tree divergence)
   const warnings = calculateWarnings(nodes, edges, branchNaming, defaultBranch, treeSpec);
 

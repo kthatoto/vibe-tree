@@ -269,3 +269,130 @@ branchRouter.post("/create-tree", async (c) => {
     },
   });
 });
+
+// POST /api/branch/create-worktree - Create worktree for an existing branch
+branchRouter.post("/create-worktree", async (c) => {
+  const body = await c.req.json();
+  const { localPath: rawLocalPath, branchName } = body;
+
+  if (!rawLocalPath || !branchName) {
+    throw new BadRequestError("localPath and branchName are required");
+  }
+
+  const localPath = expandTilde(rawLocalPath);
+
+  // Verify local path exists
+  if (!existsSync(localPath)) {
+    throw new BadRequestError(`Local path does not exist: ${localPath}`);
+  }
+
+  // Check if branch exists
+  try {
+    const existingBranches = execSync(
+      `cd "${localPath}" && git branch --list "${branchName}"`,
+      { encoding: "utf-8" }
+    ).trim();
+    if (!existingBranches) {
+      throw new BadRequestError(`Branch does not exist: ${branchName}`);
+    }
+  } catch (err) {
+    if (err instanceof BadRequestError) throw err;
+    throw new BadRequestError(`Failed to check branch: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Create worktrees directory
+  const repoName = basename(localPath);
+  const parentDir = dirname(localPath);
+  const worktreesDir = join(parentDir, `${repoName}-worktrees`);
+  if (!existsSync(worktreesDir)) {
+    mkdirSync(worktreesDir, { recursive: true });
+  }
+
+  // Create worktree
+  const worktreeName = branchName.replace(/\//g, "-");
+  const worktreePath = join(worktreesDir, worktreeName);
+
+  if (existsSync(worktreePath)) {
+    // Worktree already exists
+    return c.json({
+      worktreePath,
+      branchName,
+      alreadyExists: true,
+    });
+  }
+
+  try {
+    execSync(
+      `cd "${localPath}" && git worktree add "${worktreePath}" "${branchName}"`,
+      { encoding: "utf-8" }
+    );
+  } catch (err) {
+    throw new BadRequestError(`Failed to create worktree: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  return c.json({
+    worktreePath,
+    branchName,
+    alreadyExists: false,
+  });
+});
+
+// POST /api/branch/checkout - Checkout to a branch
+branchRouter.post("/checkout", async (c) => {
+  const body = await c.req.json();
+  const { localPath: rawLocalPath, branchName } = body;
+
+  if (!rawLocalPath || !branchName) {
+    throw new BadRequestError("localPath and branchName are required");
+  }
+
+  const localPath = expandTilde(rawLocalPath);
+
+  // Verify local path exists
+  if (!existsSync(localPath)) {
+    throw new BadRequestError(`Local path does not exist: ${localPath}`);
+  }
+
+  // Check if branch exists
+  try {
+    const existingBranches = execSync(
+      `cd "${localPath}" && git branch --list "${branchName}"`,
+      { encoding: "utf-8" }
+    ).trim();
+    if (!existingBranches) {
+      throw new BadRequestError(`Branch does not exist: ${branchName}`);
+    }
+  } catch (err) {
+    if (err instanceof BadRequestError) throw err;
+    throw new BadRequestError(`Failed to check branch: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Check for uncommitted changes
+  try {
+    const status = execSync(
+      `cd "${localPath}" && git status --porcelain`,
+      { encoding: "utf-8" }
+    ).trim();
+    if (status) {
+      throw new BadRequestError("Cannot checkout: you have uncommitted changes. Please commit or stash them first.");
+    }
+  } catch (err) {
+    if (err instanceof BadRequestError) throw err;
+    throw new BadRequestError(`Failed to check git status: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Checkout
+  try {
+    execSync(
+      `cd "${localPath}" && git checkout "${branchName}"`,
+      { encoding: "utf-8" }
+    );
+  } catch (err) {
+    throw new BadRequestError(`Failed to checkout: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  return c.json({
+    success: true,
+    branchName,
+  });
+});

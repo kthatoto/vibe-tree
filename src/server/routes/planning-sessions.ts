@@ -6,6 +6,8 @@ import { z } from "zod";
 import { validateOrThrow } from "../../shared/validation";
 import { BadRequestError, NotFoundError } from "../middleware/error-handler";
 import { broadcast } from "../ws";
+import { execSync } from "child_process";
+import { existsSync } from "fs";
 
 export const planningSessionsRouter = new Hono();
 
@@ -241,15 +243,147 @@ planningSessionsRouter.post("/:id/confirm", async (c) => {
   }
 
   const nodes = JSON.parse(session.nodesJson) as TaskNode[];
+  const edges = JSON.parse(session.edgesJson) as TaskEdge[];
+
   if (nodes.length === 0) {
     throw new BadRequestError("No tasks to confirm");
   }
 
-  // Update status to confirmed
+  // Get local path from repo pins
+  const [repoPin] = await db
+    .select()
+    .from(schema.repoPins)
+    .where(eq(schema.repoPins.repoId, session.repoId))
+    .limit(1);
+
+  if (!repoPin) {
+    throw new BadRequestError("Repository not found in pins");
+  }
+
+  const localPath = repoPin.localPath;
+  if (!existsSync(localPath)) {
+    throw new BadRequestError(`Local path does not exist: ${localPath}`);
+  }
+
+  // Build parent mapping from edges
+  const parentMap = new Map<string, string>(); // taskId -> parentTaskId
+  for (const edge of edges) {
+    parentMap.set(edge.child, edge.parent);
+  }
+
   const now = new Date().toISOString();
+  const results: Array<{
+    taskId: string;
+    branchName: string;
+    parentBranch: string;
+    success: boolean;
+    error?: string;
+  }> = [];
+
+  // Process nodes in order (parents first)
+  const processed = new Set<string>();
+  const taskBranchMap = new Map<string, string>(); // taskId -> branchName
+
+  const processTask = async (taskId: string) => {
+    if (processed.has(taskId)) return;
+
+    const task = nodes.find((n) => n.id === taskId);
+    if (!task) return;
+
+    // Process parent first if exists
+    const parentTaskId = parentMap.get(taskId);
+    if (parentTaskId && !processed.has(parentTaskId)) {
+      await processTask(parentTaskId);
+    }
+
+    // Determine branch name
+    const branchName = task.branchName ||
+      `task/${task.title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").substring(0, 30)}`;
+
+    // Determine parent branch
+    let parentBranch = session.baseBranch;
+    if (parentTaskId) {
+      const parentBranchName = taskBranchMap.get(parentTaskId);
+      if (parentBranchName) {
+        parentBranch = parentBranchName;
+      }
+    }
+
+    const result: typeof results[number] = {
+      taskId: task.id,
+      branchName,
+      parentBranch,
+      success: false,
+    };
+
+    try {
+      // Check if branch already exists
+      const existingBranches = execSync(
+        `cd "${localPath}" && git branch --list "${branchName}"`,
+        { encoding: "utf-8" }
+      ).trim();
+
+      // Create branch if it doesn't exist
+      if (!existingBranches) {
+        execSync(
+          `cd "${localPath}" && git branch "${branchName}" "${parentBranch}"`,
+          { encoding: "utf-8" }
+        );
+      }
+
+      // Store task instruction for this branch
+      const instructionMd = [
+        `# ${task.title}`,
+        "",
+        task.description || "",
+        "",
+        "---",
+        `- Branch: \`${branchName}\``,
+        `- Parent: \`${parentBranch}\``,
+        `- Planning Session: ${session.title}`,
+      ].join("\n");
+
+      await db.insert(schema.taskInstructions).values({
+        repoId: session.repoId,
+        taskId: task.id,
+        branchName,
+        instructionMd,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      result.success = true;
+      taskBranchMap.set(taskId, branchName);
+    } catch (err) {
+      result.error = err instanceof Error ? err.message : String(err);
+      console.error(`Failed to create branch for task ${taskId}:`, result.error);
+    }
+
+    results.push(result);
+    processed.add(taskId);
+  };
+
+  // Process all tasks
+  for (const node of nodes) {
+    await processTask(node.id);
+  }
+
+  const successCount = results.filter((r) => r.success).length;
+
+  // Update nodes with branch names
+  const updatedNodes = nodes.map((node) => ({
+    ...node,
+    branchName: taskBranchMap.get(node.id) || node.branchName,
+  }));
+
+  // Update status to confirmed and save updated nodes with branch names
   await db
     .update(schema.planningSessions)
-    .set({ status: "confirmed", updatedAt: now })
+    .set({
+      status: "confirmed",
+      nodesJson: JSON.stringify(updatedNodes),
+      updatedAt: now,
+    })
     .where(eq(schema.planningSessions.id, id));
 
   const [updated] = await db
@@ -260,10 +394,28 @@ planningSessionsRouter.post("/:id/confirm", async (c) => {
   broadcast({
     type: "planning.confirmed",
     repoId: updated!.repoId,
-    data: toSession(updated!),
+    data: {
+      ...toSession(updated!),
+      branchResults: results,
+    },
   });
 
-  return c.json(toSession(updated!));
+  // Also broadcast to trigger branch refetch
+  broadcast({
+    type: "branches.changed",
+    repoId: updated!.repoId,
+    data: { reason: "planning_confirmed" },
+  });
+
+  return c.json({
+    ...toSession(updated!),
+    branchResults: results,
+    summary: {
+      total: nodes.length,
+      success: successCount,
+      failed: nodes.length - successCount,
+    },
+  });
 });
 
 // POST /api/planning-sessions/:id/discard - Discard planning session

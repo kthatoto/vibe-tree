@@ -648,12 +648,30 @@ async function buildPrompt(
     parts.push(`## Repository: ${session.repoId}\n`);
 
     // Add branch naming rules for planning sessions
-    if (branchNaming) {
+    if (branchNaming && branchNaming.pattern) {
+      // Generate example from pattern by replacing placeholders
+      const exampleBranch = branchNaming.pattern
+        .replace("{issueId}", "123")
+        .replace("{taskSlug}", "add-login")
+        .replace("{type}", "feat")
+        .replace("{scope}", "auth")
+        .replace("{description}", "add-login")
+        .replace("{username}", "user");
+
       parts.push(`## ブランチ命名規則【重要・必須】
 **タスク提案時のブランチ名は、必ず以下のパターンに従ってください。**
 
 パターン: \`${branchNaming.pattern}\`
-${branchNaming.examples?.length ? `\n参考例:\n${branchNaming.examples.map((e) => `- \`${e}\``).join("\n")}` : ""}
+
+プレースホルダの説明:
+- \`{issueId}\` → Issue番号（例: 123）
+- \`{taskSlug}\` → タスク名を英語・ケバブケースで（例: add-login-form）
+- \`{type}\` → feat, fix, docs, refactor など
+- \`{scope}\` → 機能領域（例: auth, api, ui）
+- \`{description}\` → 簡潔な説明
+
+生成例: \`${exampleBranch}\`
+${branchNaming.examples?.length ? `\n設定済みの例:\n${branchNaming.examples.map((e) => `- \`${e}\``).join("\n")}` : ""}
 ${branchNaming.description ? `\n説明: ${branchNaming.description}` : ""}
 
 **このパターンに従わないブランチ名は使用しないでください。**

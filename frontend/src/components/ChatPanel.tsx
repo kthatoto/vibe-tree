@@ -191,6 +191,8 @@ export function ChatPanel({ sessionId, onTaskSuggested, existingTaskLabels = [],
                 padding: 12,
                 background: msg.role === "user" ? "#3b82f6" : "#374151",
                 color: "#f3f4f6",
+                fontSize: 13,
+                lineHeight: 1.5,
               }}
             >
               {renderMessage(msg)}
@@ -205,6 +207,7 @@ export function ChatPanel({ sessionId, onTaskSuggested, existingTaskLabels = [],
               padding: 12,
               background: "#374151",
               color: "#9ca3af",
+              fontSize: 13,
               display: "flex",
               alignItems: "center",
               gap: 8,

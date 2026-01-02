@@ -251,12 +251,16 @@ export interface ChatSession {
 }
 
 export type ChatMessageRole = "user" | "assistant" | "system";
+export type ChatMode = "planning" | "execution";
+export type InstructionEditStatus = "committed" | "rejected";
 
 export interface ChatMessage {
   id: number;
   sessionId: string;
   role: ChatMessageRole;
   content: string;
+  chatMode?: ChatMode | null;
+  instructionEditStatus?: InstructionEditStatus | null;
   createdAt: string;
 }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { api, type TaskInstruction, type ChatMessage, type TreeNode } from "../lib/api";
+import { api, type TaskInstruction, type ChatMessage, type TreeNode, type InstructionEditStatus } from "../lib/api";
 import {
   extractInstructionEdit,
   removeInstructionEditTags,
@@ -39,7 +39,8 @@ export function TaskDetailPanel({
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatMode, setChatMode] = useState<"execution" | "planning">("planning");
-  const [committedEdits, setCommittedEdits] = useState<Set<number>>(new Set());
+  // Track instruction edit statuses (loaded from DB + local updates)
+  const [editStatuses, setEditStatuses] = useState<Map<number, InstructionEditStatus>>(new Map());
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Worktree state
@@ -97,11 +98,20 @@ export function TaskDetailPanel({
           setChatSessionId(existing.id);
           const msgs = await api.getChatMessages(existing.id);
           setMessages(msgs);
+          // Load edit statuses from messages
+          const statuses = new Map<number, InstructionEditStatus>();
+          for (const msg of msgs) {
+            if (msg.instructionEditStatus) {
+              statuses.set(msg.id, msg.instructionEditStatus);
+            }
+          }
+          setEditStatuses(statuses);
         } else {
           // Create new session using effectivePath (always available)
           const newSession = await api.createChatSession(repoId, effectivePath);
           setChatSessionId(newSession.id);
           setMessages([]);
+          setEditStatuses(new Map());
         }
       } catch (err) {
         console.error("Failed to init chat:", err);
@@ -193,9 +203,22 @@ export function TaskDetailPanel({
 
   const handleCommitInstructionEdit = async (messageId: number, newContent: string) => {
     try {
+      // Update the task instruction
       const updated = await api.updateTaskInstruction(repoId, branchName, newContent);
       setInstruction(updated);
-      setCommittedEdits((prev) => new Set(prev).add(messageId));
+      // Save the commit status to DB
+      await api.updateInstructionEditStatus(messageId, "committed");
+      setEditStatuses((prev) => new Map(prev).set(messageId, "committed"));
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleRejectInstructionEdit = async (messageId: number) => {
+    try {
+      // Save the reject status to DB
+      await api.updateInstructionEditStatus(messageId, "rejected");
+      setEditStatuses((prev) => new Map(prev).set(messageId, "rejected"));
     } catch (err) {
       setError((err as Error).message);
     }
@@ -214,6 +237,7 @@ export function TaskDetailPanel({
       sessionId: chatSessionId,
       role: "user",
       content: userMessage,
+      chatMode: chatMode,
       createdAt: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, tempUserMsg]);
@@ -223,7 +247,7 @@ export function TaskDetailPanel({
       const context = instruction?.instructionMd
         ? `[Task Instruction]\n${instruction.instructionMd}\n\n[Mode: ${chatMode}]`
         : `[Mode: ${chatMode}]`;
-      const { assistantMessage } = await api.sendChatMessage(chatSessionId, userMessage, context);
+      const { assistantMessage } = await api.sendChatMessage(chatSessionId, userMessage, context, chatMode);
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err) {
       setError((err as Error).message);
@@ -376,7 +400,8 @@ export function TaskDetailPanel({
             {messages.map((msg) => {
               const instructionEdit = msg.role === "assistant" ? extractInstructionEdit(msg.content) : null;
               const displayContent = instructionEdit ? removeInstructionEditTags(msg.content) : msg.content;
-              const isCommitted = committedEdits.has(msg.id);
+              const editStatus = editStatuses.get(msg.id);
+              const msgMode = msg.chatMode || chatMode; // Fallback to current mode if not saved
 
               return (
                 <div
@@ -384,23 +409,33 @@ export function TaskDetailPanel({
                   className={`task-detail-panel__message task-detail-panel__message--${msg.role}`}
                 >
                   <div className="task-detail-panel__message-role">
-                    {msg.role === "user" ? "USER" : "ASSISTANT"} - {chatMode === "planning" ? "Planning" : "Execution"}
+                    {msg.role === "user" ? "USER" : "ASSISTANT"} - {msgMode === "planning" ? "Planning" : "Execution"}
                   </div>
                   <div className="task-detail-panel__message-content">
                     {displayContent && <pre>{displayContent}</pre>}
                     {instructionEdit && (
-                      <div className="task-detail-panel__instruction-edit-proposal">
+                      <div className={`task-detail-panel__instruction-edit-proposal ${editStatus === "rejected" ? "task-detail-panel__instruction-edit-proposal--rejected" : ""}`}>
                         <div className="task-detail-panel__diff-header">
                           <span>Task Instruction の変更提案</span>
-                          {isCommitted ? (
+                          {editStatus === "committed" ? (
                             <span className="task-detail-panel__committed-badge">Committed</span>
+                          ) : editStatus === "rejected" ? (
+                            <span className="task-detail-panel__rejected-badge">Rejected</span>
                           ) : (
-                            <button
-                              className="task-detail-panel__commit-btn"
-                              onClick={() => handleCommitInstructionEdit(msg.id, instructionEdit.newContent)}
-                            >
-                              Commit
-                            </button>
+                            <div className="task-detail-panel__diff-actions">
+                              <button
+                                className="task-detail-panel__commit-btn"
+                                onClick={() => handleCommitInstructionEdit(msg.id, instructionEdit.newContent)}
+                              >
+                                Commit
+                              </button>
+                              <button
+                                className="task-detail-panel__reject-btn"
+                                onClick={() => handleRejectInstructionEdit(msg.id)}
+                              >
+                                Reject
+                              </button>
+                            </div>
                           )}
                         </div>
                         <div className="task-detail-panel__diff-content">

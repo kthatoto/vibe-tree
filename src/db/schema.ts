@@ -131,6 +131,8 @@ export const chatMessages = sqliteTable("chat_messages", {
     .references(() => chatSessions.id),
   role: text("role").notNull(), // 'user' | 'assistant' | 'system'
   content: text("content").notNull(),
+  chatMode: text("chat_mode"), // 'planning' | 'execution' | null
+  instructionEditStatus: text("instruction_edit_status"), // null | 'committed' | 'rejected'
   createdAt: text("created_at").notNull(),
 });
 

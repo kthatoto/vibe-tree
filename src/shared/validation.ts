@@ -185,10 +185,13 @@ export const archiveChatSessionSchema = z.object({
 
 export type ArchiveChatSessionInput = z.infer<typeof archiveChatSessionSchema>;
 
+export const chatModeSchema = z.enum(["planning", "execution"]);
+
 export const chatSendSchema = z.object({
   sessionId: z.string().uuid("Valid session ID is required"),
   userMessage: z.string().min(1, "Message is required"),
   context: z.string().optional(),
+  chatMode: chatModeSchema.optional(),
 });
 
 export type ChatSendInput = z.infer<typeof chatSendSchema>;

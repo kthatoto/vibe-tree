@@ -212,12 +212,16 @@ export interface ChatSession {
 }
 
 export type ChatMessageRole = "user" | "assistant" | "system";
+export type ChatMode = "planning" | "execution";
+export type InstructionEditStatus = "committed" | "rejected";
 
 export interface ChatMessage {
   id: number;
   sessionId: string;
   role: ChatMessageRole;
   content: string;
+  chatMode?: ChatMode | null;
+  instructionEditStatus?: InstructionEditStatus | null;
   createdAt: string;
 }
 
@@ -540,11 +544,19 @@ export const api = {
     }),
   getChatMessages: (sessionId: string) =>
     fetchJson<ChatMessage[]>(`${API_BASE}/chat/messages?sessionId=${encodeURIComponent(sessionId)}`),
-  sendChatMessage: (sessionId: string, userMessage: string, context?: string) =>
+  sendChatMessage: (sessionId: string, userMessage: string, context?: string, chatMode?: ChatMode) =>
     fetchJson<{ assistantMessage: ChatMessage }>(`${API_BASE}/chat/send`, {
       method: "POST",
-      body: JSON.stringify({ sessionId, userMessage, context }),
+      body: JSON.stringify({ sessionId, userMessage, context, chatMode }),
     }),
+  updateInstructionEditStatus: (messageId: number, status: InstructionEditStatus) =>
+    fetchJson<{ success: boolean; status: InstructionEditStatus }>(
+      `${API_BASE}/chat/messages/${messageId}/instruction-status`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }
+    ),
   summarizeChat: (sessionId: string) =>
     fetchJson<ChatSummary | { message: string }>(`${API_BASE}/chat/summarize`, {
       method: "POST",

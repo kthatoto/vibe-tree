@@ -47,6 +47,8 @@ function toMessage(row: typeof schema.chatMessages.$inferSelect): ChatMessage {
     sessionId: row.sessionId,
     role: row.role as "user" | "assistant" | "system",
     content: row.content,
+    chatMode: row.chatMode as "planning" | "execution" | null,
+    instructionEditStatus: row.instructionEditStatus as "committed" | "rejected" | null,
     createdAt: row.createdAt,
   };
 }
@@ -242,6 +244,40 @@ chatRouter.get("/messages", async (c) => {
   return c.json(messages.map(toMessage));
 });
 
+// PATCH /api/chat/messages/:id/instruction-status - Update instruction edit status
+chatRouter.patch("/messages/:id/instruction-status", async (c) => {
+  const messageId = parseInt(c.req.param("id"), 10);
+  if (isNaN(messageId)) {
+    throw new BadRequestError("Invalid message ID");
+  }
+
+  const body = await c.req.json();
+  const status = body.status as "committed" | "rejected";
+
+  if (status !== "committed" && status !== "rejected") {
+    throw new BadRequestError("status must be 'committed' or 'rejected'");
+  }
+
+  // Get the message first
+  const messages = await db
+    .select()
+    .from(schema.chatMessages)
+    .where(eq(schema.chatMessages.id, messageId));
+
+  const message = messages[0];
+  if (!message) {
+    throw new NotFoundError("Message not found");
+  }
+
+  // Update the status
+  await db
+    .update(schema.chatMessages)
+    .set({ instructionEditStatus: status })
+    .where(eq(schema.chatMessages.id, messageId));
+
+  return c.json({ success: true, status });
+});
+
 // POST /api/chat/send - Send a message (execute Claude)
 chatRouter.post("/send", async (c) => {
   const body = await c.req.json();
@@ -292,6 +328,7 @@ chatRouter.post("/send", async (c) => {
       sessionId: input.sessionId,
       role: "user",
       content: input.userMessage,
+      chatMode: input.chatMode ?? null,
       createdAt: now,
     })
     .returning();
@@ -380,6 +417,7 @@ chatRouter.post("/send", async (c) => {
       sessionId: input.sessionId,
       role: "assistant",
       content: assistantContent,
+      chatMode: input.chatMode ?? null,
       createdAt: finishedAt,
     })
     .returning();

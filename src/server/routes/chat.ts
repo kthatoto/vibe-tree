@@ -595,38 +595,20 @@ const PLANNING_SYSTEM_PROMPT = `あなたはプロジェクト計画のアシス
 タスクを提案する際は、必ず以下の形式を使ってください：
 
 <<TASK>>
-{"label": "タスク名", "description": "タスクの説明", "parent": "親タスク名（任意）", "branch": "feature/branch-name（任意）"}
+{"label": "タスク名", "description": "タスクの説明", "parent": "親タスク名（任意）", "branch": "ブランチ名"}
 <</TASK>>
 
 ### フィールド説明：
 - label: タスクの名前（必須）
 - description: タスクの説明、完了条件など（必須）
 - parent: このタスクの親となるタスク名。親子関係がある場合に指定（任意）
-- branch: このタスクのブランチ名。指定しない場合は自動生成される（任意）
-
-### 例：
-
-単独タスク:
-<<TASK>>
-{"label": "認証機能の実装", "description": "ログイン・ログアウト・セッション管理を実装する", "branch": "feature/auth"}
-<</TASK>>
-
-親子関係あり:
-<<TASK>>
-{"label": "認証機能の実装", "description": "認証システム全体の親タスク"}
-<</TASK>>
-<<TASK>>
-{"label": "ログインフォーム作成", "description": "メール/パスワードでのログインUIを作成", "parent": "認証機能の実装", "branch": "feature/auth-login-form"}
-<</TASK>>
-<<TASK>>
-{"label": "セッション管理", "description": "JWTトークンの発行と検証", "parent": "認証機能の実装", "branch": "feature/auth-session"}
-<</TASK>>
+- branch: このタスクのブランチ名（必須）。**必ず「ブランチ命名規則」に従って命名すること**
 
 ## 注意点
 - 1つのメッセージで複数のタスクを提案してOK
 - タスクは具体的に、1〜2日で完了できる粒度に
 - 関連するタスクは親子関係を設定する
-- ブランチ名は英数字とハイフンのみ、feature/ や fix/ などのプレフィックスを推奨
+- **ブランチ名は必ず「ブランチ命名規則」セクションのパターンに従うこと**
 - ユーザーがブランチ名の変更を依頼したら、新しいタスク提案で修正版を提示する
 - ユーザーが情報を共有したら、まず内容を理解・整理してから質問やタスク提案を行う
 `;
@@ -667,11 +649,18 @@ async function buildPrompt(
 
     // Add branch naming rules for planning sessions
     if (branchNaming) {
+      parts.push(`## ブランチ命名規則【重要・必須】
+**タスク提案時のブランチ名は、必ず以下のパターンに従ってください。**
+
+パターン: \`${branchNaming.pattern}\`
+${branchNaming.examples?.length ? `\n参考例:\n${branchNaming.examples.map((e) => `- \`${e}\``).join("\n")}` : ""}
+${branchNaming.description ? `\n説明: ${branchNaming.description}` : ""}
+
+**このパターンに従わないブランチ名は使用しないでください。**
+`);
+    } else {
       parts.push(`## ブランチ命名規則
-以下のルールに従ってブランチ名を提案してください：
-- Pattern: \`${branchNaming.pattern}\`
-${branchNaming.examples?.length ? `- Examples: ${branchNaming.examples.map((e) => `\`${e}\``).join(", ")}` : ""}
-${branchNaming.description ? `- Description: ${branchNaming.description}` : ""}
+特定のルールは設定されていません。一般的な命名規則（feature/, fix/, etc.）を使用してください。
 `);
     }
   }

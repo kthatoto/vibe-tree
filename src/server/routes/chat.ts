@@ -595,14 +595,14 @@ const PLANNING_SYSTEM_PROMPT = `あなたはプロジェクト計画のアシス
 タスクを提案する際は、必ず以下の形式を使ってください：
 
 <<TASK>>
-{"label": "タスク名", "description": "タスクの説明", "parent": "親タスク名（任意）", "branch": "ブランチ名"}
+{"label": "タスク名", "description": "タスクの説明", "parent": "親タスク名（任意）", "branch": "【ブランチ命名規則に従ったブランチ名】"}
 <</TASK>>
 
 ### フィールド説明：
 - label: タスクの名前（必須）
 - description: タスクの説明、完了条件など（必須）
 - parent: このタスクの親となるタスク名。親子関係がある場合に指定（任意）
-- branch: このタスクのブランチ名（必須）。**必ず「ブランチ命名規則」に従って命名すること**
+- branch: **必須。下記の「ブランチ命名規則」セクションで指定されたパターンに完全に従うこと。feature/ や feat/ などのデフォルトパターンは使用禁止。**
 
 ## 注意点
 - 1つのメッセージで複数のタスクを提案してOK
@@ -644,10 +644,7 @@ async function buildPrompt(
     : null;
 
   if (isPlanningSession) {
-    parts.push(PLANNING_SYSTEM_PROMPT);
-    parts.push(`## Repository: ${session.repoId}\n`);
-
-    // Add branch naming rules for planning sessions
+    // Add branch naming rules FIRST for planning sessions (most important)
     if (branchNaming && branchNaming.pattern) {
       // Generate example from pattern by replacing placeholders
       const exampleBranch = branchNaming.pattern
@@ -658,29 +655,30 @@ async function buildPrompt(
         .replace("{description}", "add-login")
         .replace("{username}", "user");
 
-      parts.push(`## ブランチ命名規則【重要・必須】
-**タスク提案時のブランチ名は、必ず以下のパターンに従ってください。**
+      parts.push(`# ブランチ命名規則【最重要】
 
-パターン: \`${branchNaming.pattern}\`
+このプロジェクトのブランチ命名パターン: \`${branchNaming.pattern}\`
 
-プレースホルダの説明:
-- \`{issueId}\` → Issue番号（例: 123）
-- \`{taskSlug}\` → タスク名を英語・ケバブケースで（例: add-login-form）
-- \`{type}\` → feat, fix, docs, refactor など
-- \`{scope}\` → 機能領域（例: auth, api, ui）
-- \`{description}\` → 簡潔な説明
+## パターンの使い方
+- \`{issueId}\` → Issue番号がある場合は番号、なければ適当な番号（例: 001）
+- \`{taskSlug}\` → タスク内容を英語のケバブケースで（例: add-ruby-syntax-check）
 
-生成例: \`${exampleBranch}\`
-${branchNaming.examples?.length ? `\n設定済みの例:\n${branchNaming.examples.map((e) => `- \`${e}\``).join("\n")}` : ""}
-${branchNaming.description ? `\n説明: ${branchNaming.description}` : ""}
+## 正しい例
+- \`${exampleBranch}\`
+- \`feat_001_add-ruby-syntax-check\`
+- \`feat_002_setup-echo-test\`
 
-**このパターンに従わないブランチ名は使用しないでください。**
-`);
-    } else {
-      parts.push(`## ブランチ命名規則
-特定のルールは設定されていません。一般的な命名規則（feature/, fix/, etc.）を使用してください。
+## 間違った例（使用禁止）
+- \`feature/xxx\` ← feature/ は使わない
+- \`feat/xxx\` ← feat/ は使わない
+- \`fix-xxx\` ← パターンに従っていない
+
+**タスク提案時のbranchフィールドは、必ず上記パターンに従ってください。**
 `);
     }
+
+    parts.push(PLANNING_SYSTEM_PROMPT);
+    parts.push(`## Repository: ${session.repoId}\n`);
   }
 
   if (!isPlanningSession) {
@@ -714,7 +712,7 @@ ${gitStatus || "Clean working directory"}
 `);
   }
 
-  // 3. External links context (for planning sessions)
+  // 3. External links context and base branch (for planning sessions)
   if (isPlanningSession) {
     // Find the planning session that has this chat session linked
     const planningSession = await db
@@ -724,6 +722,12 @@ ${gitStatus || "Clean working directory"}
       .limit(1);
 
     if (planningSession[0]) {
+      // Add base branch info
+      parts.push(`## ベースブランチ
+このPlanning Sessionのベースブランチ: \`${planningSession[0].baseBranch}\`
+提案するタスクは、このブランチを起点として作成されます。
+`);
+
       const links = await db
         .select()
         .from(schema.externalLinks)

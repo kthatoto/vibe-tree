@@ -655,25 +655,32 @@ async function buildPrompt(
         .replace("{description}", "add-login")
         .replace("{username}", "user");
 
-      parts.push(`# ブランチ命名規則【最重要】
+      parts.push(`# ブランチ命名規則【最重要・厳守】
 
-このプロジェクトのブランチ命名パターン: \`${branchNaming.pattern}\`
+## ブランチ名のパターン
+\`${branchNaming.pattern}\`
 
-## パターンの使い方
-- \`{issueId}\` → Issue番号がある場合は番号、なければ適当な番号（例: 001）
-- \`{taskSlug}\` → タスク内容を英語のケバブケースで（例: add-ruby-syntax-check）
+## 生成ルール
+1. "feat_" で始める（アンダースコア）
+2. 次にIssue番号（例: 001, 002）
+3. アンダースコア "_" で区切る
+4. 最後にタスク内容をケバブケースで
 
-## 正しい例
-- \`${exampleBranch}\`
-- \`feat_001_add-ruby-syntax-check\`
-- \`feat_002_setup-echo-test\`
+## 正しいブランチ名の例
+- feat_001_add-github-actions
+- feat_002_setup-ruby-check
+- feat_003_implement-echo-test
 
-## 間違った例（使用禁止）
-- \`feature/xxx\` ← feature/ は使わない
-- \`feat/xxx\` ← feat/ は使わない
-- \`fix-xxx\` ← パターンに従っていない
+## 絶対に使ってはいけない形式
+- ❌ 001/add-xxx （スラッシュ禁止）
+- ❌ feature/xxx （feature/禁止）
+- ❌ feat/xxx （スラッシュ禁止）
+- ❌ add-xxx （feat_が必要）
 
-**タスク提案時のbranchフィールドは、必ず上記パターンに従ってください。**
+## 重要
+- スラッシュ "/" は使わない
+- 区切りは全てアンダースコア "_" またはハイフン "-"
+- 必ず "feat_" から始める
 `);
     }
 

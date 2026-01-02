@@ -32,9 +32,14 @@ export function ChatPanel({ sessionId, onTaskSuggested, existingTaskLabels = [],
     loadMessages();
   }, [loadMessages]);
 
+  // Track if we should use smooth scroll (only for new messages)
+  const useSmoothScroll = useRef(false);
+
   // Auto scroll to bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: useSmoothScroll.current ? "smooth" : "instant" });
+    }
   }, [messages]);
 
   // Send message
@@ -45,6 +50,7 @@ export function ChatPanel({ sessionId, onTaskSuggested, existingTaskLabels = [],
     setInput("");
     setLoading(true);
     setError(null);
+    useSmoothScroll.current = true; // Enable smooth scroll for new messages
 
     // Optimistic update
     const tempUserMsg: ChatMessage = {

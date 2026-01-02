@@ -118,13 +118,13 @@ export function TaskDetailPanel({
     initChat();
   }, [repoId, effectivePath, branchName]);
 
-  // Track if we should auto-scroll (only for new messages, not initial load)
-  const shouldAutoScroll = useRef(false);
+  // Track if we should use smooth scroll (only for new messages)
+  const useSmoothScroll = useRef(false);
 
-  // Scroll to bottom only when a new message is added (not initial load)
+  // Scroll to bottom when messages change
   useEffect(() => {
-    if (shouldAutoScroll.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: useSmoothScroll.current ? "smooth" : "instant" });
     }
   }, [messages]);
 
@@ -227,7 +227,7 @@ export function TaskDetailPanel({
     const userMessage = chatInput.trim();
     setChatInput("");
     setChatLoading(true);
-    shouldAutoScroll.current = true; // Enable auto-scroll for new messages
+    useSmoothScroll.current = true; // Enable smooth scroll for new messages
 
     // Optimistically add user message
     const tempUserMsg: ChatMessage = {

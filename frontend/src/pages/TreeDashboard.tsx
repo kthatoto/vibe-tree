@@ -69,6 +69,11 @@ export default function TreeDashboard() {
   // Branch graph edit mode
   const [branchGraphEditMode, setBranchGraphEditMode] = useState(false);
 
+  // Create branch dialog
+  const [createBranchBase, setCreateBranchBase] = useState<string | null>(null);
+  const [createBranchName, setCreateBranchName] = useState("");
+  const [createBranchLoading, setCreateBranchLoading] = useState(false);
+
   // Fetch state
   const [fetching, setFetching] = useState(false);
   const [discarding, setDiscarding] = useState(false);
@@ -272,6 +277,49 @@ export default function TreeDashboard() {
       setError((err as Error).message);
     } finally {
       setDeletingPinId(null);
+    }
+  };
+
+  // Create branch handler
+  const handleCreateBranch = async () => {
+    if (!createBranchBase || !createBranchName.trim() || !selectedPin || !snapshot) return;
+
+    setCreateBranchLoading(true);
+    try {
+      const newBranchName = createBranchName.trim();
+
+      // Create the git branch
+      await api.createBranch(selectedPin.localPath, newBranchName, createBranchBase);
+
+      // Add edge to tree spec (parent -> child relationship)
+      const currentEdges = snapshot.treeSpec?.specJson.edges ?? [];
+      const currentNodes = snapshot.treeSpec?.specJson.nodes ?? [];
+
+      // Add edge from base branch to new branch
+      const newEdges = [
+        ...currentEdges,
+        { parent: createBranchBase, child: newBranchName },
+      ];
+
+      // Update tree spec
+      await api.updateTreeSpec({
+        repoId: snapshot.repoId,
+        baseBranch: snapshot.treeSpec?.baseBranch ?? snapshot.defaultBranch,
+        nodes: currentNodes,
+        edges: newEdges,
+      });
+
+      // Rescan to update the graph
+      const newSnapshot = await api.scan(selectedPin.localPath);
+      setSnapshot(newSnapshot);
+
+      // Close dialog
+      setCreateBranchBase(null);
+      setCreateBranchName("");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setCreateBranchLoading(false);
     }
   };
 
@@ -1028,6 +1076,10 @@ export default function TreeDashboard() {
                       }
                     }}
                     tentativeBaseBranch={selectedPlanningSession?.baseBranch}
+                    onBranchCreate={(baseBranch) => {
+                      setCreateBranchBase(baseBranch);
+                      setCreateBranchName("");
+                    }}
                   />
                 </div>
               </div>
@@ -1256,6 +1308,55 @@ export default function TreeDashboard() {
               </button>
               <button className="btn-danger" onClick={handleConfirmDeletePin}>
                 削除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Branch Modal */}
+      {createBranchBase && (
+        <div className="modal-overlay" onClick={() => setCreateBranchBase(null)}>
+          <div className="modal modal--small" onClick={(e) => e.stopPropagation()}>
+            <div className="modal__header">
+              <h2>ブランチ作成</h2>
+            </div>
+            <div className="modal__body">
+              <p style={{ margin: "0 0 12px", color: "#9ca3af", fontSize: 13 }}>
+                ベース: <code style={{ background: "#1f2937", padding: "2px 6px", borderRadius: 4 }}>{createBranchBase}</code>
+              </p>
+              <input
+                type="text"
+                value={createBranchName}
+                onChange={(e) => setCreateBranchName(e.target.value)}
+                placeholder="新しいブランチ名"
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  background: "#1f2937",
+                  border: "1px solid #374151",
+                  borderRadius: 6,
+                  color: "#e5e7eb",
+                  fontSize: 14,
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && createBranchName.trim() && !createBranchLoading) {
+                    handleCreateBranch();
+                  }
+                }}
+                autoFocus
+              />
+            </div>
+            <div className="modal__footer">
+              <button className="btn-secondary" onClick={() => setCreateBranchBase(null)}>
+                キャンセル
+              </button>
+              <button
+                className="btn-primary"
+                disabled={!createBranchName.trim() || createBranchLoading}
+                onClick={handleCreateBranch}
+              >
+                {createBranchLoading ? "作成中..." : "作成"}
               </button>
             </div>
           </div>

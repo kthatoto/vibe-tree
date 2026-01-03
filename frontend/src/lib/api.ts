@@ -343,6 +343,7 @@ export interface BranchLink {
   title: string | null;
   status: string | null;
   checksStatus: string | null;
+  reviewDecision: string | null; // 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null
   checks: string | null; // JSON array of GitHubCheck
   labels: string | null; // JSON array
   reviewers: string | null; // JSON array

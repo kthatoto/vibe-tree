@@ -661,6 +661,13 @@ export function TaskDetailPanel({
                     <span className="task-detail-panel__ci-badge-count">{passedChecks}/{totalChecks}</span>
                   </button>
                 )}
+                {pr.reviewDecision && (
+                  <span className={`task-detail-panel__review-badge task-detail-panel__review-badge--${pr.reviewDecision.toLowerCase().replace('_', '-')}`}>
+                    {pr.reviewDecision === "APPROVED" ? "✓ Approved" :
+                     pr.reviewDecision === "CHANGES_REQUESTED" ? "⚠ Changes Requested" :
+                     pr.reviewDecision === "REVIEW_REQUIRED" ? "Review Required" : pr.reviewDecision}
+                  </span>
+                )}
                 {pr.status && pr.status !== "open" && (
                   <span className={`task-detail-panel__link-status task-detail-panel__link-status--${pr.status}`}>
                     {pr.status}

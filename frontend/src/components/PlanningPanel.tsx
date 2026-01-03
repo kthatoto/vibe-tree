@@ -356,6 +356,7 @@ export function PlanningPanel({
       const updated = await api.updatePlanningSession(selectedSession.id, { title });
       setSelectedSession(updated);
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      onSessionSelect?.(updated);
     } catch (err) {
       console.error("Failed to update title:", err);
     }
@@ -367,6 +368,7 @@ export function PlanningPanel({
       const updated = await api.updatePlanningSession(selectedSession.id, { baseBranch });
       setSelectedSession(updated);
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      onSessionSelect?.(updated);
     } catch (err) {
       console.error("Failed to update base branch:", err);
     }

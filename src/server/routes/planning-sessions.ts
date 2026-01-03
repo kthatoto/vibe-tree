@@ -325,8 +325,22 @@ planningSessionsRouter.post("/:id/confirm", async (c) => {
 
       // Create branch if it doesn't exist
       if (!existingBranches) {
+        // Check if parent branch exists locally, if not try remote
+        let actualParent = parentBranch;
+        try {
+          const localExists = execSync(
+            `cd "${localPath}" && git rev-parse --verify "${parentBranch}" 2>/dev/null`,
+            { encoding: "utf-8" }
+          ).trim();
+          if (!localExists) {
+            actualParent = `origin/${parentBranch}`;
+          }
+        } catch {
+          // Local branch doesn't exist, try with origin prefix
+          actualParent = `origin/${parentBranch}`;
+        }
         execSync(
-          `cd "${localPath}" && git branch "${branchName}" "${parentBranch}"`,
+          `cd "${localPath}" && git branch "${branchName}" "${actualParent}"`,
           { encoding: "utf-8" }
         );
       }

@@ -204,9 +204,17 @@ scanRouter.post("/", async (c) => {
     const childTaskIds = new Set(sessionEdges.map((e) => e.child));
     for (const node of sessionNodes) {
       if (node.branchName && !childTaskIds.has(node.id)) {
-        // This is a root task - connect to base branch if not already connected
+        // This is a root task - connect to base branch
         const existingIndex = edges.findIndex((e) => e.child === node.branchName);
-        if (existingIndex < 0) {
+        if (existingIndex >= 0) {
+          // Replace existing edge with planning session edge (higher priority)
+          edges[existingIndex] = {
+            parent: session.baseBranch,
+            child: node.branchName,
+            confidence: "high" as const,
+            isDesigned: true,
+          };
+        } else {
           edges.push({
             parent: session.baseBranch,
             child: node.branchName,

@@ -66,6 +66,7 @@ interface GitHubPRInfo {
   number: number;
   title: string;
   status: string;
+  reviewDecision: string | null;
   checksStatus: string;
   checks: GitHubCheck[];
   labels: GitHubLabel[];
@@ -76,7 +77,7 @@ interface GitHubPRInfo {
 function fetchGitHubPRInfo(repoId: string, prNumber: number): GitHubPRInfo | null {
   try {
     const result = execSync(
-      `gh pr view ${prNumber} --repo "${repoId}" --json number,title,state,statusCheckRollup,labels,reviewRequests,reviews,projectItems`,
+      `gh pr view ${prNumber} --repo "${repoId}" --json number,title,state,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems`,
       { encoding: "utf-8", timeout: 10000 }
     ).trim();
     const data = JSON.parse(result);
@@ -129,6 +130,7 @@ function fetchGitHubPRInfo(repoId: string, prNumber: number): GitHubPRInfo | nul
       number: data.number,
       title: data.title,
       status: data.state?.toLowerCase() || "open",
+      reviewDecision: data.reviewDecision || null,
       checksStatus,
       checks,
       labels: (data.labels || []).map((l: { name: string; color: string }) => ({ name: l.name, color: l.color })),
@@ -231,6 +233,7 @@ branchLinksRouter.post("/", async (c) => {
   let title = input.title ?? null;
   let status = input.status ?? null;
   let checksStatus: string | null = null;
+  let reviewDecision: string | null = null;
   let checks: string | null = null;
   let labels: string | null = null;
   let reviewers: string | null = null;
@@ -251,6 +254,7 @@ branchLinksRouter.post("/", async (c) => {
         title = prInfo.title;
         status = prInfo.status;
         checksStatus = prInfo.checksStatus;
+        reviewDecision = prInfo.reviewDecision;
         checks = JSON.stringify(prInfo.checks);
         labels = JSON.stringify(prInfo.labels);
         reviewers = JSON.stringify(prInfo.reviewers);
@@ -270,6 +274,7 @@ branchLinksRouter.post("/", async (c) => {
       title,
       status,
       checksStatus,
+      reviewDecision,
       checks,
       labels,
       reviewers,
@@ -390,6 +395,7 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
   let title = existing.title;
   let status = existing.status;
   let checksStatus = existing.checksStatus;
+  let reviewDecision = existing.reviewDecision;
   let checks = existing.checks;
   let labels = existing.labels;
   let reviewers = existing.reviewers;
@@ -409,6 +415,7 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
       title = prInfo.title;
       status = prInfo.status;
       checksStatus = prInfo.checksStatus;
+      reviewDecision = prInfo.reviewDecision;
       checks = JSON.stringify(prInfo.checks);
       labels = JSON.stringify(prInfo.labels);
       reviewers = JSON.stringify(prInfo.reviewers);
@@ -422,6 +429,7 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
       title,
       status,
       checksStatus,
+      reviewDecision,
       checks,
       labels,
       reviewers,

@@ -1207,3 +1207,26 @@
   font-weight: 500;
   white-space: nowrap;
 }
+
+/* Review Decision Badges */
+.task-detail-panel__review-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.task-detail-panel__review-badge--approved {
+  background: #065f46;
+  color: #34d399;
+}
+
+.task-detail-panel__review-badge--changes-requested {
+  background: #7f1d1d;
+  color: #f87171;
+}
+
+.task-detail-panel__review-badge--review-required {
+  background: #78350f;
+  color: #fbbf24;
+}

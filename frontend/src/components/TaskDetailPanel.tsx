@@ -338,10 +338,10 @@ export function TaskDetailPanel({
     setError(null);
     try {
       await api.deleteBranch(localPath, branchName);
+      onClose(); // Close panel first
       onWorktreeCreated?.(); // Rescan to update
     } catch (err) {
       setError((err as Error).message);
-    } finally {
       setDeleting(false);
     }
   };
@@ -546,6 +546,15 @@ export function TaskDetailPanel({
 
   return (
     <div className="task-detail-panel">
+      {/* Deleting overlay */}
+      {deleting && (
+        <div className="task-detail-panel__deleting-overlay">
+          <div className="task-detail-panel__deleting-content">
+            <span>Deleting branch...</span>
+          </div>
+        </div>
+      )}
+
       <div className="task-detail-panel__header">
         <h3>{branchName}</h3>
         <button onClick={onClose} className="task-detail-panel__close">x</button>

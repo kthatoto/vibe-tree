@@ -3,8 +3,8 @@ import { execSync } from "child_process";
 import { existsSync, mkdirSync } from "fs";
 import { dirname, basename, join } from "path";
 import { randomUUID } from "crypto";
-import { eq } from "drizzle-orm";
-import { expandTilde } from "../utils";
+import { eq, and, ne } from "drizzle-orm";
+import { expandTilde, getRepoId } from "../utils";
 import { createBranchSchema, createTreeSchema, validateOrThrow } from "../../shared/validation";
 import { BadRequestError } from "../middleware/error-handler";
 import { db, schema } from "../../db";
@@ -567,6 +567,55 @@ branchRouter.post("/delete", async (c) => {
       );
     } catch {
       // Ignore errors deleting remote branch
+    }
+
+    // Update planning session edges: reparent children of deleted branch
+    const repoId = getRepoId(localPath);
+    if (repoId) {
+      try {
+        const sessions = await db
+          .select()
+          .from(schema.planningSessions)
+          .where(
+            and(
+              eq(schema.planningSessions.repoId, repoId),
+              ne(schema.planningSessions.status, "discarded")
+            )
+          );
+
+        for (const session of sessions) {
+          const edges = JSON.parse(session.edgesJson) as Array<{ from: string; to: string }>;
+
+          // Find the deleted branch's parent
+          const parentEdge = edges.find((e) => e.to === branchName);
+          const parentBranch = parentEdge?.from;
+
+          // Update children of deleted branch to point to grandparent
+          const updatedEdges = edges
+            .filter((e) => e.to !== branchName) // Remove edge to deleted branch
+            .map((e) => {
+              if (e.from === branchName && parentBranch) {
+                // Reparent child to grandparent
+                return { ...e, from: parentBranch };
+              }
+              return e;
+            });
+
+          // Only update if edges changed
+          if (JSON.stringify(edges) !== JSON.stringify(updatedEdges)) {
+            await db
+              .update(schema.planningSessions)
+              .set({
+                edgesJson: JSON.stringify(updatedEdges),
+                updatedAt: new Date().toISOString(),
+              })
+              .where(eq(schema.planningSessions.id, session.id));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to update planning session edges:", err);
+        // Don't fail the delete operation for this
+      }
     }
 
     return c.json({

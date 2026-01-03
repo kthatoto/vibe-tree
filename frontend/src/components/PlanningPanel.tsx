@@ -170,6 +170,7 @@ interface PlanningPanelProps {
   defaultBranch: string;
   onTasksChange?: (nodes: TaskNode[], edges: TaskEdge[]) => void;
   onSessionSelect?: (session: PlanningSession | null) => void;
+  onCollapseChange?: (collapsed: boolean) => void;
 }
 
 export function PlanningPanel({
@@ -178,6 +179,7 @@ export function PlanningPanel({
   defaultBranch,
   onTasksChange,
   onSessionSelect,
+  onCollapseChange,
 }: PlanningPanelProps) {
   const [sessions, setSessions] = useState<PlanningSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<PlanningSession | null>(null);
@@ -194,14 +196,20 @@ export function PlanningPanel({
   const [newTitle, setNewTitle] = useState("");
   const [newBaseBranch, setNewBaseBranch] = useState(defaultBranch);
 
-  // Persist collapse state
+  // Notify parent of initial collapse state
+  useEffect(() => {
+    onCollapseChange?.(isCollapsed);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist collapse state and notify parent
   const toggleCollapse = useCallback(() => {
     setIsCollapsed((prev) => {
       const next = !prev;
       localStorage.setItem("planningPanel.collapsed", String(next));
+      onCollapseChange?.(next);
       return next;
     });
-  }, []);
+  }, [onCollapseChange]);
 
   // External links for selected session
   const [externalLinks, setExternalLinks] = useState<ExternalLink[]>([]);

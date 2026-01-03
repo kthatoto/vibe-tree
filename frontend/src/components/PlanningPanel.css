@@ -6,6 +6,7 @@
   border: 1px solid #374151;
   border-radius: 8px;
   overflow: hidden;
+  transition: height 0.2s ease, flex 0.2s ease;
 }
 
 .planning-panel--loading {

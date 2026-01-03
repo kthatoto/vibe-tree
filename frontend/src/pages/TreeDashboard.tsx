@@ -51,6 +51,7 @@ export default function TreeDashboard() {
   const [selectedPlanningSession, setSelectedPlanningSession] = useState<PlanningSession | null>(null);
   const [tentativeNodes, setTentativeNodes] = useState<TaskNode[]>([]);
   const [tentativeEdges, setTentativeEdges] = useState<TaskEdge[]>([]);
+  const [planningPanelCollapsed, setPlanningPanelCollapsed] = useState(false);
 
   // Terminal state
   const [showTerminal, setShowTerminal] = useState(false);
@@ -998,13 +999,14 @@ export default function TreeDashboard() {
               </div>
 
               {/* Planning Panel - Multi-session */}
-              <div className="panel panel--planning">
+              <div className={`panel panel--planning ${planningPanelCollapsed ? "panel--planning-collapsed" : ""}`}>
                 <PlanningPanel
                   repoId={snapshot.repoId}
                   branches={snapshot.branches}
                   defaultBranch={snapshot.defaultBranch}
                   onTasksChange={handlePlanningTasksChange}
                   onSessionSelect={handlePlanningSessionSelect}
+                  onCollapseChange={setPlanningPanelCollapsed}
                 />
               </div>{/* panel--planning */}
             </div>
@@ -1549,6 +1551,7 @@ export default function TreeDashboard() {
           display: flex;
           flex-direction: column;
           overflow: hidden;
+          transition: flex 0.2s ease;
         }
         .graph-container {
           flex: 1;
@@ -1588,6 +1591,10 @@ export default function TreeDashboard() {
           background: transparent;
           border: none;
           padding: 0;
+          transition: flex 0.2s ease;
+        }
+        .panel--planning-collapsed {
+          flex: 0 0 auto;
         }
         .planning-panel__layout {
           flex: 1;

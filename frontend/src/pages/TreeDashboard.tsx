@@ -1196,7 +1196,7 @@ export default function TreeDashboard() {
                             newPatterns[index] = e.target.value;
                             setSettingsPatterns(newPatterns);
                           }}
-                          placeholder="feat_{taskSlug}"
+                          placeholder="feat_{issueId}_{taskSlug}"
                           style={{ flex: 1 }}
                         />
                         <button
@@ -1220,8 +1220,7 @@ export default function TreeDashboard() {
                       + Add Pattern
                     </button>
                     <small style={{ display: "block", marginTop: 8 }}>
-                      Use {"{issueId}"} and {"{taskSlug}"} as placeholders<br/>
-                      例: feat_{"{taskSlug}"}, feat_{"{issueId}"}_{"{taskSlug}"}
+                      Use {"{issueId}"} and {"{taskSlug}"} as placeholders
                     </small>
                   </div>
                 </>

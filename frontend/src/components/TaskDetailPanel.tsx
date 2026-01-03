@@ -57,6 +57,7 @@ export function TaskDetailPanel({
   const [streamingChunks, setStreamingChunks] = useState<string[]>([]);
   const [streamingMode, setStreamingMode] = useState<"planning" | "execution" | null>(null);
   const [canCancel, setCanCancel] = useState(false);
+  const hasStreamingChunksRef = useRef(false);
 
   // Worktree state
   const [creatingWorktree, setCreatingWorktree] = useState(false);
@@ -288,6 +289,7 @@ export function TaskDetailPanel({
       if (data.sessionId === chatSessionId) {
         setStreamingContent("");
         setStreamingChunks([]);
+        hasStreamingChunksRef.current = false;
         setStreamingMode((data.chatMode as "planning" | "execution") || "planning");
       }
     });
@@ -297,6 +299,7 @@ export function TaskDetailPanel({
       if (data.sessionId === chatSessionId) {
         setStreamingContent(data.accumulated);
         if (data.chunk) {
+          hasStreamingChunksRef.current = true;
           setStreamingChunks((prev) => [...prev, data.chunk!]);
         }
       }
@@ -306,9 +309,8 @@ export function TaskDetailPanel({
       const data = msg.data as { sessionId: string; message: ChatMessage };
       if (data.sessionId === chatSessionId) {
         setStreamingContent(null);
-        setStreamingChunks([]);
+        // Keep chunks visible, don't clear them
         setStreamingMode(null);
-        // The message will be added when the API response returns
       }
     });
 
@@ -316,6 +318,11 @@ export function TaskDetailPanel({
     const unsubMessage = wsClient.on("chat.message", (msg) => {
       const data = msg.data as ChatMessage | undefined;
       if (data && data.sessionId === chatSessionId) {
+        // Skip assistant messages if we have streaming chunks (already displayed)
+        if (data.role === "assistant" && hasStreamingChunksRef.current) {
+          setChatLoading(false);
+          return;
+        }
         setMessages((prev) => {
           // Avoid duplicates
           if (prev.some((m) => m.id === data.id)) {
@@ -1193,43 +1200,41 @@ export function TaskDetailPanel({
                 </div>
               );
             })}
-            {(chatLoading || streamingContent !== null) && (
-              <>
-                {streamingChunks.map((chunk, i) => (
-                  <div key={i} className="task-detail-panel__message task-detail-panel__message--assistant">
-                    <div className="task-detail-panel__message-content">
-                      <pre>{linkifyPreContent(chunk)}</pre>
-                    </div>
-                  </div>
-                ))}
-                <div className="task-detail-panel__message task-detail-panel__message--loading">
-                  <div className="task-detail-panel__message-role">
-                    <span>ASSISTANT - {(streamingMode || chatMode) === "planning" ? "Planning" : "Execution"}</span>
-                    {canCancel && (
-                      <button
-                        className="task-detail-panel__cancel-btn"
-                        onClick={async () => {
-                          if (chatSessionId) {
-                            try {
-                              await api.cancelChat(chatSessionId);
-                              setChatLoading(false);
-                              setStreamingContent(null);
-                              setStreamingChunks([]);
-                            } catch (err) {
-                              console.error("Failed to cancel:", err);
-                            }
-                          }
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    )}
-                  </div>
-                  <div className="task-detail-panel__message-content">
-                    Thinking...
-                  </div>
+            {streamingChunks.map((chunk, i) => (
+              <div key={`stream-${i}`} className="task-detail-panel__message task-detail-panel__message--assistant">
+                <div className="task-detail-panel__message-content">
+                  <pre>{linkifyPreContent(chunk)}</pre>
                 </div>
-              </>
+              </div>
+            ))}
+            {(chatLoading || streamingContent !== null) && (
+              <div className="task-detail-panel__message task-detail-panel__message--loading">
+                <div className="task-detail-panel__message-role">
+                  <span>ASSISTANT - {(streamingMode || chatMode) === "planning" ? "Planning" : "Execution"}</span>
+                  {canCancel && (
+                    <button
+                      className="task-detail-panel__cancel-btn"
+                      onClick={async () => {
+                        if (chatSessionId) {
+                          try {
+                            await api.cancelChat(chatSessionId);
+                            setChatLoading(false);
+                            setStreamingContent(null);
+                            setStreamingChunks([]);
+                          } catch (err) {
+                            console.error("Failed to cancel:", err);
+                          }
+                        }
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+                <div className="task-detail-panel__message-content">
+                  Thinking...
+                </div>
+              </div>
             )}
             <div ref={messagesEndRef} />
           </div>

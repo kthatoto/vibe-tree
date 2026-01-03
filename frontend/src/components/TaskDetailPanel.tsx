@@ -1191,23 +1191,24 @@ export function TaskDetailPanel({
               <div className="task-detail-panel__message task-detail-panel__message--loading">
                 <div className="task-detail-panel__message-role">
                   <span>ASSISTANT - {(streamingMode || chatMode) === "planning" ? "Planning" : "Execution"}</span>
-                  <button
-                    className="task-detail-panel__cancel-btn"
-                    onClick={async () => {
-                      if (chatSessionId) {
-                        try {
-                          await api.cancelChat(chatSessionId);
-                          setChatLoading(false);
-                          setStreamingContent(null);
-                        } catch (err) {
-                          console.error("Failed to cancel:", err);
+                  {canCancel && (
+                    <button
+                      className="task-detail-panel__cancel-btn"
+                      onClick={async () => {
+                        if (chatSessionId) {
+                          try {
+                            await api.cancelChat(chatSessionId);
+                            setChatLoading(false);
+                            setStreamingContent(null);
+                          } catch (err) {
+                            console.error("Failed to cancel:", err);
+                          }
                         }
-                      }
-                    }}
-                    disabled={!canCancel}
-                  >
-                    Cancel
-                  </button>
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  )}
                 </div>
                 <div className="task-detail-panel__message-content">
                   {streamingContent !== null && streamingContent.length > 0 ? (

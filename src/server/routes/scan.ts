@@ -19,6 +19,7 @@ import {
   getPRs,
   buildTree,
   calculateAheadBehind,
+  calculateRemoteAheadBehind,
   calculateWarnings,
   generateRestartInfo,
 } from "../lib/git-helpers";
@@ -229,6 +230,9 @@ scanRouter.post("/", async (c) => {
 
   // 9. Calculate ahead/behind based on finalized edges (parent branch, not default)
   calculateAheadBehind(nodes, edges, localPath, defaultBranch);
+
+  // 9.5. Calculate ahead/behind relative to remote (origin)
+  calculateRemoteAheadBehind(nodes, localPath);
 
   // 10. Calculate warnings (including tree divergence)
   const warnings = calculateWarnings(nodes, edges, branchNaming, defaultBranch, treeSpec);

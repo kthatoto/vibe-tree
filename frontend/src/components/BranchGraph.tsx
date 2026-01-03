@@ -650,6 +650,58 @@ export default function BranchGraph({
           </g>
         )}
 
+        {/* Remote ahead/behind indicator (vs origin) - shown with cloud icon or different position */}
+        {node.remoteAheadBehind && (node.remoteAheadBehind.ahead > 0 || node.remoteAheadBehind.behind > 0) && (
+          <g>
+            {node.remoteAheadBehind.ahead > 0 && (
+              <>
+                <rect
+                  x={x - 28}
+                  y={y + nodeHeight / 2 - 7}
+                  width={24}
+                  height={14}
+                  rx={3}
+                  fill="#3b82f6"
+                />
+                <text
+                  x={x - 16}
+                  y={y + nodeHeight / 2 + 1}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize={9}
+                  fill="white"
+                  fontWeight="bold"
+                >
+                  ↑{node.remoteAheadBehind.ahead}
+                </text>
+              </>
+            )}
+            {node.remoteAheadBehind.behind > 0 && (
+              <>
+                <rect
+                  x={x - 28}
+                  y={y + nodeHeight / 2 + (node.remoteAheadBehind.ahead > 0 ? 9 : -7)}
+                  width={24}
+                  height={14}
+                  rx={3}
+                  fill="#f59e0b"
+                />
+                <text
+                  x={x - 16}
+                  y={y + nodeHeight / 2 + (node.remoteAheadBehind.ahead > 0 ? 17 : 1)}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize={9}
+                  fill="white"
+                  fontWeight="bold"
+                >
+                  ↓{node.remoteAheadBehind.behind}
+                </text>
+              </>
+            )}
+          </g>
+        )}
+
         {/* Drag handle (left side) - only in edit mode for non-default, non-tentative nodes */}
         {editMode && !isTentative && !isDefault && onEdgeCreate && (
           <g

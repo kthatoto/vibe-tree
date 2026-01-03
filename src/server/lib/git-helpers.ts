@@ -300,6 +300,41 @@ export function calculateAheadBehind(
   }
 }
 
+/**
+ * Calculate ahead/behind for each node relative to its remote tracking branch (origin).
+ */
+export function calculateRemoteAheadBehind(
+  nodes: TreeNode[],
+  repoPath: string
+): void {
+  for (const node of nodes) {
+    try {
+      // Check if there's a remote tracking branch
+      const upstream = execSync(
+        `cd "${repoPath}" && git rev-parse --abbrev-ref "${node.branchName}@{upstream}" 2>/dev/null`,
+        { encoding: "utf-8" }
+      ).trim();
+
+      if (!upstream) continue;
+
+      // Get ahead/behind count relative to upstream
+      const output = execSync(
+        `cd "${repoPath}" && git rev-list --left-right --count "${upstream}"..."${node.branchName}"`,
+        { encoding: "utf-8" }
+      );
+      const parts = output.trim().split(/\s+/);
+      const behind = parseInt(parts[0] ?? "0", 10);
+      const ahead = parseInt(parts[1] ?? "0", 10);
+
+      if (ahead > 0 || behind > 0) {
+        node.remoteAheadBehind = { ahead, behind };
+      }
+    } catch {
+      // No upstream or error - skip
+    }
+  }
+}
+
 export function calculateWarnings(
   nodes: TreeNode[],
   edges: TreeEdge[],

@@ -77,6 +77,7 @@ export interface TreeNode {
   worktree?: WorktreeInfo;
   lastCommitAt: string;
   aheadBehind?: { ahead: number; behind: number };
+  remoteAheadBehind?: { ahead: number; behind: number };
 }
 
 export interface TreeEdge {

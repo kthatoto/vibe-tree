@@ -491,7 +491,6 @@ export default function BranchGraph({
                 WebkitLineClamp: 2,
                 WebkitBoxOrient: "vertical" as const,
                 wordBreak: "break-all",
-                textDecoration: isMerged ? "line-through" : "none",
               }}
             >
               {displayText}

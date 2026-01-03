@@ -348,7 +348,7 @@ export function calculateWarnings(
   if (branchNaming?.pattern) {
     try {
       const regexStr = branchNaming.pattern
-        .replace(/\{planId\}/g, "\\d+")
+        .replace(/\{issueId\}/g, "\\d+")
         .replace(/\{taskSlug\}/g, "[a-z0-9-]+");
       branchPattern = new RegExp(`^${regexStr}$`);
     } catch {

@@ -176,9 +176,43 @@ export default function TreeDashboard() {
       }
     });
 
+    // Update Branch Graph when PR info is refreshed
+    const unsubBranchLink = wsClient.on("branchLink.updated", (msg) => {
+      const data = msg.data as {
+        branchName: string;
+        linkType: string;
+        status: string | null;
+        checksStatus: string | null;
+        reviewDecision: string | null;
+      };
+      if (data.linkType === "pr") {
+        setSnapshot((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            nodes: prev.nodes.map((node) => {
+              if (node.branchName === data.branchName && node.pr) {
+                return {
+                  ...node,
+                  pr: {
+                    ...node.pr,
+                    state: data.status?.toUpperCase() || node.pr.state,
+                    reviewDecision: data.reviewDecision || node.pr.reviewDecision,
+                    checks: data.checksStatus?.toUpperCase() || node.pr.checks,
+                  },
+                };
+              }
+              return node;
+            }),
+          };
+        });
+      }
+    });
+
     return () => {
       unsubScan();
       unsubBranches();
+      unsubBranchLink();
     };
   }, [snapshot?.repoId, selectedPin, handleScan]);
 

@@ -287,6 +287,7 @@ export interface TaskNode {
   title: string;
   description?: string;
   branchName?: string;
+  issueUrl?: string; // GitHub issue URL
 }
 
 export interface TaskEdge {
@@ -584,6 +585,13 @@ export const api = {
     }),
   getChatMessages: (sessionId: string) =>
     fetchJson<ChatMessage[]>(`${API_BASE}/chat/messages?sessionId=${encodeURIComponent(sessionId)}`),
+  checkChatRunning: (sessionId: string) =>
+    fetchJson<{ isRunning: boolean }>(`${API_BASE}/chat/running?sessionId=${encodeURIComponent(sessionId)}`),
+  cancelChat: (sessionId: string) =>
+    fetchJson<{ success: boolean }>(`${API_BASE}/chat/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ sessionId }),
+    }),
   sendChatMessage: (sessionId: string, userMessage: string, context?: string, chatMode?: ChatMode) =>
     fetchJson<{ userMessage: ChatMessage; runId: number; status: string }>(`${API_BASE}/chat/send`, {
       method: "POST",
@@ -760,6 +768,16 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify({ localPath, branchName, worktreePath }),
+      }
+    ),
+
+  // Check if branch can be deleted
+  checkBranchDeletable: (localPath: string, branchName: string, parentBranch?: string) =>
+    fetchJson<{ deletable: boolean; reason: string | null }>(
+      `${API_BASE}/branch/check-deletable`,
+      {
+        method: "POST",
+        body: JSON.stringify({ localPath, branchName, parentBranch }),
       }
     ),
 

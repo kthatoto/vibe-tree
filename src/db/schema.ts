@@ -205,9 +205,10 @@ export const agentRuns = sqliteTable("agent_runs", {
   repoId: text("repo_id").notNull(),
   worktreePath: text("worktree_path").notNull(),
   inputPromptDigest: text("input_prompt_digest"), // hash of prompt
+  pid: integer("pid"), // Process ID for cancellation
   startedAt: text("started_at").notNull(),
   finishedAt: text("finished_at"),
-  status: text("status").notNull(), // 'running' | 'success' | 'failed'
+  status: text("status").notNull(), // 'running' | 'success' | 'failed' | 'cancelled'
   stdoutSnippet: text("stdout_snippet"),
   stderrSnippet: text("stderr_snippet"),
   createdAt: text("created_at").notNull(),

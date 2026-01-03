@@ -235,6 +235,88 @@ chatRouter.get("/messages", async (c) => {
   return c.json(messages.map(toMessage));
 });
 
+// GET /api/chat/running - Check if there's a running agent for a session
+chatRouter.get("/running", async (c) => {
+  const sessionId = c.req.query("sessionId");
+  if (!sessionId) {
+    throw new BadRequestError("sessionId is required");
+  }
+
+  const runningRuns = await db
+    .select()
+    .from(schema.agentRuns)
+    .where(
+      and(
+        eq(schema.agentRuns.sessionId, sessionId),
+        eq(schema.agentRuns.status, "running")
+      )
+    )
+    .limit(1);
+
+  return c.json({ isRunning: runningRuns.length > 0 });
+});
+
+// POST /api/chat/cancel - Cancel a running agent
+chatRouter.post("/cancel", async (c) => {
+  const body = await c.req.json();
+  const sessionId = body.sessionId;
+  if (!sessionId) {
+    throw new BadRequestError("sessionId is required");
+  }
+
+  // Find running agent run
+  const runningRuns = await db
+    .select()
+    .from(schema.agentRuns)
+    .where(
+      and(
+        eq(schema.agentRuns.sessionId, sessionId),
+        eq(schema.agentRuns.status, "running")
+      )
+    )
+    .limit(1);
+
+  const run = runningRuns[0];
+  if (!run) {
+    return c.json({ success: false, message: "No running agent found" });
+  }
+
+  // Kill the process if we have a pid
+  if (run.pid) {
+    try {
+      process.kill(run.pid, "SIGTERM");
+    } catch (err) {
+      console.error(`[Chat] Failed to kill process ${run.pid}:`, err);
+    }
+  }
+
+  // Update agent run status
+  const now = new Date().toISOString();
+  await db
+    .update(schema.agentRuns)
+    .set({ status: "cancelled", finishedAt: now })
+    .where(eq(schema.agentRuns.id, run.id));
+
+  // Get session for repoId
+  const sessions = await db
+    .select()
+    .from(schema.chatSessions)
+    .where(eq(schema.chatSessions.id, sessionId))
+    .limit(1);
+
+  const session = sessions[0];
+  if (session) {
+    // Broadcast streaming end
+    broadcast({
+      type: "chat.streaming.end",
+      repoId: session.repoId,
+      data: { sessionId, message: null },
+    });
+  }
+
+  return c.json({ success: true });
+});
+
 // PATCH /api/chat/messages/:id/instruction-status - Update instruction edit status
 chatRouter.patch("/messages/:id/instruction-status", async (c) => {
   const messageId = parseInt(c.req.param("id"), 10);
@@ -360,10 +442,12 @@ chatRouter.post("/send", async (c) => {
 
   // 4. Execute Claude ASYNCHRONOUSLY (non-blocking)
   // Return immediately, process in background
-  const bypassFlag = input.chatMode === "execution" ? "--dangerously-skip-permissions" : "";
+  const isExecution = input.chatMode === "execution";
   const claudeArgs = ["-p", prompt];
-  if (bypassFlag) {
-    claudeArgs.push(bypassFlag);
+  if (isExecution) {
+    // Execution mode: use streaming + bypass permissions
+    claudeArgs.push("--output-format", "stream-json", "--verbose", "--include-partial-messages");
+    claudeArgs.push("--dangerously-skip-permissions");
   }
 
   // Spawn claude process in background
@@ -373,11 +457,67 @@ chatRouter.post("/send", async (c) => {
     detached: false,
   });
 
-  let stdout = "";
+  // Save pid for cancellation
+  if (claudeProcess.pid) {
+    await db
+      .update(schema.agentRuns)
+      .set({ pid: claudeProcess.pid })
+      .where(eq(schema.agentRuns.id, runId));
+  }
+
+  let accumulatedText = "";
   let stderr = "";
+  let lineBuffer = "";
+
+  // Broadcast streaming start
+  broadcast({
+    type: "chat.streaming.start",
+    repoId: session.repoId,
+    data: { sessionId: input.sessionId, chatMode: input.chatMode },
+  });
 
   claudeProcess.stdout.on("data", (data: Buffer) => {
-    stdout += data.toString();
+    if (isExecution) {
+      // Execution mode: parse stream-json format
+      lineBuffer += data.toString();
+      const lines = lineBuffer.split("\n");
+      lineBuffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const json = JSON.parse(line);
+          let textUpdated = false;
+          if (json.type === "assistant" && json.message?.content) {
+            for (const block of json.message.content) {
+              if (block.type === "text" && block.text) {
+                accumulatedText = block.text;
+                textUpdated = true;
+              }
+            }
+          } else if (json.type === "content_block_delta" && json.delta?.text) {
+            accumulatedText += json.delta.text;
+            textUpdated = true;
+          } else if (json.type === "result" && json.result) {
+            accumulatedText = json.result;
+            continue;
+          }
+          if (textUpdated) {
+            broadcast({
+              type: "chat.streaming.chunk",
+              repoId: session.repoId,
+              data: { sessionId: input.sessionId, accumulated: accumulatedText },
+            });
+          }
+        } catch {
+          // Fallback
+          accumulatedText += line;
+        }
+      }
+    } else {
+      // Planning mode: plain text output
+      accumulatedText += data.toString();
+    }
   });
 
   claudeProcess.stderr.on("data", (data: Buffer) => {
@@ -387,7 +527,7 @@ chatRouter.post("/send", async (c) => {
   claudeProcess.on("close", async (code) => {
     const finishedAt = new Date().toISOString();
     const status = code === 0 ? "success" : "failed";
-    let assistantContent = stdout.trim() || "Claude execution failed. Please try again.";
+    let assistantContent = accumulatedText.trim() || "Claude execution failed. Please try again.";
 
     // Update agent run
     await db
@@ -419,6 +559,13 @@ chatRouter.post("/send", async (c) => {
         .update(schema.chatSessions)
         .set({ lastUsedAt: finishedAt, updatedAt: finishedAt })
         .where(eq(schema.chatSessions.id, input.sessionId));
+
+      // Broadcast streaming end
+      broadcast({
+        type: "chat.streaming.end",
+        repoId: session.repoId,
+        data: { sessionId: input.sessionId, message: toMessage(assistantMsg) },
+      });
 
       // Broadcast assistant message
       broadcast({
@@ -469,6 +616,13 @@ chatRouter.post("/send", async (c) => {
 
     const assistantMsg = assistantMsgResult[0];
     if (assistantMsg) {
+      // Broadcast streaming end
+      broadcast({
+        type: "chat.streaming.end",
+        repoId: session.repoId,
+        data: { sessionId: input.sessionId, message: toMessage(assistantMsg) },
+      });
+
       broadcast({
         type: "chat.message",
         repoId: session.repoId,
@@ -630,7 +784,7 @@ const PLANNING_SYSTEM_PROMPT = `あなたはプロジェクト計画のアシス
 タスクを提案する際は、必ず以下の形式を使ってください：
 
 <<TASK>>
-{"label": "タスク名", "description": "タスクの説明", "parent": "親タスク名（任意）", "branch": "【ブランチ命名規則に従ったブランチ名】"}
+{"label": "タスク名", "description": "タスクの説明", "parent": "親タスク名（任意）", "branch": "【ブランチ命名規則に従ったブランチ名】", "issue": "関連するGitHub IssueのURL（任意）"}
 <</TASK>>
 
 ### フィールド説明：
@@ -638,12 +792,14 @@ const PLANNING_SYSTEM_PROMPT = `あなたはプロジェクト計画のアシス
 - description: タスクの説明、完了条件など（必須）
 - parent: このタスクの親となるタスク名。親子関係がある場合に指定（任意）
 - branch: **必須。下記の「ブランチ命名規則」セクションで指定されたパターンに完全に従うこと。feature/ や feat/ などのデフォルトパターンは使用禁止。**
+- issue: このタスクに関連するGitHub IssueのURL（任意）。共有されたリンクにGitHub Issueがあれば紐づける。
 
 ## 注意点
 - 1つのメッセージで複数のタスクを提案してOK
 - タスクは具体的に、1〜2日で完了できる粒度に
 - 関連するタスクは親子関係を設定する
 - **ブランチ名は必ず「ブランチ命名規則」セクションのパターンに従うこと**
+- GitHub Issueが共有されている場合、関連するタスクにissueフィールドでURLを紐づける
 - ユーザーがブランチ名の変更を依頼したら、新しいタスク提案で修正版を提示する
 - ユーザーが情報を共有したら、まず内容を理解・整理してから質問やタスク提案を行う
 `;
@@ -849,9 +1005,28 @@ Task Instructionの変更を提案する場合は、以下のフォーマット�
 
 ユーザーが「Commit」ボタンを押すと、この内容がTask Instructionに反映されます。
 
+### Execution権限のリクエスト【重要】
+Planningモードでは**ファイルの作成・編集・コード実行はできません**。
+以下の操作が必要な場合は、必ずPERMISSION_REQUESTフォーマットを使用してください：
+
+- ファイルを作成する
+- コードを書く・編集する
+- gitコマンドを実行する
+- PRを作成する
+- その他、実際の変更を伴う操作
+
+**フォーマット（必ずこの形式を使用）：**
+<<PERMISSION_REQUEST>>
+{"action": "switch_to_execution", "reason": "〇〇を作成/実装するため"}
+<</PERMISSION_REQUEST>>
+
+このフォーマットを使うと、ユーザーに「許可してExecutionモードに切り替え」ボタンが表示されます。
+ボタンをクリックすると、Executionモードに切り替わり、実装を進められます。
+
 ### 注意点
-- 編集提案は1つのメッセージに1つまで
-- 既存の内容を踏まえて改善する
+- Planningモードでは計画・相談のみ。実際の変更はExecutionモードで行う
+- ファイル操作が必要になったら、すぐにPERMISSION_REQUESTを使用する
+- 編集提案（INSTRUCTION_EDIT）は1つのメッセージに1つまで
 - 具体的で実行可能な指示にする
 `);
     } else {
@@ -984,25 +1159,28 @@ function fetchGitHubPRInfo(repoId: string, prNumber: number): {
     ).trim();
     const data = JSON.parse(result);
 
-    // Extract individual checks
-    const checks: GitHubCheck[] = [];
+    // Extract individual checks - deduplicate by name, keeping only the latest
+    const checksMap = new Map<string, GitHubCheck>();
     let checksStatus = "pending";
     if (data.statusCheckRollup && data.statusCheckRollup.length > 0) {
       for (const c of data.statusCheckRollup) {
-        checks.push({
-          name: c.name || c.context || "Unknown",
+        const name = c.name || c.context || "Unknown";
+        checksMap.set(name, {
+          name,
           status: c.status || "COMPLETED",
           conclusion: c.conclusion || null,
           detailsUrl: c.detailsUrl || c.targetUrl || null,
         });
       }
+      const checks = Array.from(checksMap.values());
       const hasFailure = checks.some((c) =>
         c.conclusion === "FAILURE" || c.conclusion === "ERROR"
       );
-      const allSuccess = checks.every((c) => c.conclusion === "SUCCESS");
+      const allSuccess = checks.every((c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED");
       if (hasFailure) checksStatus = "failure";
       else if (allSuccess) checksStatus = "success";
     }
+    const checks = Array.from(checksMap.values());
 
     // Extract reviewers
     const reviewers: string[] = [];

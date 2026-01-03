@@ -767,6 +767,144 @@ branchRouter.post("/push", async (c) => {
   }
 });
 
+// POST /api/branch/check-deletable - Check if branch can be safely deleted
+branchRouter.post("/check-deletable", async (c) => {
+  const body = await c.req.json();
+  const { localPath: rawLocalPath, branchName, parentBranch } = body;
+
+  if (!rawLocalPath || !branchName) {
+    throw new BadRequestError("localPath and branchName are required");
+  }
+
+  const localPath = expandTilde(rawLocalPath);
+
+  // Verify local path exists
+  if (!existsSync(localPath)) {
+    throw new BadRequestError(`Local path does not exist: ${localPath}`);
+  }
+
+  // Check if branch exists
+  try {
+    const existingBranches = execSync(
+      `cd "${localPath}" && git branch --list "${branchName}"`,
+      { encoding: "utf-8" }
+    ).trim();
+    if (!existingBranches) {
+      return c.json({ deletable: false, reason: "branch_not_found" });
+    }
+  } catch {
+    return c.json({ deletable: false, reason: "check_failed" });
+  }
+
+  // Check if currently on this branch
+  try {
+    const currentBranch = execSync(
+      `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`,
+      { encoding: "utf-8" }
+    ).trim();
+    if (currentBranch === branchName) {
+      return c.json({ deletable: false, reason: "currently_checked_out" });
+    }
+  } catch {
+    // Ignore
+  }
+
+  // Check if branch exists on remote
+  let existsOnRemote = false;
+  try {
+    const remoteRef = execSync(
+      `cd "${localPath}" && git ls-remote --heads origin "${branchName}" 2>/dev/null`,
+      { encoding: "utf-8" }
+    ).trim();
+    existsOnRemote = remoteRef.length > 0;
+  } catch {
+    // If command fails, assume not on remote
+  }
+
+  if (existsOnRemote) {
+    return c.json({ deletable: false, reason: "pushed_to_remote" });
+  }
+
+  // Check if branch has commits beyond parent
+  // Find the parent branch from edges or use default
+  let actualParent = parentBranch;
+  if (!actualParent) {
+    // Try to find parent from tree spec edges
+    const repoId = getRepoId(localPath);
+    if (repoId) {
+      try {
+        const treeSpecs = await db
+          .select()
+          .from(schema.treeSpecs)
+          .where(eq(schema.treeSpecs.repoId, repoId));
+
+        for (const spec of treeSpecs) {
+          const specJson = JSON.parse(spec.specJson) as {
+            nodes: unknown[];
+            edges: Array<{ parent: string; child: string }>;
+          };
+          const parentEdge = specJson.edges.find((e) => e.child === branchName);
+          if (parentEdge) {
+            actualParent = parentEdge.parent;
+            break;
+          }
+        }
+
+        // If no parent found, use base branch
+        if (!actualParent && treeSpecs.length > 0 && treeSpecs[0]) {
+          actualParent = treeSpecs[0].baseBranch;
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
+    // Fallback to main/master
+    if (!actualParent) {
+      try {
+        // Try main first
+        const mainExists = execSync(
+          `cd "${localPath}" && git rev-parse --verify main 2>/dev/null`,
+          { encoding: "utf-8" }
+        ).trim();
+        if (mainExists) {
+          actualParent = "main";
+        }
+      } catch {
+        actualParent = "master";
+      }
+    }
+  }
+
+  // Check if there are any commits between parent and branch
+  try {
+    const commits = execSync(
+      `cd "${localPath}" && git log "${actualParent}..${branchName}" --oneline 2>/dev/null`,
+      { encoding: "utf-8" }
+    ).trim();
+    if (commits.length > 0) {
+      return c.json({ deletable: false, reason: "has_commits" });
+    }
+  } catch {
+    // If command fails, check against origin version
+    try {
+      const commits = execSync(
+        `cd "${localPath}" && git log "origin/${actualParent}..${branchName}" --oneline 2>/dev/null`,
+        { encoding: "utf-8" }
+      ).trim();
+      if (commits.length > 0) {
+        return c.json({ deletable: false, reason: "has_commits" });
+      }
+    } catch {
+      // If both fail, assume not deletable for safety
+      return c.json({ deletable: false, reason: "check_failed" });
+    }
+  }
+
+  // Branch can be safely deleted
+  return c.json({ deletable: true, reason: null });
+});
+
 // DELETE /api/branch/delete - Delete a branch
 branchRouter.post("/delete", async (c) => {
   const body = await c.req.json();

@@ -17,6 +17,7 @@ interface TaskNode {
   title: string;
   description?: string;
   branchName?: string;
+  issueUrl?: string; // GitHub issue URL
 }
 
 interface TaskEdge {
@@ -360,6 +361,57 @@ planningSessionsRouter.post("/:id/confirm", async (c) => {
         createdAt: now,
         updatedAt: now,
       });
+
+      // Link issue if task has issueUrl
+      if (task.issueUrl) {
+        const issueMatch = task.issueUrl.match(/\/issues\/(\d+)/);
+        if (issueMatch) {
+          const issueNumber = parseInt(issueMatch[1], 10);
+
+          // Check if link already exists
+          const [existingLink] = await db
+            .select()
+            .from(schema.branchLinks)
+            .where(
+              and(
+                eq(schema.branchLinks.repoId, session.repoId),
+                eq(schema.branchLinks.branchName, branchName),
+                eq(schema.branchLinks.linkType, "issue"),
+                eq(schema.branchLinks.number, issueNumber)
+              )
+            )
+            .limit(1);
+
+          if (!existingLink) {
+            // Fetch issue info from GitHub
+            let title: string | null = null;
+            let status: string | null = null;
+            try {
+              const issueResult = execSync(
+                `gh issue view ${issueNumber} --repo "${session.repoId}" --json title,state`,
+                { encoding: "utf-8", timeout: 10000 }
+              ).trim();
+              const issueData = JSON.parse(issueResult);
+              title = issueData.title;
+              status = issueData.state?.toLowerCase();
+            } catch {
+              // Ignore fetch errors
+            }
+
+            await db.insert(schema.branchLinks).values({
+              repoId: session.repoId,
+              branchName,
+              linkType: "issue",
+              url: task.issueUrl,
+              number: issueNumber,
+              title,
+              status,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+        }
+      }
 
       result.success = true;
       taskBranchMap.set(taskId, branchName);

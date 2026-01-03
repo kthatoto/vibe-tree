@@ -489,6 +489,7 @@ export function PlanningPanel({
       title: suggestion.label,
       description: suggestion.description,
       branchName: suggestion.branchName,
+      issueUrl: suggestion.issueUrl,
     };
     const updatedNodes = [...selectedSession.nodes, newNode];
 

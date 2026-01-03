@@ -82,25 +82,29 @@ function fetchGitHubPRInfo(repoId: string, prNumber: number): GitHubPRInfo | nul
     ).trim();
     const data = JSON.parse(result);
 
-    // Extract individual checks
-    const checks: GitHubCheck[] = [];
+    // Extract individual checks - deduplicate by name, keeping only the latest
+    const checksMap = new Map<string, GitHubCheck>();
     let checksStatus = "pending";
     if (data.statusCheckRollup && data.statusCheckRollup.length > 0) {
       for (const c of data.statusCheckRollup) {
-        checks.push({
-          name: c.name || c.context || "Unknown",
+        const name = c.name || c.context || "Unknown";
+        // Later entries in the array are newer, so they overwrite older ones
+        checksMap.set(name, {
+          name,
           status: c.status || "COMPLETED",
           conclusion: c.conclusion || null,
           detailsUrl: c.detailsUrl || c.targetUrl || null,
         });
       }
+      const checks = Array.from(checksMap.values());
       const hasFailure = checks.some((c) =>
         c.conclusion === "FAILURE" || c.conclusion === "ERROR"
       );
-      const allSuccess = checks.every((c) => c.conclusion === "SUCCESS");
+      const allSuccess = checks.every((c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED");
       if (hasFailure) checksStatus = "failure";
       else if (allSuccess) checksStatus = "success";
     }
+    const checks = Array.from(checksMap.values());
 
     // Extract reviewers
     const reviewers: string[] = [];

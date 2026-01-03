@@ -43,7 +43,7 @@ interface LayoutEdge {
 }
 
 const NODE_WIDTH = 220;
-const NODE_HEIGHT = 52; // Taller for 2-line layout (labels + branch name)
+const NODE_HEIGHT = 68; // Taller for multi-line layout (labels + branch name with wrap)
 const TENTATIVE_NODE_HEIGHT = 64;
 const HORIZONTAL_GAP = 40; // Gap between nodes
 const VERTICAL_GAP = 48; // Extra space for worktree labels above and indicators below
@@ -523,7 +523,7 @@ export default function BranchGraph({
                     fontSize: 11,
                     padding: "1px 6px",
                     borderRadius: 3,
-                    background: "transparent",
+                    background: "#14532d",
                     border: "1px solid #22c55e",
                     color: "#4ade80",
                     whiteSpace: "nowrap",
@@ -534,7 +534,7 @@ export default function BranchGraph({
                     fontSize: 11,
                     padding: "1px 6px",
                     borderRadius: 3,
-                    background: "transparent",
+                    background: "#7f1d1d",
                     border: "1px solid #ef4444",
                     color: "#f87171",
                     whiteSpace: "nowrap",
@@ -545,7 +545,7 @@ export default function BranchGraph({
                     fontSize: 11,
                     padding: "1px 6px",
                     borderRadius: 3,
-                    background: "transparent",
+                    background: "#78350f",
                     border: "1px solid #f59e0b",
                     color: "#fbbf24",
                     whiteSpace: "nowrap",
@@ -571,10 +571,10 @@ export default function BranchGraph({
                 fontFamily: isTentative ? "sans-serif" : "monospace",
                 fontWeight: isDefault ? "bold" : isTentative ? 500 : "normal",
                 color: isTentative ? "#c084fc" : isMerged ? "#9ca3af" : "#e5e7eb",
-                lineHeight: 1.2,
+                lineHeight: 1.3,
                 overflow: "hidden",
                 display: "-webkit-box",
-                WebkitLineClamp: 2,
+                WebkitLineClamp: 3,
                 WebkitBoxOrient: "vertical" as const,
                 wordBreak: "break-all",
               }}

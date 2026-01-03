@@ -6,6 +6,10 @@ import {
   removeInstructionEditTags,
   computeSimpleDiff,
 } from "../lib/instruction-parser";
+import {
+  extractPermissionRequests,
+  removePermissionTags,
+} from "../lib/permission-parser";
 import { linkifyPreContent } from "../lib/linkify";
 import "./TaskDetailPanel.css";
 
@@ -45,6 +49,8 @@ export function TaskDetailPanel({
   const [chatMode, setChatMode] = useState<"execution" | "planning">("planning");
   // Track instruction edit statuses (loaded from DB + local updates)
   const [editStatuses, setEditStatuses] = useState<Map<number, InstructionEditStatus>>(new Map());
+  // Track granted permission requests (message ID -> granted)
+  const [grantedPermissions, setGrantedPermissions] = useState<Set<number>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // Streaming state
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
@@ -83,6 +89,9 @@ export function TaskDetailPanel({
   const [showPushModal, setShowPushModal] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [pushing, setPushing] = useState(false);
+
+  // Deletable branch check (no commits + not on remote)
+  const [isDeletable, setIsDeletable] = useState(false);
 
   // The working path is either the worktree path or localPath if checked out
   const workingPath = worktreePath || (checkedOut ? localPath : null);
@@ -137,6 +146,24 @@ export function TaskDetailPanel({
     };
     loadBranchLinks();
   }, [repoId, branchName]);
+
+  // Check if branch is deletable (no commits + not on remote)
+  useEffect(() => {
+    const checkDeletable = async () => {
+      if (isDefaultBranch) {
+        setIsDeletable(false);
+        return;
+      }
+      try {
+        const result = await api.checkBranchDeletable(localPath, branchName, parentBranch);
+        setIsDeletable(result.deletable);
+      } catch (err) {
+        console.error("Failed to check branch deletable:", err);
+        setIsDeletable(false);
+      }
+    };
+    checkDeletable();
+  }, [localPath, branchName, parentBranch, isDefaultBranch]);
 
   // Poll CI status for PRs every 30 seconds
   useEffect(() => {
@@ -209,6 +236,15 @@ export function TaskDetailPanel({
             }
           }
           setEditStatuses(statuses);
+          // Check if there's a running chat to restore Thinking state
+          try {
+            const { isRunning } = await api.checkChatRunning(existing.id);
+            if (isRunning) {
+              setChatLoading(true);
+            }
+          } catch (err) {
+            console.error("Failed to check running chat:", err);
+          }
         } else {
           // Create new session for this branch
           const newSession = await api.createChatSession(repoId, effectivePath, branchName);
@@ -678,6 +714,16 @@ export function TaskDetailPanel({
                   </button>
                 </span>
               )}
+              {isDeletable && !isMerged && (
+                <span className="task-detail-panel__tooltip-wrapper" data-tooltip="Checkout another branch first">
+                  <button
+                    className="task-detail-panel__delete-btn"
+                    disabled
+                  >
+                    Delete Empty Branch
+                  </button>
+                </span>
+              )}
             </div>
           </div>
         ) : (
@@ -714,6 +760,15 @@ export function TaskDetailPanel({
                 disabled={deleting}
               >
                 {deleting ? "Deleting..." : "Delete Branch"}
+              </button>
+            )}
+            {isDeletable && !isMerged && (
+              <button
+                className="task-detail-panel__delete-btn task-detail-panel__delete-btn--empty"
+                onClick={() => setShowDeleteBranchModal(true)}
+                disabled={deleting}
+              >
+                {deleting ? "Deleting..." : "Delete Empty Branch"}
               </button>
             )}
           </div>
@@ -835,7 +890,7 @@ export function TaskDetailPanel({
           const labels: GitHubLabel[] = pr.labels ? ((): GitHubLabel[] => { try { const parsed = JSON.parse(pr.labels!); return Array.isArray(parsed) ? parsed.map((l: string | GitHubLabel) => typeof l === 'string' ? { name: l, color: '374151' } : l) : [] } catch { return [] } })() : [];
           const reviewers = pr.reviewers ? ((): string[] => { try { return JSON.parse(pr.reviewers!) } catch { return [] } })() : [];
           const checks: GitHubCheck[] = pr.checks ? ((): GitHubCheck[] => { try { return JSON.parse(pr.checks!) } catch { return [] } })() : [];
-          const passedChecks = checks.filter((c) => c.conclusion === "SUCCESS").length;
+          const passedChecks = checks.filter((c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED").length;
           const totalChecks = checks.length;
           // Helper to get contrasting text color
           const getTextColor = (bgColor: string) => {
@@ -1002,9 +1057,14 @@ export function TaskDetailPanel({
             )}
             {messages.map((msg) => {
               const instructionEdit = msg.role === "assistant" ? extractInstructionEdit(msg.content) : null;
-              const displayContent = instructionEdit ? removeInstructionEditTags(msg.content) : msg.content;
+              const permissionRequests = msg.role === "assistant" ? extractPermissionRequests(msg.content) : [];
+              let displayContent = msg.content;
+              if (instructionEdit) displayContent = removeInstructionEditTags(displayContent);
+              if (permissionRequests.length > 0) displayContent = removePermissionTags(displayContent);
               const editStatus = editStatuses.get(msg.id);
               const msgMode = msg.chatMode || "planning"; // Fallback to planning for old messages
+              const hasExecutionRequest = permissionRequests.some(p => p.action === "switch_to_execution");
+              const isPermissionGranted = grantedPermissions.has(msg.id);
 
               return (
                 <div
@@ -1016,6 +1076,56 @@ export function TaskDetailPanel({
                   </div>
                   <div className="task-detail-panel__message-content">
                     {displayContent && <pre>{linkifyPreContent(displayContent)}</pre>}
+                    {hasExecutionRequest && !isPermissionGranted && workingPath && !isMerged && (
+                      <div className="task-detail-panel__permission-request">
+                        <span className="task-detail-panel__permission-text">
+                          Execution権限が必要です
+                        </span>
+                        <button
+                          className="task-detail-panel__permission-grant-btn"
+                          onClick={async () => {
+                            setGrantedPermissions(prev => new Set(prev).add(msg.id));
+                            setChatMode("execution");
+                            // Send continuation message in execution mode
+                            if (chatSessionId && !chatLoading) {
+                              setChatLoading(true);
+                              const continueMessage = "Execution権限を許可しました。実装を進めてください。";
+                              const tempId = Date.now();
+                              const tempUserMsg: ChatMessage = {
+                                id: tempId,
+                                sessionId: chatSessionId,
+                                role: "user",
+                                content: continueMessage,
+                                chatMode: "execution",
+                                createdAt: new Date().toISOString(),
+                              };
+                              setMessages((prev) => [...prev, tempUserMsg]);
+                              try {
+                                const context = instruction?.instructionMd
+                                  ? `[Task Instruction]\n${instruction.instructionMd}\n\n[Mode: execution]`
+                                  : `[Mode: execution]`;
+                                const result = await api.sendChatMessage(chatSessionId, continueMessage, context, "execution");
+                                setMessages((prev) =>
+                                  prev.map((m) => (m.id === tempId ? result.userMessage : m))
+                                );
+                              } catch (err) {
+                                setError((err as Error).message);
+                                setMessages((prev) => prev.filter((m) => m.id !== tempId));
+                                setChatLoading(false);
+                              }
+                            }
+                          }}
+                          disabled={chatLoading}
+                        >
+                          {chatLoading ? "処理中..." : "許可してExecutionモードに切り替え"}
+                        </button>
+                      </div>
+                    )}
+                    {hasExecutionRequest && isPermissionGranted && (
+                      <div className="task-detail-panel__permission-granted">
+                        ✓ Execution権限を許可しました
+                      </div>
+                    )}
                     {instructionEdit && (
                       <div className={`task-detail-panel__instruction-edit-proposal ${editStatus === "rejected" ? "task-detail-panel__instruction-edit-proposal--rejected" : ""}`}>
                         <div className="task-detail-panel__diff-header">
@@ -1068,8 +1178,23 @@ export function TaskDetailPanel({
             {(chatLoading || streamingContent !== null) && (
               <div className="task-detail-panel__message task-detail-panel__message--loading">
                 <div className="task-detail-panel__message-role">
-                  ASSISTANT - {(streamingMode || chatMode) === "planning" ? "Planning" : "Execution"}
-                  {streamingContent !== null && <span className="task-detail-panel__streaming-indicator"> (Streaming...)</span>}
+                  <span>ASSISTANT - {(streamingMode || chatMode) === "planning" ? "Planning" : "Execution"}</span>
+                  <button
+                    className="task-detail-panel__cancel-btn"
+                    onClick={async () => {
+                      if (chatSessionId) {
+                        try {
+                          await api.cancelChat(chatSessionId);
+                          setChatLoading(false);
+                          setStreamingContent(null);
+                        } catch (err) {
+                          console.error("Failed to cancel:", err);
+                        }
+                      }
+                    }}
+                  >
+                    Cancel
+                  </button>
                 </div>
                 <div className="task-detail-panel__message-content">
                   {streamingContent !== null && streamingContent.length > 0 ? (
@@ -1152,7 +1277,7 @@ export function TaskDetailPanel({
                         className="task-detail-panel__ci-item task-detail-panel__ci-item--link"
                       >
                         <span className={`task-detail-panel__ci-status task-detail-panel__ci-status--${check.conclusion?.toLowerCase() || "pending"}`}>
-                          {check.conclusion === "SUCCESS" ? "✓" : check.conclusion === "FAILURE" || check.conclusion === "ERROR" ? "✗" : "●"}
+                          {check.conclusion === "SUCCESS" ? "✓" : check.conclusion === "FAILURE" || check.conclusion === "ERROR" ? "✗" : check.conclusion === "SKIPPED" ? "⊘" : "●"}
                         </span>
                         <span className="task-detail-panel__ci-name">{check.name}</span>
                         <span className="task-detail-panel__ci-link-icon">↗</span>
@@ -1160,7 +1285,7 @@ export function TaskDetailPanel({
                     ) : (
                       <div key={i} className="task-detail-panel__ci-item">
                         <span className={`task-detail-panel__ci-status task-detail-panel__ci-status--${check.conclusion?.toLowerCase() || "pending"}`}>
-                          {check.conclusion === "SUCCESS" ? "✓" : check.conclusion === "FAILURE" || check.conclusion === "ERROR" ? "✗" : "●"}
+                          {check.conclusion === "SUCCESS" ? "✓" : check.conclusion === "FAILURE" || check.conclusion === "ERROR" ? "✗" : check.conclusion === "SKIPPED" ? "⊘" : "●"}
                         </span>
                         <span className="task-detail-panel__ci-name">{check.name}</span>
                       </div>
@@ -1203,7 +1328,11 @@ export function TaskDetailPanel({
           <div className="task-detail-panel__modal task-detail-panel__modal--delete" onClick={(e) => e.stopPropagation()}>
             <h4>ブランチを削除しますか？</h4>
             <p className="task-detail-panel__modal-branch-name">{branchName}</p>
-            <p className="task-detail-panel__modal-warning">ローカルとリモートの両方から削除されます。この操作は取り消せません。</p>
+            {isDeletable && !isMerged ? (
+              <p className="task-detail-panel__modal-info">このブランチにはコミットがなく、リモートにもプッシュされていません。</p>
+            ) : (
+              <p className="task-detail-panel__modal-warning">ローカルとリモートの両方から削除されます。この操作は取り消せません。</p>
+            )}
             <div className="task-detail-panel__modal-actions">
               <button
                 className="task-detail-panel__modal-cancel"

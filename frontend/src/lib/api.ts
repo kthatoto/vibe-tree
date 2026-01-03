@@ -753,6 +753,16 @@ export const api = {
       }
     ),
 
+  // Pull
+  pull: (localPath: string, branchName: string, worktreePath?: string) =>
+    fetchJson<{ success: boolean; branchName: string; output: string }>(
+      `${API_BASE}/branch/pull`,
+      {
+        method: "POST",
+        body: JSON.stringify({ localPath, branchName, worktreePath }),
+      }
+    ),
+
   // Branch Links
   getBranchLinks: (repoId: string, branchName: string) =>
     fetchJson<BranchLink[]>(

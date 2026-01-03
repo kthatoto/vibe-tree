@@ -409,3 +409,79 @@ branchRouter.post("/checkout", async (c) => {
     branchName,
   });
 });
+
+// POST /api/branch/pull - Pull latest changes for a branch
+branchRouter.post("/pull", async (c) => {
+  const body = await c.req.json();
+  const { localPath: rawLocalPath, branchName, worktreePath: rawWorktreePath } = body;
+
+  if (!rawLocalPath || !branchName) {
+    throw new BadRequestError("localPath and branchName are required");
+  }
+
+  const localPath = expandTilde(rawLocalPath);
+  const worktreePath = rawWorktreePath ? expandTilde(rawWorktreePath) : null;
+
+  // Verify local path exists
+  if (!existsSync(localPath)) {
+    throw new BadRequestError(`Local path does not exist: ${localPath}`);
+  }
+
+  // Determine which path to use for pull
+  let pullPath: string | null = null;
+
+  if (worktreePath && existsSync(worktreePath)) {
+    // Use worktree path directly
+    pullPath = worktreePath;
+  } else {
+    // Check if the main repo is on this branch
+    try {
+      const currentBranch = execSync(
+        `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`,
+        { encoding: "utf-8" }
+      ).trim();
+      if (currentBranch === branchName) {
+        pullPath = localPath;
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  if (!pullPath) {
+    throw new BadRequestError(
+      `Cannot pull: branch "${branchName}" is not checked out. Please checkout the branch first.`
+    );
+  }
+
+  // Check for uncommitted changes
+  try {
+    const status = execSync(
+      `cd "${pullPath}" && git status --porcelain`,
+      { encoding: "utf-8" }
+    ).trim();
+    if (status) {
+      throw new BadRequestError(
+        "Cannot pull: you have uncommitted changes. Please commit or stash them first."
+      );
+    }
+  } catch (err) {
+    if (err instanceof BadRequestError) throw err;
+    throw new BadRequestError(`Failed to check git status: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Pull
+  try {
+    const output = execSync(
+      `cd "${pullPath}" && git pull`,
+      { encoding: "utf-8", timeout: 30000 }
+    );
+    return c.json({
+      success: true,
+      branchName,
+      output: output.trim(),
+    });
+  } catch (err) {
+    throw new BadRequestError(`Failed to pull: ${err instanceof Error ? err.message : String(err)}`);
+  }
+});

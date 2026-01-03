@@ -14,6 +14,10 @@ interface BranchGraphProps {
   // Edge creation - only works when editMode is true
   editMode?: boolean;
   onEdgeCreate?: (parentBranch: string, childBranch: string) => void;
+  // Pull functionality
+  localPath?: string;
+  onPull?: (branchName: string, worktreePath?: string) => void;
+  pullingBranch?: string | null;
 }
 
 interface DragState {
@@ -74,6 +78,8 @@ export default function BranchGraph({
   tentativeBaseBranch,
   editMode = false,
   onEdgeCreate,
+  onPull,
+  pullingBranch,
 }: BranchGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -650,53 +656,85 @@ export default function BranchGraph({
           </g>
         )}
 
-        {/* Remote ahead/behind indicator (vs origin) - shown with cloud icon or different position */}
+        {/* Remote ahead/behind indicator (vs origin) - shown above node */}
         {node.remoteAheadBehind && (node.remoteAheadBehind.ahead > 0 || node.remoteAheadBehind.behind > 0) && (
           <g>
             {node.remoteAheadBehind.ahead > 0 && (
               <>
                 <rect
-                  x={x - 28}
-                  y={y + nodeHeight / 2 - 7}
-                  width={24}
+                  x={x + NODE_WIDTH / 2 - 24}
+                  y={y - 18}
+                  width={22}
                   height={14}
                   rx={3}
                   fill="#3b82f6"
                 />
                 <text
-                  x={x - 16}
-                  y={y + nodeHeight / 2 + 1}
+                  x={x + NODE_WIDTH / 2 - 13}
+                  y={y - 10}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   fontSize={9}
                   fill="white"
                   fontWeight="bold"
                 >
-                  ↑{node.remoteAheadBehind.ahead}
+                  +{node.remoteAheadBehind.ahead}
                 </text>
               </>
             )}
             {node.remoteAheadBehind.behind > 0 && (
               <>
                 <rect
-                  x={x - 28}
-                  y={y + nodeHeight / 2 + (node.remoteAheadBehind.ahead > 0 ? 9 : -7)}
-                  width={24}
+                  x={x + NODE_WIDTH / 2 + 2}
+                  y={y - 18}
+                  width={22}
                   height={14}
                   rx={3}
                   fill="#f59e0b"
                 />
                 <text
-                  x={x - 16}
-                  y={y + nodeHeight / 2 + (node.remoteAheadBehind.ahead > 0 ? 17 : 1)}
+                  x={x + NODE_WIDTH / 2 + 13}
+                  y={y - 10}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   fontSize={9}
                   fill="white"
                   fontWeight="bold"
                 >
-                  ↓{node.remoteAheadBehind.behind}
+                  -{node.remoteAheadBehind.behind}
                 </text>
+                {/* Pull button - only show if worktree exists or is default branch */}
+                {onPull && (node.worktree || isDefault) && (
+                  <g
+                    style={{ cursor: pullingBranch === node.branchName ? "wait" : "pointer" }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (pullingBranch !== node.branchName) {
+                        onPull(node.branchName, node.worktree?.path);
+                      }
+                    }}
+                  >
+                    <rect
+                      x={x + NODE_WIDTH / 2 + 26}
+                      y={y - 18}
+                      width={28}
+                      height={14}
+                      rx={3}
+                      fill={pullingBranch === node.branchName ? "#6b7280" : "#10b981"}
+                    />
+                    <text
+                      x={x + NODE_WIDTH / 2 + 40}
+                      y={y - 10}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize={8}
+                      fill="white"
+                      fontWeight="bold"
+                    >
+                      {pullingBranch === node.branchName ? "..." : "Pull"}
+                    </text>
+                  </g>
+                )}
               </>
             )}
           </g>

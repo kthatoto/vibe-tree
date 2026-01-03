@@ -458,6 +458,32 @@ export function TaskDetailPanel({
           <h3>{branchName}</h3>
           <button onClick={onClose} className="task-detail-panel__close">x</button>
         </div>
+
+        {error && <div className="task-detail-panel__error">{error}</div>}
+
+        {/* Working Path Section - checkout available for default branch too */}
+        <div className="task-detail-panel__worktree-section">
+          {worktreePath ? (
+            <div className="task-detail-panel__worktree-info">
+              <span className="task-detail-panel__worktree-badge">Active</span>
+            </div>
+          ) : checkedOut ? (
+            <div className="task-detail-panel__worktree-info">
+              <span className="task-detail-panel__worktree-badge task-detail-panel__worktree-badge--checkout">Checked Out</span>
+            </div>
+          ) : (
+            <div className="task-detail-panel__branch-actions">
+              <button
+                className="task-detail-panel__checkout-btn"
+                onClick={handleCheckout}
+                disabled={checkingOut}
+              >
+                {checkingOut ? "Checking out..." : "Checkout"}
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="task-detail-panel__default-branch">
           <span className="task-detail-panel__default-branch-badge">Default Branch</span>
           <p>This is the default branch. Task planning and execution are not available here.</p>

@@ -47,7 +47,7 @@ const NODE_HEIGHT = 40;
 const TENTATIVE_NODE_HEIGHT = 52;
 const HORIZONTAL_GAP = 32;
 const VERTICAL_GAP = 28;
-const PADDING = 20;
+const PADDING = 70; // Increased to accommodate worktree indicator on left
 
 // Badge colors
 const CI_COLORS: Record<string, string> = {
@@ -513,14 +513,31 @@ export default function BranchGraph({
           </div>
         </foreignObject>
 
-        {/* Status indicators on right side */}
+        {/* Worktree indicator on left side */}
         {hasWorktree && (
-          <circle
-            cx={x + NODE_WIDTH - 12}
-            cy={y + nodeHeight / 2}
-            r={5}
-            fill={node.worktree?.isActive ? "#4caf50" : "#9e9e9e"}
-          />
+          <g>
+            <rect
+              x={x - 52}
+              y={y + nodeHeight / 2 - 8}
+              width={48}
+              height={16}
+              rx={3}
+              fill={node.worktree?.isActive ? "#14532d" : "#1e293b"}
+              stroke={node.worktree?.isActive ? "#22c55e" : "#64748b"}
+              strokeWidth={1}
+            />
+            <text
+              x={x - 28}
+              y={y + nodeHeight / 2 + 1}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize={9}
+              fill={node.worktree?.isActive ? "#4ade80" : "#94a3b8"}
+              fontWeight="600"
+            >
+              {node.worktree?.isActive ? "● Active" : "Worktree"}
+            </text>
+          </g>
         )}
 
         {hasPR && (

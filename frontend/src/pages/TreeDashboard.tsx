@@ -799,6 +799,31 @@ export default function TreeDashboard() {
           </div>
         )}
 
+        {/* Worktrees */}
+        {snapshot && snapshot.worktrees.length > 0 && (
+          <div className="sidebar__section">
+            <h3>Worktrees</h3>
+            <div className="sidebar__worktrees">
+              {snapshot.worktrees.map((wt) => (
+                <div
+                  key={wt.path}
+                  className={`sidebar__worktree ${selectedNode?.branchName === wt.branch ? "sidebar__worktree--selected" : ""}`}
+                  onClick={() => {
+                    const node = snapshot.nodes.find((n) => n.branchName === wt.branch);
+                    if (node) setSelectedNode(node);
+                  }}
+                >
+                  <div className="sidebar__worktree-branch">
+                    {wt.branch || "(detached)"}
+                    {wt.dirty && <span className="sidebar__worktree-dirty">●</span>}
+                  </div>
+                  <div className="sidebar__worktree-path">{wt.path.split("/").pop()}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Warnings */}
         {snapshot && snapshot.warnings.length > 0 && (
           <div className="sidebar__section">
@@ -1329,12 +1354,21 @@ export default function TreeDashboard() {
         }
         .sidebar__worktree {
           display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 6px 10px;
-          background: #0f172a;
-          border-radius: 4px;
+          flex-direction: column;
+          padding: 8px 10px;
+          background: #1e293b;
+          border-radius: 6px;
           font-size: 12px;
+          cursor: pointer;
+          border: 1px solid transparent;
+          transition: all 0.15s;
+        }
+        .sidebar__worktree:hover {
+          background: #334155;
+        }
+        .sidebar__worktree--selected {
+          background: #1e3a5f;
+          border-color: #3b82f6;
         }
         .sidebar__worktree--active {
           background: #14532d;
@@ -1342,9 +1376,22 @@ export default function TreeDashboard() {
         }
         .sidebar__worktree-branch {
           font-family: monospace;
+          font-weight: 600;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .sidebar__worktree-dirty {
+          color: #f59e0b;
+          font-size: 8px;
+        }
+        .sidebar__worktree-path {
+          font-size: 10px;
+          color: #9ca3af;
+          margin-top: 2px;
         }
         .sidebar__worktree-terminal {
           padding: 2px 8px;

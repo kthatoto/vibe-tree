@@ -14,10 +14,6 @@ interface BranchGraphProps {
   // Edge creation - only works when editMode is true
   editMode?: boolean;
   onEdgeCreate?: (parentBranch: string, childBranch: string) => void;
-  // Pull functionality
-  localPath?: string;
-  onPull?: (branchName: string, worktreePath?: string) => void;
-  pullingBranch?: string | null;
 }
 
 interface DragState {
@@ -78,8 +74,6 @@ export default function BranchGraph({
   tentativeBaseBranch,
   editMode = false,
   onEdgeCreate,
-  onPull,
-  pullingBranch,
 }: BranchGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -657,13 +651,17 @@ export default function BranchGraph({
         )}
 
         {/* Remote ahead/behind indicator (vs origin) - shown below local indicators */}
-        {node.remoteAheadBehind && (node.remoteAheadBehind.ahead > 0 || node.remoteAheadBehind.behind > 0) && (
+        {node.remoteAheadBehind && (node.remoteAheadBehind.ahead > 0 || node.remoteAheadBehind.behind > 0) && (() => {
+          // Position below local indicators if they exist, otherwise directly below node
+          const hasLocalIndicator = node.aheadBehind && (node.aheadBehind.ahead > 0 || node.aheadBehind.behind > 0);
+          const remoteY = y + nodeHeight + (hasLocalIndicator ? 22 : 4);
+          return (
           <g>
             {node.remoteAheadBehind.ahead > 0 && (
               <>
                 <rect
                   x={x + NODE_WIDTH / 2 - 24}
-                  y={y + nodeHeight + 22}
+                  y={remoteY}
                   width={22}
                   height={14}
                   rx={3}
@@ -671,7 +669,7 @@ export default function BranchGraph({
                 />
                 <text
                   x={x + NODE_WIDTH / 2 - 13}
-                  y={y + nodeHeight + 30}
+                  y={remoteY + 8}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   fontSize={9}
@@ -686,7 +684,7 @@ export default function BranchGraph({
               <>
                 <rect
                   x={x + NODE_WIDTH / 2 + 2}
-                  y={y + nodeHeight + 22}
+                  y={remoteY}
                   width={22}
                   height={14}
                   rx={3}
@@ -694,7 +692,7 @@ export default function BranchGraph({
                 />
                 <text
                   x={x + NODE_WIDTH / 2 + 13}
-                  y={y + nodeHeight + 30}
+                  y={remoteY + 8}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   fontSize={9}
@@ -703,42 +701,11 @@ export default function BranchGraph({
                 >
                   ↓{node.remoteAheadBehind.behind}
                 </text>
-                {/* Pull button - works for any branch via fast-forward fetch */}
-                {onPull && (
-                  <g
-                    style={{ cursor: pullingBranch === node.branchName ? "wait" : "pointer" }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (pullingBranch !== node.branchName) {
-                        onPull(node.branchName, node.worktree?.path);
-                      }
-                    }}
-                  >
-                    <rect
-                      x={x + NODE_WIDTH / 2 + 26}
-                      y={y + nodeHeight + 22}
-                      width={28}
-                      height={14}
-                      rx={3}
-                      fill={pullingBranch === node.branchName ? "#6b7280" : "#10b981"}
-                    />
-                    <text
-                      x={x + NODE_WIDTH / 2 + 40}
-                      y={y + nodeHeight + 30}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fontSize={8}
-                      fill="white"
-                      fontWeight="bold"
-                    >
-                      {pullingBranch === node.branchName ? "..." : "Pull"}
-                    </text>
-                  </g>
-                )}
               </>
             )}
           </g>
-        )}
+          );
+        })()}
 
         {/* Drag handle (left side) - only in edit mode for non-default, non-tentative nodes */}
         {editMode && !isTentative && !isDefault && onEdgeCreate && (

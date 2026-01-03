@@ -181,6 +181,27 @@
   cursor: not-allowed;
 }
 
+.task-detail-panel__pull-btn {
+  padding: 4px 12px;
+  background: #f59e0b;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.task-detail-panel__pull-btn:hover:not(:disabled) {
+  background: #d97706;
+}
+
+.task-detail-panel__pull-btn:disabled {
+  background: #4b5563;
+  cursor: not-allowed;
+}
+
 /* Branch Links Section */
 .task-detail-panel__links-section {
   padding: 8px 16px;

@@ -70,7 +70,6 @@ export default function TreeDashboard() {
 
   // Fetch state
   const [fetching, setFetching] = useState(false);
-  const [pullingBranch, setPullingBranch] = useState<string | null>(null);
   const [originalTreeSpecEdges, setOriginalTreeSpecEdges] = useState<TreeSpecEdge[] | null>(null);
 
   // Settings modal state
@@ -133,22 +132,6 @@ export default function TreeDashboard() {
       setFetching(false);
     }
   }, []);
-
-  const handlePull = useCallback(async (branchName: string, worktreePath?: string) => {
-    if (!selectedPin) return;
-    setPullingBranch(branchName);
-    setError(null);
-    try {
-      await api.pull(selectedPin.localPath, branchName, worktreePath);
-      // Rescan after pull to update the view
-      const result = await api.scan(selectedPin.localPath);
-      setSnapshot(result);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setPullingBranch(null);
-    }
-  }, [selectedPin]);
 
   // Auto-scan when pin is selected
   useEffect(() => {
@@ -958,8 +941,6 @@ export default function TreeDashboard() {
                       }
                     }}
                     tentativeBaseBranch={selectedPlanningSession?.baseBranch}
-                    onPull={handlePull}
-                    pullingBranch={pullingBranch}
                   />
                 </div>
               </div>

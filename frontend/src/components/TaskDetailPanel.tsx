@@ -307,6 +307,20 @@ export function TaskDetailPanel({
   };
 
   const [checkingOut, setCheckingOut] = useState(false);
+  const [pulling, setPulling] = useState(false);
+
+  const handlePull = async () => {
+    setPulling(true);
+    setError(null);
+    try {
+      await api.pull(localPath, branchName, worktreePath);
+      onWorktreeCreated?.(); // Rescan to update
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setPulling(false);
+    }
+  };
 
   const handleCheckout = async () => {
     setCheckingOut(true);
@@ -466,10 +480,28 @@ export function TaskDetailPanel({
           {worktreePath ? (
             <div className="task-detail-panel__worktree-info">
               <span className="task-detail-panel__worktree-badge">Active</span>
+              {node?.remoteAheadBehind && node.remoteAheadBehind.behind > 0 && (
+                <button
+                  className="task-detail-panel__pull-btn"
+                  onClick={handlePull}
+                  disabled={pulling}
+                >
+                  {pulling ? "Pulling..." : `Pull (↓${node.remoteAheadBehind.behind})`}
+                </button>
+              )}
             </div>
           ) : checkedOut ? (
             <div className="task-detail-panel__worktree-info">
               <span className="task-detail-panel__worktree-badge task-detail-panel__worktree-badge--checkout">Checked Out</span>
+              {node?.remoteAheadBehind && node.remoteAheadBehind.behind > 0 && (
+                <button
+                  className="task-detail-panel__pull-btn"
+                  onClick={handlePull}
+                  disabled={pulling}
+                >
+                  {pulling ? "Pulling..." : `Pull (↓${node.remoteAheadBehind.behind})`}
+                </button>
+              )}
             </div>
           ) : (
             <div className="task-detail-panel__branch-actions">
@@ -480,6 +512,15 @@ export function TaskDetailPanel({
               >
                 {checkingOut ? "Checking out..." : "Checkout"}
               </button>
+              {node?.remoteAheadBehind && node.remoteAheadBehind.behind > 0 && (
+                <button
+                  className="task-detail-panel__pull-btn"
+                  onClick={handlePull}
+                  disabled={pulling}
+                >
+                  {pulling ? "Pulling..." : `Pull (↓${node.remoteAheadBehind.behind})`}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -506,10 +547,28 @@ export function TaskDetailPanel({
         {worktreePath ? (
           <div className="task-detail-panel__worktree-info">
             <span className="task-detail-panel__worktree-badge">Active</span>
+            {node?.remoteAheadBehind && node.remoteAheadBehind.behind > 0 && (
+              <button
+                className="task-detail-panel__pull-btn"
+                onClick={handlePull}
+                disabled={pulling}
+              >
+                {pulling ? "Pulling..." : `Pull (↓${node.remoteAheadBehind.behind})`}
+              </button>
+            )}
           </div>
         ) : checkedOut ? (
           <div className="task-detail-panel__worktree-info">
             <span className="task-detail-panel__worktree-badge task-detail-panel__worktree-badge--checkout">Checked Out</span>
+            {node?.remoteAheadBehind && node.remoteAheadBehind.behind > 0 && (
+              <button
+                className="task-detail-panel__pull-btn"
+                onClick={handlePull}
+                disabled={pulling}
+              >
+                {pulling ? "Pulling..." : `Pull (↓${node.remoteAheadBehind.behind})`}
+              </button>
+            )}
           </div>
         ) : (
           <div className="task-detail-panel__branch-actions">
@@ -527,6 +586,15 @@ export function TaskDetailPanel({
             >
               {creatingWorktree ? "Creating..." : "Create Worktree"}
             </button>
+            {node?.remoteAheadBehind && node.remoteAheadBehind.behind > 0 && (
+              <button
+                className="task-detail-panel__pull-btn"
+                onClick={handlePull}
+                disabled={pulling}
+              >
+                {pulling ? "Pulling..." : `Pull (↓${node.remoteAheadBehind.behind})`}
+              </button>
+            )}
           </div>
         )}
       </div>

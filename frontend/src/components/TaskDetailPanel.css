@@ -1319,3 +1319,32 @@
   background: #78350f;
   color: #fbbf24;
 }
+
+/* Delete Branch Modal */
+.task-detail-panel__modal--delete {
+  max-width: 420px;
+}
+
+.task-detail-panel__modal-branch-name {
+  font-family: monospace;
+  background: #0f172a;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #f87171;
+  word-break: break-all;
+  margin-bottom: 8px;
+}
+
+.task-detail-panel__modal-warning {
+  color: #fbbf24;
+  font-size: 12px;
+}
+
+.task-detail-panel__modal-confirm--danger {
+  background: #dc2626;
+}
+
+.task-detail-panel__modal-confirm--danger:hover {
+  background: #b91c1c;
+}

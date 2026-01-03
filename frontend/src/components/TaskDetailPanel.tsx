@@ -70,6 +70,7 @@ export function TaskDetailPanel({
   const [addingLink, setAddingLink] = useState(false);
   const [showCIModal, setShowCIModal] = useState(false);
   const [refreshingLink, setRefreshingLink] = useState<number | null>(null);
+  const [showDeleteBranchModal, setShowDeleteBranchModal] = useState(false);
 
   // The working path is either the worktree path or localPath if checked out
   const workingPath = worktreePath || (checkedOut ? localPath : null);
@@ -324,9 +325,7 @@ export function TaskDetailPanel({
   };
 
   const handleDelete = async () => {
-    if (!confirm(`Delete branch "${branchName}"? This will also delete the remote branch.`)) {
-      return;
-    }
+    setShowDeleteBranchModal(false);
     setDeleting(true);
     setError(null);
     try {
@@ -577,7 +576,7 @@ export function TaskDetailPanel({
               {isMerged && (
                 <button
                   className="task-detail-panel__delete-btn"
-                  onClick={handleDelete}
+                  onClick={() => setShowDeleteBranchModal(true)}
                   disabled={deleting}
                 >
                   {deleting ? "Deleting..." : "Delete Branch"}
@@ -601,7 +600,7 @@ export function TaskDetailPanel({
               {isMerged && (
                 <button
                   className="task-detail-panel__delete-btn"
-                  onClick={handleDelete}
+                  onClick={() => setShowDeleteBranchModal(true)}
                   disabled={deleting}
                 >
                   {deleting ? "Deleting..." : "Delete Branch"}
@@ -637,7 +636,7 @@ export function TaskDetailPanel({
             {isMerged && (
               <button
                 className="task-detail-panel__delete-btn"
-                onClick={handleDelete}
+                onClick={() => setShowDeleteBranchModal(true)}
                 disabled={deleting}
               >
                 {deleting ? "Deleting..." : "Delete Branch"}
@@ -1095,6 +1094,31 @@ export function TaskDetailPanel({
           </div>
         );
       })()}
+
+      {/* Delete Branch Confirmation Modal */}
+      {showDeleteBranchModal && (
+        <div className="task-detail-panel__modal-overlay" onClick={() => setShowDeleteBranchModal(false)}>
+          <div className="task-detail-panel__modal task-detail-panel__modal--delete" onClick={(e) => e.stopPropagation()}>
+            <h4>ブランチを削除しますか？</h4>
+            <p className="task-detail-panel__modal-branch-name">{branchName}</p>
+            <p className="task-detail-panel__modal-warning">ローカルとリモートの両方から削除されます。この操作は取り消せません。</p>
+            <div className="task-detail-panel__modal-actions">
+              <button
+                className="task-detail-panel__modal-cancel"
+                onClick={() => setShowDeleteBranchModal(false)}
+              >
+                キャンセル
+              </button>
+              <button
+                className="task-detail-panel__modal-confirm task-detail-panel__modal-confirm--danger"
+                onClick={handleDelete}
+              >
+                削除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

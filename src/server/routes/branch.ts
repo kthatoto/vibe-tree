@@ -562,20 +562,27 @@ branchRouter.post("/rebase", async (c) => {
     throw new BadRequestError(`Failed to check git status: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  // First fetch latest from remote
+  // Check if remote branch exists
+  let useRemote = false;
   try {
     execSync(`cd "${rebasePath}" && git fetch origin "${parentBranch}"`, {
       encoding: "utf-8",
       timeout: 30000,
     });
+    // Verify remote ref exists
+    execSync(`cd "${rebasePath}" && git rev-parse "origin/${parentBranch}" 2>/dev/null`, {
+      encoding: "utf-8",
+    });
+    useRemote = true;
   } catch {
-    // Ignore fetch errors - continue with local
+    // Remote doesn't exist, use local branch
   }
 
-  // Rebase
+  // Rebase onto remote or local parent
+  const rebaseTarget = useRemote ? `origin/${parentBranch}` : parentBranch;
   try {
     const output = execSync(
-      `cd "${rebasePath}" && git rebase "origin/${parentBranch}"`,
+      `cd "${rebasePath}" && git rebase "${rebaseTarget}"`,
       { encoding: "utf-8", timeout: 60000 }
     );
     return c.json({
@@ -654,20 +661,27 @@ branchRouter.post("/merge-parent", async (c) => {
     throw new BadRequestError(`Failed to check git status: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  // First fetch latest from remote
+  // Check if remote branch exists
+  let useRemote = false;
   try {
     execSync(`cd "${mergePath}" && git fetch origin "${parentBranch}"`, {
       encoding: "utf-8",
       timeout: 30000,
     });
+    // Verify remote ref exists
+    execSync(`cd "${mergePath}" && git rev-parse "origin/${parentBranch}" 2>/dev/null`, {
+      encoding: "utf-8",
+    });
+    useRemote = true;
   } catch {
-    // Ignore fetch errors - continue with local
+    // Remote doesn't exist, use local branch
   }
 
-  // Merge
+  // Merge remote or local parent
+  const mergeTarget = useRemote ? `origin/${parentBranch}` : parentBranch;
   try {
     const output = execSync(
-      `cd "${mergePath}" && git merge "origin/${parentBranch}" --no-edit`,
+      `cd "${mergePath}" && git merge "${mergeTarget}" --no-edit`,
       { encoding: "utf-8", timeout: 60000 }
     );
     return c.json({

@@ -242,22 +242,6 @@ export function buildTree(
       if (pr.reviewDecision === "CHANGES_REQUESTED") badges.push("changes-requested");
     }
 
-    let aheadBehind: { ahead: number; behind: number } | undefined;
-    if (baseBranch && branch.name !== defaultBranch) {
-      try {
-        const output = execSync(
-          `cd "${repoPath}" && git rev-list --left-right --count ${defaultBranch}...${branch.name}`,
-          { encoding: "utf-8" }
-        );
-        const parts = output.trim().split(/\s+/);
-        const behind = parseInt(parts[0] ?? "0", 10);
-        const ahead = parseInt(parts[1] ?? "0", 10);
-        aheadBehind = { ahead, behind };
-      } catch {
-        // Ignore errors
-      }
-    }
-
     const node: TreeNode = {
       branchName: branch.name,
       badges,
@@ -265,7 +249,6 @@ export function buildTree(
     };
     if (pr) node.pr = pr;
     if (worktree) node.worktree = worktree;
-    if (aheadBehind) node.aheadBehind = aheadBehind;
     nodes.push(node);
 
     if (baseBranch && branch.name !== defaultBranch) {
@@ -279,6 +262,42 @@ export function buildTree(
   }
 
   return { nodes, edges };
+}
+
+/**
+ * Calculate ahead/behind for each node based on its parent in the edges.
+ * This should be called after edges are finalized (including planning session edges).
+ */
+export function calculateAheadBehind(
+  nodes: TreeNode[],
+  edges: TreeEdge[],
+  repoPath: string,
+  defaultBranch: string
+): void {
+  // Build a map of child -> parent from edges
+  const parentMap = new Map<string, string>();
+  for (const edge of edges) {
+    parentMap.set(edge.child, edge.parent);
+  }
+
+  for (const node of nodes) {
+    if (node.branchName === defaultBranch) continue;
+
+    const parentBranch = parentMap.get(node.branchName) || defaultBranch;
+
+    try {
+      const output = execSync(
+        `cd "${repoPath}" && git rev-list --left-right --count "${parentBranch}"..."${node.branchName}"`,
+        { encoding: "utf-8" }
+      );
+      const parts = output.trim().split(/\s+/);
+      const behind = parseInt(parts[0] ?? "0", 10);
+      const ahead = parseInt(parts[1] ?? "0", 10);
+      node.aheadBehind = { ahead, behind };
+    } catch {
+      // Ignore errors (branch might not exist, etc.)
+    }
+  }
 }
 
 export function calculateWarnings(

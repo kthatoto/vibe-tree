@@ -18,6 +18,7 @@ import {
   getWorktrees,
   getPRs,
   buildTree,
+  calculateAheadBehind,
   calculateWarnings,
   generateRestartInfo,
 } from "../lib/git-helpers";
@@ -226,7 +227,10 @@ scanRouter.post("/", async (c) => {
     }
   }
 
-  // 9. Calculate warnings (including tree divergence)
+  // 9. Calculate ahead/behind based on finalized edges (parent branch, not default)
+  calculateAheadBehind(nodes, edges, localPath, defaultBranch);
+
+  // 10. Calculate warnings (including tree divergence)
   const warnings = calculateWarnings(nodes, edges, branchNaming, defaultBranch, treeSpec);
 
   // 9. Generate restart info for active worktree

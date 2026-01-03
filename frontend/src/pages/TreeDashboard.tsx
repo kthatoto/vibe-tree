@@ -1085,10 +1085,19 @@ export default function TreeDashboard() {
 
       {/* Warnings Modal */}
       {showWarnings && snapshot && (() => {
-        const WARNING_CODE_LABELS: Record<string, string> = {
-          BRANCH_NAMING_VIOLATION: "Branch Naming",
+        const WARNING_CONFIG: Record<string, { label: string; color: string }> = {
+          BEHIND_PARENT: { label: "Behind Parent", color: "#f59e0b" },
+          BRANCH_NAMING_VIOLATION: { label: "Branch Naming", color: "#8b5cf6" },
+          DIRTY: { label: "Uncommitted Changes", color: "#ef4444" },
+          CI_FAIL: { label: "CI Failed", color: "#dc2626" },
+          TREE_DIVERGENCE: { label: "Tree Divergence", color: "#06b6d4" },
+          ORDER_BROKEN: { label: "Order Broken", color: "#ec4899" },
         };
-        const getWarningLabel = (code: string) => WARNING_CODE_LABELS[code] || code;
+        const getWarningConfig = (code: string) => WARNING_CONFIG[code] || { label: code, color: "#6b7280" };
+
+        // Get unique warning codes that exist in current warnings
+        const existingCodes = [...new Set(snapshot.warnings.map((w) => w.code))];
+
         return (
         <div className="modal-overlay" onClick={() => setShowWarnings(false)}>
           <div className="modal modal--warnings" onClick={(e) => e.stopPropagation()}>
@@ -1103,27 +1112,42 @@ export default function TreeDashboard() {
               >
                 All
               </button>
-              <button
-                className={`filter-btn ${warningFilter === "BRANCH_NAMING_VIOLATION" ? "filter-btn--active" : ""}`}
-                onClick={() => setWarningFilter("BRANCH_NAMING_VIOLATION")}
-              >
-                Branch Naming
-              </button>
+              {existingCodes.map((code) => (
+                <button
+                  key={code}
+                  className={`filter-btn ${warningFilter === code ? "filter-btn--active" : ""}`}
+                  onClick={() => setWarningFilter(code)}
+                  style={{
+                    borderColor: warningFilter === code ? getWarningConfig(code).color : undefined,
+                    color: warningFilter === code ? getWarningConfig(code).color : undefined,
+                  }}
+                >
+                  {getWarningConfig(code).label}
+                </button>
+              ))}
             </div>
             <div className="modal__content modal__content--scrollable">
               {snapshot.warnings
                 .filter((w) => warningFilter === null || w.code === warningFilter)
-                .map((w, i) => (
+                .map((w, i) => {
+                  const config = getWarningConfig(w.code);
+                  return (
                   <div key={i} className={`warning-item warning-item--${w.severity}`}>
                     <div className="warning-item__header">
-                      <span className="warning-item__code">{getWarningLabel(w.code)}</span>
+                      <span
+                        className="warning-item__code"
+                        style={{ background: config.color }}
+                      >
+                        {config.label}
+                      </span>
                       <span className={`warning-item__severity warning-item__severity--${w.severity}`}>
                         {w.severity}
                       </span>
                     </div>
                     <div className="warning-item__message">{w.message}</div>
                   </div>
-                ))}
+                  );
+                })}
               {snapshot.warnings.filter((w) => warningFilter === null || w.code === warningFilter).length === 0 && (
                 <div className="modal__empty">No warnings match the filter</div>
               )}
@@ -2951,7 +2975,7 @@ export default function TreeDashboard() {
           color: #6b7280;
         }
         .warning-item {
-          padding: 12px 20px;
+          padding: 14px 20px;
           border-bottom: 1px solid #374151;
         }
         .warning-item:last-child {
@@ -2960,20 +2984,22 @@ export default function TreeDashboard() {
         .warning-item__header {
           display: flex;
           align-items: center;
-          gap: 8px;
-          margin-bottom: 4px;
+          gap: 10px;
+          margin-bottom: 8px;
         }
         .warning-item__code {
-          font-family: monospace;
-          font-size: 11px;
-          color: #9ca3af;
+          font-size: 13px;
+          font-weight: 600;
+          color: white;
+          padding: 4px 12px;
+          border-radius: 12px;
         }
         .warning-item__severity {
-          font-size: 10px;
+          font-size: 11px;
           font-weight: 600;
           text-transform: uppercase;
-          padding: 2px 6px;
-          border-radius: 3px;
+          padding: 3px 8px;
+          border-radius: 4px;
         }
         .warning-item__severity--warn {
           background: #422006;
@@ -2984,8 +3010,9 @@ export default function TreeDashboard() {
           color: #f87171;
         }
         .warning-item__message {
-          font-size: 13px;
+          font-size: 14px;
           color: #e5e7eb;
+          line-height: 1.5;
         }
         .modal__body {
           padding: 20px;

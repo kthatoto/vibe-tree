@@ -631,21 +631,21 @@ export default function BranchGraph({
               {/* Worktree folder name label - positioned above node */}
               <rect
                 x={x}
-                y={y - 20}
+                y={y - 22}
                 width={labelWidth}
-                height={18}
-                rx={3}
-                fill={isActive ? "#1a3a2a" : "#1e293b"}
-                stroke={isActive ? "#22c55e" : "#475569"}
-                strokeWidth={1}
+                height={20}
+                rx={4}
+                fill={isActive ? "#14532d" : "#1e3a5f"}
+                stroke={isActive ? "#22c55e" : "#3b82f6"}
+                strokeWidth={1.5}
               />
               <text
                 x={x + 6}
-                y={y - 10}
+                y={y - 11}
                 textAnchor="start"
                 dominantBaseline="middle"
-                fontSize={10}
-                fill={isActive ? "#4ade80" : "#94a3b8"}
+                fontSize={11}
+                fill={isActive ? "#4ade80" : "#60a5fa"}
                 fontWeight="600"
               >
                 {worktreeName.length > 22 ? worktreeName.substring(0, 20) + "…" : worktreeName}

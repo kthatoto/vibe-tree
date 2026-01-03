@@ -488,7 +488,19 @@ chatRouter.post("/send", async (c) => {
         try {
           const json = JSON.parse(line);
           let textUpdated = false;
-          if (json.type === "content_block_delta" && json.delta?.text) {
+          if (json.type === "assistant" && json.message?.content) {
+            // Partial message - extract all text blocks
+            let fullText = "";
+            for (const block of json.message.content) {
+              if (block.type === "text" && block.text) {
+                fullText += block.text;
+              }
+            }
+            if (fullText && fullText !== accumulatedText) {
+              accumulatedText = fullText;
+              textUpdated = true;
+            }
+          } else if (json.type === "content_block_delta" && json.delta?.text) {
             accumulatedText += json.delta.text;
             textUpdated = true;
           } else if (json.type === "result" && json.result) {

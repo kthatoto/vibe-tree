@@ -89,7 +89,6 @@ export default function TreeDashboard() {
   // Worktree settings
   const [worktreeCreateScript, setWorktreeCreateScript] = useState("");
   const [worktreePostCreateScript, setWorktreePostCreateScript] = useState("");
-  const [worktreeCheckoutPref, setWorktreeCheckoutPref] = useState<"main" | "first" | "ask">("main");
   // Settings modal category
   const [settingsCategory, setSettingsCategory] = useState<"general" | "worktree" | "cleanup">("general");
 
@@ -544,14 +543,12 @@ export default function TreeDashboard() {
       setSettingsPatterns(rule.patterns || []);
       setWorktreeCreateScript(wtSettings.createScript || "");
       setWorktreePostCreateScript(wtSettings.postCreateScript || "");
-      setWorktreeCheckoutPref(wtSettings.checkoutPreference || "main");
     } catch {
       // No rule exists yet
       setSettingsRule({ patterns: [] });
       setSettingsPatterns([]);
       setWorktreeCreateScript("");
       setWorktreePostCreateScript("");
-      setWorktreeCheckoutPref("main");
     } finally {
       setSettingsLoading(false);
     }
@@ -576,7 +573,6 @@ export default function TreeDashboard() {
         repoId: snapshot.repoId,
         createScript: worktreeCreateScript,
         postCreateScript: worktreePostCreateScript,
-        checkoutPreference: worktreeCheckoutPref,
       });
 
       // Save default branch (empty string clears it)
@@ -1331,21 +1327,6 @@ export default function TreeDashboard() {
                             rows={4}
                             style={{ width: "100%", fontFamily: "monospace", fontSize: 12, background: "#1f2937", border: "1px solid #374151", borderRadius: 4, padding: 8, color: "white", resize: "vertical" }}
                           />
-                        </div>
-                        <div className="settings-section">
-                          <label>Checkout Preference</label>
-                          <small style={{ display: "block", marginBottom: 8, color: "#9ca3af" }}>
-                            When checking out a branch with multiple worktrees
-                          </small>
-                          <select
-                            value={worktreeCheckoutPref}
-                            onChange={(e) => setWorktreeCheckoutPref(e.target.value as "main" | "first" | "ask")}
-                            style={{ width: "100%", padding: "8px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "white" }}
-                          >
-                            <option value="main">Always use main repo</option>
-                            <option value="first">Use first worktree found</option>
-                            <option value="ask">Ask each time</option>
-                          </select>
                         </div>
                       </>
                     )}

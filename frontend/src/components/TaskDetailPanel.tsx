@@ -318,10 +318,10 @@ export function TaskDetailPanel({
     const unsubMessage = wsClient.on("chat.message", (msg) => {
       const data = msg.data as ChatMessage | undefined;
       if (data && data.sessionId === chatSessionId) {
-        // Skip assistant messages if we have streaming chunks (already displayed)
+        // Clear streaming chunks when we receive the final assistant message
         if (data.role === "assistant" && hasStreamingChunksRef.current) {
-          setChatLoading(false);
-          return;
+          setStreamingChunks([]);
+          hasStreamingChunksRef.current = false;
         }
         setMessages((prev) => {
           // Avoid duplicates

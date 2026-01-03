@@ -553,6 +553,7 @@ export default function TreeDashboard() {
         patterns: validPatterns,
       });
       setSettingsRule(updated);
+      setSettingsPatterns(updated.patterns || validPatterns);
 
       // Save default branch (empty string clears it)
       await api.updateRepoPin(selectedPin.id, { baseBranch: settingsDefaultBranch || null });

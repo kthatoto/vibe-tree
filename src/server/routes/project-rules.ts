@@ -40,7 +40,14 @@ projectRulesRouter.get("/branch-naming", async (c) => {
 
   const ruleData = JSON.parse(rule.ruleJson) as BranchNamingRule;
   // Support legacy single pattern
-  const patterns = ruleData.patterns ?? (ruleData as unknown as { pattern?: string }).pattern ? [(ruleData as unknown as { pattern: string }).pattern] : [];
+  let patterns: string[];
+  if (ruleData.patterns && Array.isArray(ruleData.patterns)) {
+    patterns = ruleData.patterns;
+  } else if ((ruleData as unknown as { pattern?: string }).pattern) {
+    patterns = [(ruleData as unknown as { pattern: string }).pattern];
+  } else {
+    patterns = [];
+  }
   return c.json({
     id: rule.id,
     repoId: rule.repoId,

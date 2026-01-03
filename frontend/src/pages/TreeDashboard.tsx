@@ -923,27 +923,29 @@ export default function TreeDashboard() {
                       {wt.path.split("/").pop()}
                       {wt.dirty && <span className="sidebar__worktree-dirty">●</span>}
                     </div>
-                    <button
-                      className="sidebar__worktree-delete"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (!selectedPin) return;
-                        if (wt.dirty) {
-                          alert("Worktree has uncommitted changes. Please commit or stash first.");
-                          return;
-                        }
-                        if (!confirm(`Delete worktree "${wt.path.split("/").pop()}"?`)) return;
-                        try {
-                          await api.deleteWorktree(selectedPin.localPath, wt.path);
-                          handleScan(selectedPin.localPath);
-                        } catch (err) {
-                          alert("Failed to delete worktree: " + (err as Error).message);
-                        }
-                      }}
-                      title="Delete worktree"
-                    >
-                      ×
-                    </button>
+                    {wt.path !== selectedPin?.localPath && (
+                      <button
+                        className="sidebar__worktree-delete"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!selectedPin) return;
+                          if (wt.dirty) {
+                            alert("Worktree has uncommitted changes. Please commit or stash first.");
+                            return;
+                          }
+                          if (!confirm(`Delete worktree "${wt.path.split("/").pop()}"?`)) return;
+                          try {
+                            await api.deleteWorktree(selectedPin.localPath, wt.path);
+                            handleScan(selectedPin.localPath);
+                          } catch (err) {
+                            alert("Failed to delete worktree: " + (err as Error).message);
+                          }
+                        }}
+                        title="Delete worktree"
+                      >
+                        ×
+                      </button>
+                    )}
                   </div>
                   <div className="sidebar__worktree-branch">{wt.branch || "(detached)"}</div>
                 </div>

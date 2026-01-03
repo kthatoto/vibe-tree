@@ -815,9 +815,53 @@ branchRouter.post("/delete", async (c) => {
       // Ignore errors deleting remote branch
     }
 
-    // Update planning session edges: reparent children of deleted branch
+    // Reparent children of deleted branch in both treeSpecs and planningSessions
     const repoId = getRepoId(localPath);
     if (repoId) {
+      // 1. Update treeSpecs (Branch Graph structure - highest priority)
+      try {
+        const treeSpecs = await db
+          .select()
+          .from(schema.treeSpecs)
+          .where(eq(schema.treeSpecs.repoId, repoId));
+
+        for (const spec of treeSpecs) {
+          const specJson = JSON.parse(spec.specJson) as {
+            nodes: unknown[];
+            edges: Array<{ parent: string; child: string }>;
+          };
+
+          // Find the deleted branch's parent in treeSpec
+          const parentEdge = specJson.edges.find((e) => e.child === branchName);
+          const parentBranch = parentEdge?.parent || spec.baseBranch;
+
+          // Update children of deleted branch to point to grandparent
+          const updatedEdges = specJson.edges
+            .filter((e) => e.child !== branchName) // Remove edge to deleted branch
+            .map((e) => {
+              if (e.parent === branchName) {
+                // Reparent child to grandparent
+                return { ...e, parent: parentBranch };
+              }
+              return e;
+            });
+
+          // Only update if edges changed
+          if (JSON.stringify(specJson.edges) !== JSON.stringify(updatedEdges)) {
+            await db
+              .update(schema.treeSpecs)
+              .set({
+                specJson: JSON.stringify({ ...specJson, edges: updatedEdges }),
+                updatedAt: new Date().toISOString(),
+              })
+              .where(eq(schema.treeSpecs.id, spec.id));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to update treeSpecs edges:", err);
+      }
+
+      // 2. Update planning sessions
       try {
         const sessions = await db
           .select()
@@ -834,13 +878,13 @@ branchRouter.post("/delete", async (c) => {
 
           // Find the deleted branch's parent
           const parentEdge = edges.find((e) => e.to === branchName);
-          const parentBranch = parentEdge?.from;
+          const parentBranch = parentEdge?.from || session.baseBranch;
 
           // Update children of deleted branch to point to grandparent
           const updatedEdges = edges
             .filter((e) => e.to !== branchName) // Remove edge to deleted branch
             .map((e) => {
-              if (e.from === branchName && parentBranch) {
+              if (e.from === branchName) {
                 // Reparent child to grandparent
                 return { ...e, from: parentBranch };
               }
@@ -860,7 +904,6 @@ branchRouter.post("/delete", async (c) => {
         }
       } catch (err) {
         console.error("Failed to update planning session edges:", err);
-        // Don't fail the delete operation for this
       }
     }
 

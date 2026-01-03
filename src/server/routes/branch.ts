@@ -47,27 +47,65 @@ function runPostCreateScript(worktreePath: string, script: string): void {
   });
 }
 
+// Helper to find worktree path for a branch from git worktree list
+function findWorktreePathForBranch(localPath: string, branchName: string): string | null {
+  try {
+    const output = execSync(
+      `cd "${localPath}" && git worktree list --porcelain`,
+      { encoding: "utf-8" }
+    );
+
+    // Parse porcelain output: worktree path, HEAD sha, branch name
+    const lines = output.trim().split("\n");
+    let currentWorktree: string | null = null;
+
+    for (const line of lines) {
+      if (line.startsWith("worktree ")) {
+        currentWorktree = line.substring(9); // Remove "worktree " prefix
+      } else if (line.startsWith("branch refs/heads/")) {
+        const wtBranch = line.substring(18); // Remove "branch refs/heads/" prefix
+        if (wtBranch === branchName && currentWorktree) {
+          return currentWorktree;
+        }
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // Helper to create worktree with optional custom script
+// Returns the actual worktree path (may differ from input if custom script is used)
 function createWorktreeWithScript(
   localPath: string,
-  worktreePath: string,
+  fallbackWorktreePath: string,
   branchName: string,
   createScript?: string
-): void {
+): string {
   if (createScript && createScript.trim()) {
     // Replace placeholders in custom script
     const script = createScript
-      .replace(/\{worktreePath\}/g, worktreePath)
+      .replace(/\{worktreePath\}/g, fallbackWorktreePath)
       .replace(/\{branchName\}/g, branchName)
       .replace(/\{localPath\}/g, localPath);
 
     execSync(`cd "${localPath}" && ${script}`, { encoding: "utf-8", shell: "/bin/bash" });
+
+    // After custom script, find actual worktree path from git
+    const actualPath = findWorktreePathForBranch(localPath, branchName);
+    if (actualPath) {
+      return actualPath;
+    }
+    // Fallback to expected path if not found (script might use different branch name)
+    return fallbackWorktreePath;
   } else {
     // Default worktree creation
     execSync(
-      `cd "${localPath}" && git worktree add "${worktreePath}" "${branchName}"`,
+      `cd "${localPath}" && git worktree add "${fallbackWorktreePath}" "${branchName}"`,
       { encoding: "utf-8" }
     );
+    return fallbackWorktreePath;
   }
 }
 
@@ -230,14 +268,17 @@ branchRouter.post("/create-tree", async (c) => {
         );
       }
 
-      // Check if worktree already exists
-      if (existsSync(result.worktreePath)) {
-        // Worktree already exists, just use it
+      // Check if worktree already exists for this branch
+      const existingWorktreePath = findWorktreePathForBranch(localPath, task.branchName);
+      if (existingWorktreePath) {
+        // Worktree already exists, use actual path
+        result.worktreePath = existingWorktreePath;
         console.log(`Worktree already exists: ${result.worktreePath}`);
       } else {
         // Create worktree with optional custom script
         const wtSettings = await getWorktreeSettings(input.repoId);
-        createWorktreeWithScript(localPath, result.worktreePath, task.branchName, wtSettings.createScript);
+        const actualPath = createWorktreeWithScript(localPath, result.worktreePath, task.branchName, wtSettings.createScript);
+        result.worktreePath = actualPath;
 
         // Run post-creation script if configured
         if (wtSettings.postCreateScript) {
@@ -386,37 +427,40 @@ branchRouter.post("/create-worktree", async (c) => {
     mkdirSync(worktreesDir, { recursive: true });
   }
 
-  // Create worktree
-  const worktreeName = branchName.replace(/\//g, "-");
-  const worktreePath = join(worktreesDir, worktreeName);
-
-  if (existsSync(worktreePath)) {
-    // Worktree already exists
+  // Check if worktree already exists for this branch
+  const existingWorktreePath = findWorktreePathForBranch(localPath, branchName);
+  if (existingWorktreePath) {
+    // Worktree already exists, return actual path
     return c.json({
-      worktreePath,
+      worktreePath: existingWorktreePath,
       branchName,
       alreadyExists: true,
     });
   }
 
+  // Create worktree
+  const worktreeName = branchName.replace(/\//g, "-");
+  const fallbackWorktreePath = join(worktreesDir, worktreeName);
+
+  let actualWorktreePath: string;
   try {
     // Get worktree settings
     const repoId = getRepoId(localPath);
     const wtSettings = await getWorktreeSettings(repoId);
 
     // Create worktree with optional custom script
-    createWorktreeWithScript(localPath, worktreePath, branchName, wtSettings.createScript);
+    actualWorktreePath = createWorktreeWithScript(localPath, fallbackWorktreePath, branchName, wtSettings.createScript);
 
     // Run post-creation script if configured
     if (wtSettings.postCreateScript) {
-      runPostCreateScript(worktreePath, wtSettings.postCreateScript);
+      runPostCreateScript(actualWorktreePath, wtSettings.postCreateScript);
     }
   } catch (err) {
     throw new BadRequestError(`Failed to create worktree: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   return c.json({
-    worktreePath,
+    worktreePath: actualWorktreePath,
     branchName,
     alreadyExists: false,
   });

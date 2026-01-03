@@ -45,10 +45,10 @@ interface LayoutEdge {
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 68; // Taller for multi-line layout (labels + branch name with wrap)
 const TENTATIVE_NODE_HEIGHT = 64;
-const HORIZONTAL_GAP = 60; // Gap between sibling nodes (horizontal)
-const VERTICAL_GAP = 80; // Gap between parent-child levels (vertical)
-const PADDING = 40; // Base padding
-const LEFT_PADDING = 40; // Left padding for worktree labels
+const HORIZONTAL_GAP = 40; // Gap between sibling nodes (horizontal)
+const VERTICAL_GAP = 70; // Gap between parent-child levels (vertical) - includes space for indicators
+const TOP_PADDING = 40; // Top padding for worktree labels
+const LEFT_PADDING = 20; // Left padding
 
 
 export default function BranchGraph({
@@ -144,32 +144,27 @@ export default function BranchGraph({
       return a.branchName.localeCompare(b.branchName);
     });
 
-    // Layout nodes - vertical tree (root on top, children below)
+    // Layout nodes - vertical tree (root on top-left, children below)
     const layoutNodes: LayoutNode[] = [];
     const nodeMap = new Map<string, LayoutNode>();
 
-    // Calculate subtree width for centering children
-    function getSubtreeWidth(branchName: string): number {
-      const children = childrenMap.get(branchName) || [];
-      if (children.length === 0) return 1;
-      return children.reduce((sum, child) => sum + getSubtreeWidth(child), 0);
-    }
+    // Track max column used at each depth for left-aligned layout
+    const maxColAtDepth = new Map<number, number>();
 
     function layoutSubtree(branchName: string, depth: number, minCol: number): number {
       const node = nodes.find((n) => n.branchName === branchName);
       if (!node || nodeMap.has(branchName)) return minCol;
 
       const children = childrenMap.get(branchName) || [];
-      const subtreeWidth = getSubtreeWidth(branchName);
 
-      // Center this node over its children
-      const col = minCol + (subtreeWidth - 1) / 2;
+      // Left-aligned: use minCol directly
+      const col = minCol;
 
       // Vertical layout: depth controls Y, col controls X
       const layoutNode: LayoutNode = {
         id: branchName,
         x: LEFT_PADDING + col * (NODE_WIDTH + HORIZONTAL_GAP),
-        y: PADDING + depth * (NODE_HEIGHT + VERTICAL_GAP),
+        y: TOP_PADDING + depth * (NODE_HEIGHT + VERTICAL_GAP),
         node,
         depth,
         row: col,
@@ -178,7 +173,11 @@ export default function BranchGraph({
       layoutNodes.push(layoutNode);
       nodeMap.set(branchName, layoutNode);
 
-      // Layout children below (they spread horizontally)
+      // Track max column at this depth
+      const currentMax = maxColAtDepth.get(depth) ?? -1;
+      maxColAtDepth.set(depth, Math.max(currentMax, col));
+
+      // Layout children below, each child gets its own column
       let currentCol = minCol;
       children.forEach((childName) => {
         currentCol = layoutSubtree(childName, depth + 1, currentCol);
@@ -203,7 +202,7 @@ export default function BranchGraph({
         const layoutNode: LayoutNode = {
           id: node.branchName,
           x: LEFT_PADDING + col * (NODE_WIDTH + HORIZONTAL_GAP),
-          y: PADDING + depth * (NODE_HEIGHT + VERTICAL_GAP),
+          y: TOP_PADDING + depth * (NODE_HEIGHT + VERTICAL_GAP),
           node,
           depth,
           row: col,
@@ -267,7 +266,7 @@ export default function BranchGraph({
         const layoutNode: LayoutNode = {
           id: branchName,
           x: LEFT_PADDING + col * (NODE_WIDTH + HORIZONTAL_GAP),
-          y: PADDING + depth * (NODE_HEIGHT + VERTICAL_GAP),
+          y: TOP_PADDING + depth * (NODE_HEIGHT + VERTICAL_GAP),
           node: tentDummyNode,
           depth,
           row: col,
@@ -323,11 +322,11 @@ export default function BranchGraph({
     layoutEdges.push(...tentativeLayoutEdges);
 
     // Calculate canvas size
-    const maxX = Math.max(...layoutNodes.map((n) => n.x), 0) + NODE_WIDTH + PADDING;
+    const maxX = Math.max(...layoutNodes.map((n) => n.x), 0) + NODE_WIDTH + LEFT_PADDING;
     const maxY = Math.max(
       ...layoutNodes.map((n) => n.y + (n.isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT)),
       0
-    ) + PADDING;
+    ) + TOP_PADDING;
 
     return {
       layoutNodes,
@@ -604,11 +603,11 @@ export default function BranchGraph({
           </div>
         </foreignObject>
 
-        {/* Worktree label on left side + active border effect */}
+        {/* Worktree label on top + active border effect */}
         {hasWorktree && (() => {
           const worktreeName = node.worktree?.path?.split("/").pop() || "worktree";
           const isActive = node.worktree?.isActive;
-          const labelWidth = Math.min(worktreeName.length * 6 + 10, 100);
+          const labelWidth = Math.min(worktreeName.length * 7 + 20, NODE_WIDTH);
           return (
             <g>
               {/* Active glow effect */}
@@ -626,49 +625,58 @@ export default function BranchGraph({
                   opacity={0.6}
                 />
               )}
-              {/* Worktree folder name label - positioned to the left of node */}
+              {/* Worktree folder name label - positioned above node */}
               <rect
-                x={x - labelWidth - 6}
-                y={y + nodeHeight / 2 - 8}
+                x={x}
+                y={y - 22}
                 width={labelWidth}
-                height={16}
-                rx={3}
-                fill={isActive ? "#14532d" : "#1e293b"}
-                stroke={isActive ? "#22c55e" : "#64748b"}
-                strokeWidth={1}
+                height={20}
+                rx={4}
+                fill={isActive ? "#166534" : "#1e293b"}
+                stroke={isActive ? "#22c55e" : "#475569"}
+                strokeWidth={isActive ? 2 : 1}
               />
+              {/* Folder icon */}
               <text
-                x={x - labelWidth / 2 - 6}
-                y={y + nodeHeight / 2}
-                textAnchor="middle"
+                x={x + 6}
+                y={y - 11}
                 dominantBaseline="middle"
-                fontSize={9}
-                fill={isActive ? "#4ade80" : "#94a3b8"}
-                fontWeight="600"
+                fontSize={11}
               >
-                {worktreeName.length > 14 ? worktreeName.substring(0, 12) + "…" : worktreeName}
+                📁
+              </text>
+              <text
+                x={x + 22}
+                y={y - 11}
+                textAnchor="start"
+                dominantBaseline="middle"
+                fontSize={11}
+                fill={isActive ? "#4ade80" : "#94a3b8"}
+                fontWeight={isActive ? "bold" : "600"}
+              >
+                {worktreeName.length > 20 ? worktreeName.substring(0, 18) + "…" : worktreeName}
               </text>
             </g>
           );
         })()}
 
 
-        {/* Ahead/Behind indicator on right side of node */}
+        {/* Ahead/Behind indicator below node */}
         {node.aheadBehind && (node.aheadBehind.ahead > 0 || node.aheadBehind.behind > 0) && (
           <g>
             {node.aheadBehind.ahead > 0 && (
               <>
                 <rect
-                  x={x + NODE_WIDTH + 4}
-                  y={y + nodeHeight / 2 - 16}
+                  x={x + NODE_WIDTH / 2 - 24}
+                  y={y + nodeHeight + 4}
                   width={22}
                   height={14}
                   rx={3}
                   fill="#4caf50"
                 />
                 <text
-                  x={x + NODE_WIDTH + 15}
-                  y={y + nodeHeight / 2 - 9}
+                  x={x + NODE_WIDTH / 2 - 13}
+                  y={y + nodeHeight + 12}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   fontSize={9}
@@ -682,16 +690,16 @@ export default function BranchGraph({
             {node.aheadBehind.behind > 0 && (
               <>
                 <rect
-                  x={x + NODE_WIDTH + 4}
-                  y={y + nodeHeight / 2 + 2}
+                  x={x + NODE_WIDTH / 2 + 2}
+                  y={y + nodeHeight + 4}
                   width={22}
                   height={14}
                   rx={3}
                   fill="#f44336"
                 />
                 <text
-                  x={x + NODE_WIDTH + 15}
-                  y={y + nodeHeight / 2 + 9}
+                  x={x + NODE_WIDTH / 2 + 13}
+                  y={y + nodeHeight + 12}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   fontSize={9}
@@ -705,26 +713,26 @@ export default function BranchGraph({
           </g>
         )}
 
-        {/* Remote ahead/behind indicator (vs origin) - shown to the right of local indicators */}
+        {/* Remote ahead/behind indicator (vs origin) - shown below local indicators */}
         {node.remoteAheadBehind && (node.remoteAheadBehind.ahead > 0 || node.remoteAheadBehind.behind > 0) && (() => {
-          // Position to the right of local indicators if they exist
+          // Position below local indicators if they exist
           const hasLocalIndicator = node.aheadBehind && (node.aheadBehind.ahead > 0 || node.aheadBehind.behind > 0);
-          const remoteX = x + NODE_WIDTH + (hasLocalIndicator ? 30 : 4);
+          const remoteY = y + nodeHeight + (hasLocalIndicator ? 22 : 4);
           return (
           <g>
             {node.remoteAheadBehind.ahead > 0 && (
               <>
                 <rect
-                  x={remoteX}
-                  y={y + nodeHeight / 2 - 16}
+                  x={x + NODE_WIDTH / 2 - 24}
+                  y={remoteY}
                   width={22}
                   height={14}
                   rx={3}
                   fill="#3b82f6"
                 />
                 <text
-                  x={remoteX + 11}
-                  y={y + nodeHeight / 2 - 9}
+                  x={x + NODE_WIDTH / 2 - 13}
+                  y={remoteY + 8}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   fontSize={9}
@@ -738,16 +746,16 @@ export default function BranchGraph({
             {node.remoteAheadBehind.behind > 0 && (
               <>
                 <rect
-                  x={remoteX}
-                  y={y + nodeHeight / 2 + 2}
+                  x={x + NODE_WIDTH / 2 + 2}
+                  y={remoteY}
                   width={22}
                   height={14}
                   rx={3}
                   fill="#f59e0b"
                 />
                 <text
-                  x={remoteX + 11}
-                  y={y + nodeHeight / 2 + 9}
+                  x={x + NODE_WIDTH / 2 + 13}
+                  y={remoteY + 8}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   fontSize={9}

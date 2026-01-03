@@ -45,24 +45,11 @@ interface LayoutEdge {
 const NODE_WIDTH = 180;
 const NODE_HEIGHT = 40;
 const TENTATIVE_NODE_HEIGHT = 52;
-const HORIZONTAL_GAP = 32;
+const HORIZONTAL_GAP = 40; // Gap between nodes
 const VERTICAL_GAP = 48; // Extra space for worktree labels above and indicators below
-const PADDING = 30; // Base padding
+const PADDING = 40; // Base padding
 const TOP_PADDING = 50; // Extra top padding for worktree labels above nodes
 
-// Badge colors
-const CI_COLORS: Record<string, string> = {
-  SUCCESS: "#4caf50",
-  FAILURE: "#f44336",
-  PENDING: "#ff9800",
-  NEUTRAL: "#9e9e9e",
-};
-
-const REVIEW_COLORS: Record<string, string> = {
-  APPROVED: "#4caf50",
-  CHANGES_REQUESTED: "#f44336",
-  REVIEW_REQUIRED: "#ff9800",
-};
 
 export default function BranchGraph({
   nodes,
@@ -479,7 +466,7 @@ export default function BranchGraph({
         <foreignObject
           x={x + 8}
           y={y + 2}
-          width={NODE_WIDTH - 16}
+          width={hasPR ? NODE_WIDTH - 70 : NODE_WIDTH - 16}
           height={nodeHeight - 4}
           style={{ pointerEvents: "none" }}
         >
@@ -495,7 +482,7 @@ export default function BranchGraph({
           >
             <div
               style={{
-                fontSize: isTentative ? 10 : 11,
+                fontSize: isTentative ? 11 : 12,
                 fontFamily: isTentative ? "sans-serif" : "monospace",
                 fontWeight: isDefault ? "bold" : isTentative ? 500 : "normal",
                 color: isTentative ? "#c084fc" : isMerged ? "#9ca3af" : "#e5e7eb",
@@ -574,80 +561,58 @@ export default function BranchGraph({
           );
         })()}
 
-        {hasPR && (
-          <g>
-            {/* PR state badge */}
-            <rect
-              x={x + NODE_WIDTH - 28}
-              y={y + 4}
-              width={24}
-              height={14}
-              rx={2}
-              fill={node.pr?.state === "MERGED" ? "#9c27b0" : node.pr?.state === "OPEN" ? "#22c55e" : "#9e9e9e"}
-            />
-            <text
-              x={x + NODE_WIDTH - 16}
-              y={y + 12}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fontSize={8}
-              fill="white"
-              fontWeight="bold"
-            >
-              PR
-            </text>
+        {/* PR badges - positioned inside node at top-right */}
+        {hasPR && (() => {
+          const badges: Array<{ label: string; color: string }> = [];
 
-            {/* CI status badge */}
-            {node.pr?.checks && (
-              <g>
-                <rect
-                  x={x + NODE_WIDTH - 54}
-                  y={y + 4}
-                  width={22}
-                  height={14}
-                  rx={2}
-                  fill={CI_COLORS[node.pr.checks] || CI_COLORS.NEUTRAL}
-                />
-                <text
-                  x={x + NODE_WIDTH - 43}
-                  y={y + 12}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize={7}
-                  fill="white"
-                  fontWeight="bold"
-                >
-                  {node.pr.checks === "SUCCESS" ? "✓" : node.pr.checks === "FAILURE" ? "✗" : node.pr.checks === "PENDING" ? "…" : "−"}
-                </text>
-              </g>
-            )}
+          // Review status first
+          if (node.pr?.reviewDecision === "APPROVED") {
+            badges.push({ label: "✓R", color: "#4ade80" });
+          } else if (node.pr?.reviewDecision === "CHANGES_REQUESTED") {
+            badges.push({ label: "✗R", color: "#f87171" });
+          } else if (node.pr?.reviewDecision === "REVIEW_REQUIRED") {
+            badges.push({ label: "?R", color: "#fbbf24" });
+          }
 
-            {/* Review decision badge */}
-            {node.pr?.reviewDecision && (
-              <g>
-                <rect
-                  x={x + NODE_WIDTH - (node.pr?.checks ? 78 : 54)}
-                  y={y + 4}
-                  width={20}
-                  height={14}
-                  rx={2}
-                  fill={REVIEW_COLORS[node.pr.reviewDecision] || "#9e9e9e"}
-                />
+          // CI status
+          if (node.pr?.checks === "SUCCESS") {
+            badges.push({ label: "✓", color: "#4ade80" });
+          } else if (node.pr?.checks === "FAILURE") {
+            badges.push({ label: "✗", color: "#f87171" });
+          } else if (node.pr?.checks === "PENDING") {
+            badges.push({ label: "…", color: "#fbbf24" });
+          }
+
+          // PR indicator
+          badges.push({
+            label: "PR",
+            color: node.pr?.state === "MERGED" ? "#c084fc" : node.pr?.state === "OPEN" ? "#4ade80" : "#9ca3af"
+          });
+
+          // Calculate total width to position from right
+          const badgeWidth = 18;
+          const totalWidth = badges.length * badgeWidth;
+
+          return (
+            <g>
+              {badges.map((badge, i) => (
                 <text
-                  x={x + NODE_WIDTH - (node.pr?.checks ? 68 : 44)}
+                  key={i}
+                  x={x + NODE_WIDTH - 8 - totalWidth + i * badgeWidth}
                   y={y + 12}
-                  textAnchor="middle"
+                  textAnchor="start"
                   dominantBaseline="middle"
-                  fontSize={7}
-                  fill="white"
-                  fontWeight="bold"
+                  fontSize={9}
+                  fill={badge.color}
+                  fontFamily="monospace"
+                  fontWeight="500"
                 >
-                  {node.pr.reviewDecision === "APPROVED" ? "✓R" : node.pr.reviewDecision === "CHANGES_REQUESTED" ? "✗R" : "?R"}
+                  {badge.label}
                 </text>
-              </g>
-            )}
-          </g>
-        )}
+              ))}
+            </g>
+          );
+        })()}
 
         {/* Ahead/Behind indicator below node */}
         {node.aheadBehind && (node.aheadBehind.ahead > 0 || node.aheadBehind.behind > 0) && (

@@ -1059,6 +1059,78 @@ branchRouter.post("/delete", async (c) => {
       }
     }
 
+    // Clean up related data for the deleted branch
+    try {
+      // Delete chat sessions and their messages
+      const sessionsToDelete = await db
+        .select({ id: schema.chatSessions.id })
+        .from(schema.chatSessions)
+        .where(
+          and(
+            eq(schema.chatSessions.repoId, repoId),
+            eq(schema.chatSessions.branchName, branchName)
+          )
+        );
+
+      for (const session of sessionsToDelete) {
+        // Delete chat summaries first (foreign key)
+        await db
+          .delete(schema.chatSummaries)
+          .where(eq(schema.chatSummaries.sessionId, session.id));
+        // Delete chat messages
+        await db
+          .delete(schema.chatMessages)
+          .where(eq(schema.chatMessages.sessionId, session.id));
+        // Delete agent runs
+        await db
+          .delete(schema.agentRuns)
+          .where(eq(schema.agentRuns.sessionId, session.id));
+      }
+
+      // Delete the chat sessions
+      await db
+        .delete(schema.chatSessions)
+        .where(
+          and(
+            eq(schema.chatSessions.repoId, repoId),
+            eq(schema.chatSessions.branchName, branchName)
+          )
+        );
+
+      // Delete task instructions
+      await db
+        .delete(schema.taskInstructions)
+        .where(
+          and(
+            eq(schema.taskInstructions.repoId, repoId),
+            eq(schema.taskInstructions.branchName, branchName)
+          )
+        );
+
+      // Delete branch links
+      await db
+        .delete(schema.branchLinks)
+        .where(
+          and(
+            eq(schema.branchLinks.repoId, repoId),
+            eq(schema.branchLinks.branchName, branchName)
+          )
+        );
+
+      // Delete instruction logs
+      await db
+        .delete(schema.instructionsLog)
+        .where(
+          and(
+            eq(schema.instructionsLog.repoId, repoId),
+            eq(schema.instructionsLog.branchName, branchName)
+          )
+        );
+    } catch (err) {
+      console.error("Failed to clean up branch data:", err);
+      // Don't fail the request, branch is already deleted
+    }
+
     return c.json({
       success: true,
       branchName,
@@ -1072,4 +1144,109 @@ branchRouter.post("/delete", async (c) => {
     }
     throw new BadRequestError(`Failed to delete branch: ${message}`);
   }
+});
+
+// POST /api/branch/cleanup-orphaned - Clean up data for branches that no longer exist
+branchRouter.post("/cleanup-orphaned", async (c) => {
+  const body = await c.req.json();
+  const { localPath: rawLocalPath } = body;
+
+  if (!rawLocalPath) {
+    throw new BadRequestError("localPath is required");
+  }
+
+  const localPath = normalizePath(rawLocalPath);
+  const repoId = getRepoId(localPath);
+  if (!repoId) {
+    throw new BadRequestError("Could not determine repo ID");
+  }
+
+  // Get all existing branches
+  let existingBranches: string[] = [];
+  try {
+    const output = execSync(
+      `cd "${localPath}" && git for-each-ref --format='%(refname:short)' refs/heads/`,
+      { encoding: "utf-8" }
+    );
+    existingBranches = output.trim().split("\n").filter(Boolean);
+  } catch (err) {
+    throw new BadRequestError("Failed to get branches");
+  }
+
+  const branchSet = new Set(existingBranches);
+  const cleaned = {
+    chatSessions: 0,
+    chatMessages: 0,
+    taskInstructions: 0,
+    branchLinks: 0,
+    instructionsLog: 0,
+  };
+
+  try {
+    // Find and delete chat sessions for non-existent branches
+    const orphanedSessions = await db
+      .select({ id: schema.chatSessions.id, branchName: schema.chatSessions.branchName })
+      .from(schema.chatSessions)
+      .where(eq(schema.chatSessions.repoId, repoId));
+
+    for (const session of orphanedSessions) {
+      if (session.branchName && !branchSet.has(session.branchName)) {
+        // Delete related data
+        await db.delete(schema.chatSummaries).where(eq(schema.chatSummaries.sessionId, session.id));
+        const msgResult = await db.delete(schema.chatMessages).where(eq(schema.chatMessages.sessionId, session.id));
+        cleaned.chatMessages += msgResult.changes;
+        await db.delete(schema.agentRuns).where(eq(schema.agentRuns.sessionId, session.id));
+        await db.delete(schema.chatSessions).where(eq(schema.chatSessions.id, session.id));
+        cleaned.chatSessions += 1;
+      }
+    }
+
+    // Clean up task instructions
+    const orphanedInstructions = await db
+      .select()
+      .from(schema.taskInstructions)
+      .where(eq(schema.taskInstructions.repoId, repoId));
+
+    for (const instr of orphanedInstructions) {
+      if (instr.branchName && !branchSet.has(instr.branchName)) {
+        await db.delete(schema.taskInstructions).where(eq(schema.taskInstructions.id, instr.id));
+        cleaned.taskInstructions += 1;
+      }
+    }
+
+    // Clean up branch links
+    const orphanedLinks = await db
+      .select()
+      .from(schema.branchLinks)
+      .where(eq(schema.branchLinks.repoId, repoId));
+
+    for (const link of orphanedLinks) {
+      if (!branchSet.has(link.branchName)) {
+        await db.delete(schema.branchLinks).where(eq(schema.branchLinks.id, link.id));
+        cleaned.branchLinks += 1;
+      }
+    }
+
+    // Clean up instruction logs
+    const orphanedLogs = await db
+      .select()
+      .from(schema.instructionsLog)
+      .where(eq(schema.instructionsLog.repoId, repoId));
+
+    for (const log of orphanedLogs) {
+      if (log.branchName && !branchSet.has(log.branchName)) {
+        await db.delete(schema.instructionsLog).where(eq(schema.instructionsLog.id, log.id));
+        cleaned.instructionsLog += 1;
+      }
+    }
+  } catch (err) {
+    console.error("Cleanup error:", err);
+    throw new BadRequestError("Failed to clean up orphaned data");
+  }
+
+  return c.json({
+    success: true,
+    cleaned,
+    existingBranches: existingBranches.length,
+  });
 });

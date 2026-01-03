@@ -791,6 +791,23 @@ export const api = {
       }
     ),
 
+  // Clean up orphaned branch data
+  cleanupOrphanedBranchData: (localPath: string) =>
+    fetchJson<{
+      success: boolean;
+      cleaned: {
+        chatSessions: number;
+        chatMessages: number;
+        taskInstructions: number;
+        branchLinks: number;
+        instructionsLog: number;
+      };
+      existingBranches: number;
+    }>(`${API_BASE}/branch/cleanup-orphaned`, {
+      method: "POST",
+      body: JSON.stringify({ localPath }),
+    }),
+
   // Rebase onto parent
   rebase: (localPath: string, branchName: string, parentBranch: string, worktreePath?: string) =>
     fetchJson<{ success: boolean; branchName: string; parentBranch: string; output: string }>(

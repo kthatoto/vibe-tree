@@ -1223,6 +1223,36 @@ export default function TreeDashboard() {
                       Use {"{issueId}"} and {"{taskSlug}"} as placeholders
                     </small>
                   </div>
+
+                  {/* Cleanup Section */}
+                  <div className="form-group" style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid #374151" }}>
+                    <label>Data Cleanup</label>
+                    <p style={{ fontSize: 12, color: "#9ca3af", margin: "4px 0 8px" }}>
+                      Remove chat history and settings for deleted branches
+                    </p>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={{ background: "#7f1d1d", color: "#fca5a5" }}
+                      onClick={async () => {
+                        if (!selectedPin) return;
+                        if (!confirm("削除されたブランチのチャット履歴・設定をすべて削除します。よろしいですか？")) return;
+                        try {
+                          const result = await api.cleanupOrphanedBranchData(selectedPin.localPath);
+                          const total = result.cleaned.chatSessions + result.cleaned.taskInstructions + result.cleaned.branchLinks;
+                          if (total > 0) {
+                            alert(`クリーンアップ完了:\n- チャットセッション: ${result.cleaned.chatSessions}\n- タスク設定: ${result.cleaned.taskInstructions}\n- ブランチリンク: ${result.cleaned.branchLinks}`);
+                          } else {
+                            alert("削除対象のデータはありませんでした");
+                          }
+                        } catch (err) {
+                          alert("クリーンアップに失敗しました: " + (err as Error).message);
+                        }
+                      }}
+                    >
+                      Clean Up Orphaned Data
+                    </button>
+                  </div>
                 </>
               ) : (
                 <div className="modal__error">Failed to load settings</div>

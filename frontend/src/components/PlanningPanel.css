@@ -474,9 +474,29 @@
 }
 
 .planning-panel__task-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   color: #e5e7eb;
   margin-bottom: 2px;
+}
+
+.planning-panel__task-issue-link {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.planning-panel__task-issue-link img {
+  width: 14px;
+  height: 14px;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.planning-panel__task-issue-link:hover img {
+  opacity: 1;
 }
 
 .planning-panel__task-branch-row {

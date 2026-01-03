@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { api, type ChatMessage } from "../lib/api";
 import { extractTaskSuggestions, removeTaskTags, type TaskSuggestion } from "../lib/task-parser";
 import { wsClient } from "../lib/ws";
+import githubIcon from "../assets/github.svg";
 
 interface ChatPanelProps {
   sessionId: string;
@@ -147,7 +148,21 @@ export function ChatPanel({ sessionId, onTaskSuggested, existingTaskLabels = [],
                           ↳ {task.parentLabel}
                         </p>
                       )}
-                      <p style={{ margin: 0, fontWeight: 500, color: "#f3f4f6" }}>{task.label}</p>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <p style={{ margin: 0, fontWeight: 500, color: "#f3f4f6" }}>{task.label}</p>
+                        {task.issueUrl && (
+                          <a
+                            href={task.issueUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ display: "flex", alignItems: "center" }}
+                            title={task.issueUrl}
+                          >
+                            <img src={githubIcon} alt="GitHub Issue" style={{ width: 14, height: 14, opacity: 0.7 }} />
+                          </a>
+                        )}
+                      </div>
                       {task.branchName && (
                         <p style={{ margin: "2px 0 0", fontSize: 11, color: "#6b7280", fontFamily: "monospace" }}>
                           {task.branchName}

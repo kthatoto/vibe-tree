@@ -110,7 +110,21 @@ function DraggableTaskItem({
           )}
         </div>
       )}
-      <div className="planning-panel__task-title">{task.title}</div>
+      <div className="planning-panel__task-title">
+        {task.title}
+        {task.issueUrl && (
+          <a
+            href={task.issueUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="planning-panel__task-issue-link"
+            onClick={(e) => e.stopPropagation()}
+            title={task.issueUrl}
+          >
+            <img src={githubIcon} alt="Issue" />
+          </a>
+        )}
+      </div>
       <div className="planning-panel__task-branch-row">
         {isEditingBranch ? (
           <input

@@ -76,6 +76,7 @@ export function TaskDetailPanel({
   const [showCIModal, setShowCIModal] = useState(false);
   const [refreshingLink, setRefreshingLink] = useState<number | null>(null);
   const [showDeleteBranchModal, setShowDeleteBranchModal] = useState(false);
+  const [showCreateWorktreeModal, setShowCreateWorktreeModal] = useState(false);
 
   // The working path is either the worktree path or localPath if checked out
   const workingPath = worktreePath || (checkedOut ? localPath : null);
@@ -301,6 +302,7 @@ export function TaskDetailPanel({
   };
 
   const handleCreateWorktree = async () => {
+    setShowCreateWorktreeModal(false);
     setCreatingWorktree(true);
     setError(null);
     try {
@@ -590,7 +592,7 @@ export function TaskDetailPanel({
             {!isMerged && (
               <button
                 className="task-detail-panel__create-worktree-btn"
-                onClick={handleCreateWorktree}
+                onClick={() => setShowCreateWorktreeModal(true)}
                 disabled={creatingWorktree || checkingOut}
               >
                 {creatingWorktree ? "Creating..." : "Create Worktree"}
@@ -1070,6 +1072,30 @@ export function TaskDetailPanel({
           </div>
         );
       })()}
+
+      {/* Create Worktree Confirmation Modal */}
+      {showCreateWorktreeModal && (
+        <div className="task-detail-panel__modal-overlay" onClick={() => setShowCreateWorktreeModal(false)}>
+          <div className="task-detail-panel__modal" onClick={(e) => e.stopPropagation()}>
+            <h4>Worktreeを作成しますか？</h4>
+            <p className="task-detail-panel__modal-branch-name" style={{ color: "#4ade80" }}>{branchName}</p>
+            <div className="task-detail-panel__modal-actions">
+              <button
+                className="task-detail-panel__modal-cancel"
+                onClick={() => setShowCreateWorktreeModal(false)}
+              >
+                キャンセル
+              </button>
+              <button
+                className="task-detail-panel__modal-confirm"
+                onClick={handleCreateWorktree}
+              >
+                作成
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Branch Confirmation Modal */}
       {showDeleteBranchModal && (

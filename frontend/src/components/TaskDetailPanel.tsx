@@ -78,6 +78,9 @@ export function TaskDetailPanel({
   // Check if PR is merged
   const isMerged = branchLinks.some((l) => l.linkType === "pr" && l.status === "merged");
 
+  // Check if branch is currently active (can't be deleted)
+  const isCurrentlyActive = node?.worktree?.isActive || checkedOut;
+
   // Planning mode can work without workingPath (uses localPath), Execution requires workingPath
   const effectivePath = workingPath || localPath; // For Planning mode, use localPath as fallback
 
@@ -577,7 +580,8 @@ export function TaskDetailPanel({
                 <button
                   className="task-detail-panel__delete-btn"
                   onClick={() => setShowDeleteBranchModal(true)}
-                  disabled={deleting}
+                  disabled={deleting || isCurrentlyActive}
+                  title={isCurrentlyActive ? "別のブランチにチェックアウトしてから削除してください" : undefined}
                 >
                   {deleting ? "Deleting..." : "Delete Branch"}
                 </button>
@@ -601,7 +605,8 @@ export function TaskDetailPanel({
                 <button
                   className="task-detail-panel__delete-btn"
                   onClick={() => setShowDeleteBranchModal(true)}
-                  disabled={deleting}
+                  disabled={deleting || isCurrentlyActive}
+                  title={isCurrentlyActive ? "別のブランチにチェックアウトしてから削除してください" : undefined}
                 >
                   {deleting ? "Deleting..." : "Delete Branch"}
                 </button>
@@ -637,7 +642,8 @@ export function TaskDetailPanel({
               <button
                 className="task-detail-panel__delete-btn"
                 onClick={() => setShowDeleteBranchModal(true)}
-                disabled={deleting}
+                disabled={deleting || isCurrentlyActive}
+                title={isCurrentlyActive ? "別のブランチにチェックアウトしてから削除してください" : undefined}
               >
                 {deleting ? "Deleting..." : "Delete Branch"}
               </button>

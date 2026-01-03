@@ -47,7 +47,8 @@ const NODE_HEIGHT = 40;
 const TENTATIVE_NODE_HEIGHT = 52;
 const HORIZONTAL_GAP = 32;
 const VERTICAL_GAP = 28;
-const PADDING = 70; // Increased to accommodate worktree indicator on left
+const PADDING = 30; // Base padding
+const TOP_PADDING = 50; // Extra top padding for worktree labels above nodes
 
 // Badge colors
 const CI_COLORS: Record<string, string> = {
@@ -168,7 +169,7 @@ export default function BranchGraph({
       const layoutNode: LayoutNode = {
         id: branchName,
         x: PADDING + depth * (NODE_WIDTH + HORIZONTAL_GAP),
-        y: PADDING + row * (NODE_HEIGHT + VERTICAL_GAP),
+        y: TOP_PADDING + row * (NODE_HEIGHT + VERTICAL_GAP),
         node,
         depth,
         row,
@@ -202,7 +203,7 @@ export default function BranchGraph({
         const layoutNode: LayoutNode = {
           id: node.branchName,
           x: PADDING + depth * (NODE_WIDTH + HORIZONTAL_GAP),
-          y: PADDING + row * (NODE_HEIGHT + VERTICAL_GAP),
+          y: TOP_PADDING + row * (NODE_HEIGHT + VERTICAL_GAP),
           node,
           depth,
           row,
@@ -268,7 +269,7 @@ export default function BranchGraph({
         const layoutNode: LayoutNode = {
           id: branchName,
           x: PADDING + depth * (NODE_WIDTH + HORIZONTAL_GAP),
-          y: PADDING + row * (NODE_HEIGHT + VERTICAL_GAP),
+          y: TOP_PADDING + row * (NODE_HEIGHT + VERTICAL_GAP),
           node: tentDummyNode,
           depth,
           row,
@@ -513,32 +514,52 @@ export default function BranchGraph({
           </div>
         </foreignObject>
 
-        {/* Worktree indicator on left side */}
-        {hasWorktree && (
-          <g>
-            <rect
-              x={x - 52}
-              y={y + nodeHeight / 2 - 8}
-              width={48}
-              height={16}
-              rx={3}
-              fill={node.worktree?.isActive ? "#14532d" : "#1e293b"}
-              stroke={node.worktree?.isActive ? "#22c55e" : "#64748b"}
-              strokeWidth={1}
-            />
-            <text
-              x={x - 28}
-              y={y + nodeHeight / 2 + 1}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fontSize={9}
-              fill={node.worktree?.isActive ? "#4ade80" : "#94a3b8"}
-              fontWeight="600"
-            >
-              {node.worktree?.isActive ? "● Active" : "Worktree"}
-            </text>
-          </g>
-        )}
+        {/* Worktree label on top-left + active border effect */}
+        {hasWorktree && (() => {
+          const worktreeName = node.worktree?.path?.split("/").pop() || "worktree";
+          const isActive = node.worktree?.isActive;
+          return (
+            <g>
+              {/* Active glow effect */}
+              {isActive && (
+                <rect
+                  x={x - 2}
+                  y={y - 2}
+                  width={NODE_WIDTH + 4}
+                  height={nodeHeight + 4}
+                  rx={8}
+                  ry={8}
+                  fill="none"
+                  stroke="#22c55e"
+                  strokeWidth={2}
+                  opacity={0.6}
+                />
+              )}
+              {/* Worktree folder name label */}
+              <rect
+                x={x}
+                y={y - 18}
+                width={Math.min(worktreeName.length * 6.5 + 12, NODE_WIDTH)}
+                height={16}
+                rx={3}
+                fill={isActive ? "#14532d" : "#1e293b"}
+                stroke={isActive ? "#22c55e" : "#64748b"}
+                strokeWidth={1}
+              />
+              <text
+                x={x + 6}
+                y={y - 9}
+                textAnchor="start"
+                dominantBaseline="middle"
+                fontSize={10}
+                fill={isActive ? "#4ade80" : "#94a3b8"}
+                fontWeight="600"
+              >
+                {worktreeName.length > 24 ? worktreeName.substring(0, 22) + "..." : worktreeName}
+              </text>
+            </g>
+          );
+        })()}
 
         {hasPR && (
           <g>

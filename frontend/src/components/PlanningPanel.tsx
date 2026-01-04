@@ -919,6 +919,10 @@ export function PlanningPanel({
     );
   }
 
+  // Determine session type
+  const isPlanningSession = selectedSession.title.startsWith("Planning:");
+  const sessionType = isPlanningSession ? "Planning" : "Refinement";
+
   // Session detail view
   return (
     <div className="planning-panel planning-panel--detail">
@@ -932,24 +936,35 @@ export function PlanningPanel({
         >
           &larr; Back
         </button>
-        <select
-          value={selectedSession.baseBranch}
-          onChange={(e) => handleUpdateBaseBranch(e.target.value)}
-          className="planning-panel__branch-select"
-          disabled={selectedSession.status !== "draft"}
-        >
-          {branches.map((b) => (
-            <option key={b} value={b}>{b}</option>
-          ))}
-        </select>
-        <input
-          type="text"
-          value={selectedSession.title}
-          onChange={(e) => handleUpdateTitle(e.target.value)}
-          className="planning-panel__title-input"
-          placeholder="Untitled Planning"
-          disabled={selectedSession.status !== "draft"}
-        />
+        <span className={`planning-panel__session-type planning-panel__session-type--${sessionType.toLowerCase()}`}>
+          {sessionType}
+        </span>
+        {isPlanningSession ? (
+          <span className="planning-panel__branch-display">
+            {selectedSession.baseBranch}
+          </span>
+        ) : (
+          <>
+            <select
+              value={selectedSession.baseBranch}
+              onChange={(e) => handleUpdateBaseBranch(e.target.value)}
+              className="planning-panel__branch-select"
+              disabled={selectedSession.status !== "draft"}
+            >
+              {branches.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={selectedSession.title}
+              onChange={(e) => handleUpdateTitle(e.target.value)}
+              className="planning-panel__title-input"
+              placeholder="Untitled Planning"
+              disabled={selectedSession.status !== "draft"}
+            />
+          </>
+        )}
       </div>
 
       {error && <div className="planning-panel__error">{error}</div>}
@@ -1036,41 +1051,43 @@ export function PlanningPanel({
             )}
           </div>
 
-          {/* Task list */}
-          <div className="planning-panel__tasks">
-            <h4>Tasks ({selectedSession.nodes.length})</h4>
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-            >
-              {selectedSession.nodes.map((task) => (
-                <DraggableTaskItem
-                  key={task.id}
-                  task={task}
-                  parentName={getParentName(task.id)}
-                  depth={getTaskDepth(task.id)}
-                  isDraft={selectedSession.status === "draft"}
-                  onRemove={() => handleRemoveTask(task.id)}
-                  onRemoveParent={() => handleRemoveParent(task.id)}
-                  onBranchNameChange={(newName) => handleBranchNameChange(task.id, newName)}
-                />
-              ))}
-              <DragOverlay>
-                {activeDragId && (
-                  <div className="planning-panel__task-item planning-panel__task-item--dragging">
-                    {selectedSession.nodes.find((t) => t.id === activeDragId)?.title}
-                  </div>
-                )}
-              </DragOverlay>
-            </DndContext>
-            {selectedSession.nodes.length === 0 && (
-              <div className="planning-panel__tasks-empty">
-                Chat with AI to suggest tasks
-              </div>
-            )}
-          </div>
+          {/* Task list - only for Refinement sessions */}
+          {!isPlanningSession && (
+            <div className="planning-panel__tasks">
+              <h4>Tasks ({selectedSession.nodes.length})</h4>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+              >
+                {selectedSession.nodes.map((task) => (
+                  <DraggableTaskItem
+                    key={task.id}
+                    task={task}
+                    parentName={getParentName(task.id)}
+                    depth={getTaskDepth(task.id)}
+                    isDraft={selectedSession.status === "draft"}
+                    onRemove={() => handleRemoveTask(task.id)}
+                    onRemoveParent={() => handleRemoveParent(task.id)}
+                    onBranchNameChange={(newName) => handleBranchNameChange(task.id, newName)}
+                  />
+                ))}
+                <DragOverlay>
+                  {activeDragId && (
+                    <div className="planning-panel__task-item planning-panel__task-item--dragging">
+                      {selectedSession.nodes.find((t) => t.id === activeDragId)?.title}
+                    </div>
+                  )}
+                </DragOverlay>
+              </DndContext>
+              {selectedSession.nodes.length === 0 && (
+                <div className="planning-panel__tasks-empty">
+                  Chat with AI to suggest tasks
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Actions in sidebar */}
           {selectedSession.status === "draft" && (

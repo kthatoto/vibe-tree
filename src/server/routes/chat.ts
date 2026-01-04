@@ -827,8 +827,8 @@ chatRouter.post("/purge", async (c) => {
   return c.json({ deleted: toDelete.length, remaining: input.keepLastN });
 });
 
-// Planning system prompt
-const PLANNING_SYSTEM_PROMPT = `あなたはプロジェクト計画のアシスタントです。
+// Refinement system prompt (task breakdown)
+const REFINEMENT_SYSTEM_PROMPT = `あなたはプロジェクト計画のアシスタントです。
 
 ## 役割
 1. ユーザーの要件を理解するために積極的に質問する
@@ -873,6 +873,35 @@ const PLANNING_SYSTEM_PROMPT = `あなたはプロジェクト計画のアシス
 - ユーザーが情報を共有したら、まず内容を理解・整理してから質問やタスク提案を行う
 `;
 
+// Instruction review system prompt (for Planning sessions)
+const INSTRUCTION_REVIEW_SYSTEM_PROMPT = `あなたはタスクインストラクションを精査・改善するアシスタントです。
+
+## 役割
+1. 提供されたタスクインストラクションの内容を確認・精査する
+2. 不明確な点や曖昧な記述を指摘する
+3. より良い表現や構成を提案する
+4. 技術的な観点からのフィードバックを行う
+
+## 精査のポイント
+- 目的・ゴールが明確か
+- 実装に必要な情報が揃っているか
+- 曖昧な表現がないか
+- 技術的な矛盾や問題がないか
+- 優先順位や依存関係が明確か
+
+## 質問例（状況に応じて使う）
+- "この機能の具体的な動作を教えてください"
+- "エラーケースの処理はどうしますか？"
+- "この部分の優先度は高いですか？"
+- "既存の機能との整合性は確認しましたか？"
+
+## フィードバック時の注意
+- 具体的な改善案を提示する
+- 良い点も指摘する
+- 質問は1-2個に絞る
+- ユーザーの意図を尊重しながら改善を提案する
+`;
+
 // Helper: Build prompt with full context
 async function buildPrompt(
   session: typeof schema.chatSessions.$inferSelect,
@@ -881,11 +910,26 @@ async function buildPrompt(
 ): Promise<string> {
   const parts: string[] = [];
 
-  // Check if this is a planning session
-  const isPlanningSession = session.worktreePath.startsWith("planning:");
-  const actualPath = isPlanningSession
+  // Check if this is a planning session (Refinement or Planning tab)
+  const isClaudeCodeSession = session.worktreePath.startsWith("planning:");
+  const planningSessionId = isClaudeCodeSession
+    ? session.worktreePath.replace("planning:", "")
+    : null;
+  const actualPath = isClaudeCodeSession
     ? session.worktreePath.replace("planning:", "")
     : session.worktreePath;
+
+  // Get planning session to check if it's an Instruction Review session
+  let isInstructionReviewSession = false;
+  if (planningSessionId) {
+    const [planningSession] = await db
+      .select()
+      .from(schema.planningSessions)
+      .where(eq(schema.planningSessions.id, planningSessionId));
+    if (planningSession?.title.startsWith("Planning:")) {
+      isInstructionReviewSession = true;
+    }
+  }
 
   // 1. System: Project rules (fetch early for use in both modes)
   const rules = await db
@@ -903,10 +947,16 @@ async function buildPrompt(
     ? (JSON.parse(rules[0].ruleJson) as BranchNamingRule)
     : null;
 
-  if (isPlanningSession) {
-    // Add branch naming rules FIRST for planning sessions (most important)
-    if (branchNaming && branchNaming.pattern) {
-      parts.push(`# ブランチ命名規則【厳守】
+  if (isClaudeCodeSession) {
+    if (isInstructionReviewSession) {
+      // Planning tab: Instruction review mode
+      parts.push(INSTRUCTION_REVIEW_SYSTEM_PROMPT);
+      parts.push(`## Repository: ${session.repoId}\n`);
+    } else {
+      // Refinement tab: Task breakdown mode
+      // Add branch naming rules FIRST for planning sessions (most important)
+      if (branchNaming && branchNaming.pattern) {
+        parts.push(`# ブランチ命名規則【厳守】
 
 ブランチ名は以下のパターンに従ってください:
 
@@ -916,13 +966,14 @@ ${branchNaming.pattern}
 ※ {issueId} がパターンに含まれていても、Issue番号がない場合は省略してください。
 ${branchNaming.examples?.length ? `\n例: ${branchNaming.examples.join(", ")}` : ""}
 `);
-    }
+      }
 
-    parts.push(PLANNING_SYSTEM_PROMPT);
-    parts.push(`## Repository: ${session.repoId}\n`);
+      parts.push(REFINEMENT_SYSTEM_PROMPT);
+      parts.push(`## Repository: ${session.repoId}\n`);
+    }
   }
 
-  if (!isPlanningSession) {
+  if (!isClaudeCodeSession) {
     parts.push(`# System Context
 
 ## Working Directory
@@ -936,7 +987,7 @@ ${branchNaming ? `- Branch naming: \`${branchNaming.pattern}\`` : "- No specific
   }
 
   // 2. Context: Git status (skip for planning sessions)
-  if (!isPlanningSession) {
+  if (!isClaudeCodeSession) {
     let gitStatus = "";
     try {
       gitStatus = execSync(`cd "${actualPath}" && git status --short`, {
@@ -954,7 +1005,7 @@ ${gitStatus || "Clean working directory"}
   }
 
   // 3. External links context and base branch (for planning sessions)
-  if (isPlanningSession) {
+  if (isClaudeCodeSession) {
     // Find the planning session that has this chat session linked
     const planningSession = await db
       .select()

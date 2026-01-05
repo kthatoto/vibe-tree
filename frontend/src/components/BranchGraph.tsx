@@ -44,7 +44,7 @@ interface LayoutEdge {
   isTentative?: boolean;
 }
 
-const NODE_WIDTH = 170;
+const NODE_WIDTH = 200;
 const NODE_HEIGHT = 70;
 const TENTATIVE_NODE_HEIGHT = 60;
 const HORIZONTAL_GAP = 28;
@@ -483,7 +483,7 @@ export default function BranchGraph({
               height: "100%",
               display: "flex",
               flexDirection: "column",
-              justifyContent: hasPR ? "flex-start" : "center",
+              justifyContent: "flex-start",
               gap: 4,
               overflow: "hidden",
             }}
@@ -583,7 +583,7 @@ export default function BranchGraph({
                 lineHeight: 1.3,
                 wordBreak: "break-all",
                 overflow: "hidden",
-                textAlign: hasPR ? "left" : "center",
+                textAlign: "left",
               }}
             >
               {displayText}

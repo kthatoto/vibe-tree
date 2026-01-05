@@ -27,6 +27,12 @@ export interface WorktreeSettings {
   // Which worktree to use for checkout when multiple exist
   // "main" = always use main repo, "first" = use first worktree found, "ask" = show selection
   checkoutPreference?: "main" | "first" | "ask";
+  // Custom command to run after worktree creation
+  // Placeholders: {repo} = repository name, {branch} = branch name, {path} = worktree full path
+  worktreeCreateCommand?: string;
+  // Custom command to run after worktree deletion
+  // Placeholders: {repo} = repository name, {branch} = branch name, {path} = worktree full path
+  worktreeDeleteCommand?: string;
 }
 
 export interface ProjectRule {

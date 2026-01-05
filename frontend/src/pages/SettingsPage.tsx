@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { api, type BranchNamingRule, type RepoPin } from "../lib/api";
+import { api, type BranchNamingRule, type RepoPin, type WorktreeSettings } from "../lib/api";
 
 export default function SettingsPage() {
   const [searchParams] = useSearchParams();
@@ -12,6 +12,7 @@ export default function SettingsPage() {
   const [, setRule] = useState<BranchNamingRule | null>(null);
   const [patterns, setPatterns] = useState<string[]>([]);
   const [defaultBranch, setDefaultBranch] = useState("");
+  const [worktreeSettings, setWorktreeSettings] = useState<WorktreeSettings>({});
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +36,7 @@ export default function SettingsPage() {
     if (!selectedPinId) {
       setSelectedPin(null);
       setRule(null);
+      setWorktreeSettings({});
       return;
     }
 
@@ -54,6 +56,16 @@ export default function SettingsPage() {
         console.error(err);
         setRule({ patterns: [] });
         setPatterns([]);
+      });
+
+    api
+      .getWorktreeSettings(pin.repoId)
+      .then((settings) => {
+        setWorktreeSettings(settings);
+      })
+      .catch((err) => {
+        console.error(err);
+        setWorktreeSettings({});
       });
   }, [selectedPinId, repoPins]);
 
@@ -76,6 +88,12 @@ export default function SettingsPage() {
       if (defaultBranch) {
         await api.updateRepoPin(selectedPin.id, { baseBranch: defaultBranch });
       }
+
+      // Save worktree settings
+      await api.updateWorktreeSettings({
+        repoId: selectedPin.repoId,
+        ...worktreeSettings,
+      });
 
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -170,6 +188,35 @@ export default function SettingsPage() {
             >
               + Add Pattern
             </button>
+          </div>
+
+          {/* Worktree Custom Commands */}
+          <div style={{ marginBottom: "20px", padding: "15px", background: "#1f2937", borderRadius: "8px", border: "1px solid #374151" }}>
+            <label style={{ color: "#9ca3af", fontSize: "12px", display: "block", marginBottom: "8px" }}>WORKTREE CREATE COMMAND</label>
+            <input
+              type="text"
+              value={worktreeSettings.worktreeCreateCommand || ""}
+              onChange={(e) => setWorktreeSettings({ ...worktreeSettings, worktreeCreateCommand: e.target.value })}
+              placeholder="e.g., npm install"
+              style={{ width: "100%", padding: "8px", fontFamily: "monospace", background: "#111827", color: "#e5e7eb", border: "1px solid #374151", borderRadius: "4px", boxSizing: "border-box" }}
+            />
+            <small style={{ color: "#6b7280", fontSize: "11px", marginTop: "4px", display: "block" }}>
+              Placeholders: {"{repo}"}, {"{branch}"}, {"{path}"}
+            </small>
+          </div>
+
+          <div style={{ marginBottom: "20px", padding: "15px", background: "#1f2937", borderRadius: "8px", border: "1px solid #374151" }}>
+            <label style={{ color: "#9ca3af", fontSize: "12px", display: "block", marginBottom: "8px" }}>WORKTREE DELETE COMMAND</label>
+            <input
+              type="text"
+              value={worktreeSettings.worktreeDeleteCommand || ""}
+              onChange={(e) => setWorktreeSettings({ ...worktreeSettings, worktreeDeleteCommand: e.target.value })}
+              placeholder="e.g., cleanup-script.sh {branch}"
+              style={{ width: "100%", padding: "8px", fontFamily: "monospace", background: "#111827", color: "#e5e7eb", border: "1px solid #374151", borderRadius: "4px", boxSizing: "border-box" }}
+            />
+            <small style={{ color: "#6b7280", fontSize: "11px", marginTop: "4px", display: "block" }}>
+              Placeholders: {"{repo}"}, {"{branch}"}, {"{path}"}
+            </small>
           </div>
 
           {/* Save Button */}

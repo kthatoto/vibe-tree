@@ -1,6 +1,5 @@
 {
   "name": "vibe-tree",
-  "module": "index.ts",
   "type": "module",
   "scripts": {
     "dev": "concurrently -n backend,frontend -c blue,green \"bun run dev:backend\" \"bun run dev:frontend\"",
@@ -33,7 +32,6 @@
     "bun-pty": "^0.4.2",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.11.3",
-    "node-pty": "^1.1.0",
     "zod": "^4.2.1"
   }
 }

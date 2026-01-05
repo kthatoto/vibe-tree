@@ -9,6 +9,7 @@ import { createBranchSchema, createTreeSchema, validateOrThrow } from "../../sha
 import { BadRequestError } from "../middleware/error-handler";
 import { db, schema } from "../../db";
 import type { WorktreeSettings } from "../../shared/types";
+import { getWorktreePath, removeWorktree } from "../../utils/git";
 
 // Helper to get worktree settings for a repo
 async function getWorktreeSettings(repoId: string): Promise<WorktreeSettings> {
@@ -59,6 +60,35 @@ function runPostDeleteScript(localPath: string, script: string): void {
       if (stderr) console.error(`[Worktree] stderr:`, stderr);
     } else {
       console.log(`[Worktree] Post-delete script completed successfully`);
+      if (stdout) console.log(`[Worktree] stdout:`, stdout);
+    }
+  });
+}
+
+// Helper to run custom worktree command with placeholder replacement
+// Placeholders: {repo}, {branch}, {path}
+function runCustomCommand(
+  command: string,
+  context: { repoId: string; branchName: string; worktreePath: string },
+  label: string
+): void {
+  if (!command || !command.trim()) return;
+
+  // Replace placeholders
+  const repoName = context.repoId.split("/").pop() || context.repoId;
+  const resolvedCommand = command
+    .replace(/\{repo\}/g, repoName)
+    .replace(/\{branch\}/g, context.branchName)
+    .replace(/\{path\}/g, context.worktreePath);
+
+  console.log(`[Worktree] Running ${label}: ${resolvedCommand}`);
+
+  exec(resolvedCommand, { shell: "/bin/bash" }, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`[Worktree] ${label} failed:`, error.message);
+      if (stderr) console.error(`[Worktree] stderr:`, stderr);
+    } else {
+      console.log(`[Worktree] ${label} completed successfully`);
       if (stdout) console.log(`[Worktree] stdout:`, stdout);
     }
   });
@@ -301,6 +331,15 @@ branchRouter.post("/create-tree", async (c) => {
         if (wtSettings.postCreateScript) {
           runPostCreateScript(result.worktreePath, wtSettings.postCreateScript);
         }
+
+        // Run custom worktree create command if configured
+        if (wtSettings.worktreeCreateCommand) {
+          runCustomCommand(wtSettings.worktreeCreateCommand, {
+            repoId: input.repoId,
+            branchName: task.branchName,
+            worktreePath: result.worktreePath,
+          }, "worktreeCreateCommand");
+        }
       }
 
       // Create chat session for this worktree
@@ -471,6 +510,15 @@ branchRouter.post("/create-worktree", async (c) => {
     // Run post-creation script if configured
     if (wtSettings.postCreateScript) {
       runPostCreateScript(actualWorktreePath, wtSettings.postCreateScript);
+    }
+
+    // Run custom worktree create command if configured
+    if (wtSettings.worktreeCreateCommand) {
+      runCustomCommand(wtSettings.worktreeCreateCommand, {
+        repoId,
+        branchName,
+        worktreePath: actualWorktreePath,
+      }, "worktreeCreateCommand");
     }
   } catch (err) {
     throw new BadRequestError(`Failed to create worktree: ${err instanceof Error ? err.message : String(err)}`);
@@ -1080,6 +1128,38 @@ branchRouter.post("/delete", async (c) => {
   } catch (err) {
     if (err instanceof BadRequestError) throw err;
     // Ignore other errors
+  }
+
+  // Remove worktree if it exists for this branch
+  const worktreePath = getWorktreePath(localPath, branchName);
+  if (worktreePath) {
+    // Get worktree settings before removal for custom command
+    const repoIdForWorktree = getRepoId(localPath);
+    const wtSettings = await getWorktreeSettings(repoIdForWorktree);
+
+    try {
+      const removed = removeWorktree(localPath, branchName);
+      if (!removed) {
+        console.warn(`Failed to remove worktree for branch ${branchName}`);
+      } else {
+        // Run custom worktree delete command if configured
+        if (wtSettings.worktreeDeleteCommand) {
+          runCustomCommand(wtSettings.worktreeDeleteCommand, {
+            repoId: repoIdForWorktree,
+            branchName,
+            worktreePath,
+          }, "worktreeDeleteCommand");
+        }
+
+        // Run post-delete script if configured
+        if (wtSettings.postDeleteScript) {
+          runPostDeleteScript(localPath, wtSettings.postDeleteScript);
+        }
+      }
+    } catch (err) {
+      console.error(`Error removing worktree for branch ${branchName}:`, err);
+      // Continue with branch deletion even if worktree removal fails
+    }
   }
 
   // Delete the branch

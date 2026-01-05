@@ -407,6 +407,8 @@ export const api = {
     postCreateScript?: string;
     postDeleteScript?: string;
     checkoutPreference?: "main" | "first" | "ask";
+    worktreeCreateCommand?: string;
+    worktreeDeleteCommand?: string;
   }) =>
     fetchJson<WorktreeSettings>(`${API_BASE}/project-rules/worktree`, {
       method: "POST",

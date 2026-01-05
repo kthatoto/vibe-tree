@@ -19,6 +19,7 @@ import {
   type ChatMessage,
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
+import { useSessionNotifications } from "../lib/useSessionNotifications";
 import { ChatPanel } from "./ChatPanel";
 import type { TaskSuggestion } from "../lib/task-parser";
 import githubIcon from "../assets/github.svg";
@@ -230,6 +231,17 @@ export function PlanningPanel({
   // Instructions map for planning sessions (baseBranch -> instruction preview)
   const [branchInstructions, setBranchInstructions] = useState<Map<string, string>>(new Map());
 
+  // Session notifications (unread counts, thinking state)
+  const chatSessionIds = sessions
+    .filter((s) => s.chatSessionId)
+    .map((s) => s.chatSessionId as string);
+  const {
+    getNotification,
+    getTotalUnread,
+    hasThinking,
+    markAsSeen,
+  } = useSessionNotifications(chatSessionIds);
+
   // Drag and drop for task parent-child relationships
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const sensors = useSensors(
@@ -398,6 +410,10 @@ export function PlanningPanel({
   const handleSelectSession = (session: PlanningSession) => {
     setSelectedSession(session);
     onSessionSelect?.(session);
+    // Mark session as seen when selected
+    if (session.chatSessionId) {
+      markAsSeen(session.chatSessionId);
+    }
   };
 
   // Start planning session from pending planning
@@ -720,18 +736,42 @@ export function PlanningPanel({
 
         {/* Tabs */}
         <div className="planning-panel__tabs">
-          <button
-            className={`planning-panel__tab ${activeTab === "refinement" ? "planning-panel__tab--active" : ""}`}
-            onClick={() => setActiveTab("refinement")}
-          >
-            Refinement
-          </button>
-          <button
-            className={`planning-panel__tab ${activeTab === "planning" ? "planning-panel__tab--active" : ""}`}
-            onClick={() => setActiveTab("planning")}
-          >
-            Planning
-          </button>
+          {(() => {
+            const refinementSessions = sessions.filter(s => !s.title.startsWith("Planning:"));
+            const refinementChatIds = refinementSessions.filter(s => s.chatSessionId).map(s => s.chatSessionId as string);
+            const refinementUnread = getTotalUnread(refinementChatIds);
+            const refinementThinking = hasThinking(refinementChatIds);
+            return (
+              <button
+                className={`planning-panel__tab ${activeTab === "refinement" ? "planning-panel__tab--active" : ""}`}
+                onClick={() => setActiveTab("refinement")}
+              >
+                {refinementThinking && <span className="planning-panel__tab-thinking" />}
+                Refinement
+                {refinementUnread > 0 && (
+                  <span className="planning-panel__tab-badge">{refinementUnread}</span>
+                )}
+              </button>
+            );
+          })()}
+          {(() => {
+            const planningSessions = sessions.filter(s => s.title.startsWith("Planning:"));
+            const planningChatIds = planningSessions.filter(s => s.chatSessionId).map(s => s.chatSessionId as string);
+            const planningUnread = getTotalUnread(planningChatIds);
+            const planningThinking = hasThinking(planningChatIds);
+            return (
+              <button
+                className={`planning-panel__tab ${activeTab === "planning" ? "planning-panel__tab--active" : ""}`}
+                onClick={() => setActiveTab("planning")}
+              >
+                {planningThinking && <span className="planning-panel__tab-thinking" />}
+                Planning
+                {planningUnread > 0 && (
+                  <span className="planning-panel__tab-badge">{planningUnread}</span>
+                )}
+              </button>
+            );
+          })()}
           <button
             className={`planning-panel__tab ${activeTab === "task" ? "planning-panel__tab--active" : ""}`}
             onClick={() => setActiveTab("task")}
@@ -795,13 +835,19 @@ export function PlanningPanel({
                 No refinement sessions yet
               </div>
             ) : (
-              refinementSessions.map((session) => (
+              refinementSessions.map((session) => {
+                const notification = session.chatSessionId ? getNotification(session.chatSessionId) : null;
+                const hasUnread = notification && notification.unreadCount > 0;
+                const isThinking = notification?.isThinking;
+                return (
                 <div
                   key={session.id}
                   className={`planning-panel__session-item planning-panel__session-item--${session.status}`}
                   onClick={() => handleSelectSession(session)}
                 >
                   <div className="planning-panel__session-title">
+                    {isThinking && <span className="planning-panel__session-thinking" />}
+                    {hasUnread && <span className="planning-panel__session-unread" />}
                     {session.title}
                   </div>
                   <div className="planning-panel__session-base">
@@ -828,7 +874,8 @@ export function PlanningPanel({
                     )}
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
           </div>
           );
@@ -876,6 +923,9 @@ export function PlanningPanel({
               const instructionPreview = instruction
                 ? instruction.split('\n').slice(0, 2).join('\n')
                 : null;
+              const notification = session.chatSessionId ? getNotification(session.chatSessionId) : null;
+              const hasUnread = notification && notification.unreadCount > 0;
+              const isThinking = notification?.isThinking;
               return (
               <div
                 key={session.id}
@@ -884,6 +934,8 @@ export function PlanningPanel({
               >
                 <div className="planning-panel__planning-info">
                   <div className="planning-panel__session-base">
+                    {isThinking && <span className="planning-panel__session-thinking" />}
+                    {hasUnread && <span className="planning-panel__session-unread" />}
                     {session.baseBranch}
                   </div>
                   {instructionPreview && (

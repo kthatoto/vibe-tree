@@ -471,6 +471,22 @@
   flex-shrink: 0;
 }
 
+/* Instruction hidden indicator (when editing in Planning Session) */
+.task-detail-panel__instruction-hidden {
+  padding: 12px 16px;
+  background: #111827;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6b7280;
+  font-size: 13px;
+  border-top: 1px solid #1f2937;
+}
+
+.task-detail-panel__instruction-hidden-icon {
+  font-size: 14px;
+}
+
 /* Resize Handle */
 .task-detail-panel__resize-handle {
   position: relative;

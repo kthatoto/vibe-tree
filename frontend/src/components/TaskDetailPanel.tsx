@@ -1199,7 +1199,12 @@ export function TaskDetailPanel({
       </div>
 
       {/* Instruction Section - hidden when Planning session is open for this branch */}
-      {activePlanningBranch !== branchName && (
+      {activePlanningBranch === branchName ? (
+        <div className="task-detail-panel__instruction-hidden">
+          <span className="task-detail-panel__instruction-hidden-icon">📝</span>
+          <span>Editing in Planning Session below</span>
+        </div>
+      ) : (
         <div className="task-detail-panel__instruction-section">
           <div className="task-detail-panel__instruction-header">
             <h4>Task Instruction</h4>

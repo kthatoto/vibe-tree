@@ -1071,18 +1071,16 @@
 
 .task-detail-panel__link-main {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
 }
 
 .task-detail-panel__link-main .task-detail-panel__link-url {
   flex: 1;
   line-height: 1.4;
-  padding-top: 1px;
 }
 
 .task-detail-panel__link-main .task-detail-panel__link-delete-btn {
-  margin-top: 2px;
 }
 
 .task-detail-panel__link-meta {

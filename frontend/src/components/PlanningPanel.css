@@ -1078,7 +1078,7 @@
 
 .planning-panel__instruction-textarea {
   flex: 1;
-  min-height: 150px;
+  min-height: 100px;
   padding: 10px;
   background: #0f172a;
   color: #e5e7eb;
@@ -1087,7 +1087,8 @@
   font-size: 13px;
   font-family: inherit;
   line-height: 1.5;
-  resize: none;
+  resize: vertical;
+  overflow-y: auto;
 }
 
 .planning-panel__instruction-textarea:focus {

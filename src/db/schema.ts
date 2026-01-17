@@ -71,6 +71,8 @@ export const planningSessions = sqliteTable("planning_sessions", {
   nodesJson: text("nodes_json").notNull().default("[]"), // JSON array of task nodes
   edgesJson: text("edges_json").notNull().default("[]"), // JSON array of task edges
   chatSessionId: text("chat_session_id"), // linked chat session
+  executeBranchesJson: text("execute_branches_json"), // JSON array of branch names for execute session ["branch1", "branch2"]
+  currentExecuteIndex: integer("current_execute_index").default(0), // current index in executeBranchesJson
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

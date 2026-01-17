@@ -9,6 +9,13 @@ import {
 import { wsClient } from "../lib/ws";
 import githubIcon from "../assets/github.svg";
 
+interface ExecuteContext {
+  branchName: string;
+  instruction: string | null;
+  taskIndex: number;
+  totalTasks: number;
+}
+
 interface ChatPanelProps {
   sessionId: string;
   onTaskSuggested?: (task: TaskSuggestion) => void;
@@ -16,6 +23,8 @@ interface ChatPanelProps {
   disabled?: boolean;
   currentInstruction?: string;
   onInstructionUpdated?: (newContent: string) => void;
+  executeMode?: boolean;
+  executeContext?: ExecuteContext;
 }
 
 export function ChatPanel({
@@ -25,6 +34,8 @@ export function ChatPanel({
   disabled = false,
   currentInstruction = "",
   onInstructionUpdated,
+  executeMode = false,
+  executeContext,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -83,6 +94,19 @@ export function ChatPanel({
     }
   }, [messages]);
 
+  // Build execute mode context
+  const buildExecuteContext = (): string | undefined => {
+    if (!executeMode || !executeContext) return undefined;
+    const lines = [
+      `## Execute Mode - Task ${executeContext.taskIndex + 1}/${executeContext.totalTasks}`,
+      `**Branch:** ${executeContext.branchName}`,
+    ];
+    if (executeContext.instruction) {
+      lines.push("", "### Task Instruction:", executeContext.instruction);
+    }
+    return lines.join("\n");
+  };
+
   // Send message
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
@@ -104,8 +128,11 @@ export function ChatPanel({
     setMessages((prev) => [...prev, tempUserMsg]);
 
     try {
+      // Build context for execute mode
+      const context = buildExecuteContext();
+      const chatMode = executeMode ? "execution" : undefined;
       // API returns immediately, assistant message comes via WebSocket
-      const result = await api.sendChatMessage(sessionId, userMessage);
+      const result = await api.sendChatMessage(sessionId, userMessage, context, chatMode);
       // Replace temp message with real one
       setMessages((prev) =>
         prev.map((m) => (m.id === tempId ? result.userMessage : m))

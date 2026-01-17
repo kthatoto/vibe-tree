@@ -1296,6 +1296,8 @@ export default function TreeDashboard() {
                   onSessionSelect={handlePlanningSessionSelect}
                   pendingPlanning={pendingPlanning}
                   onPlanningStarted={() => setPendingPlanning(null)}
+                  graphNodes={snapshot.nodes}
+                  graphEdges={snapshot.edges}
                 />
               </div>
             </div>

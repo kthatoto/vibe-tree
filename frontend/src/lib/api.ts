@@ -313,6 +313,8 @@ export interface PlanningSession {
   nodes: TaskNode[];
   edges: TaskEdge[];
   chatSessionId: string | null;
+  executeBranches: string[] | null; // Selected branches for execute session
+  currentExecuteIndex: number; // Current index in executeBranches
   createdAt: string;
   updatedAt: string;
 }
@@ -730,10 +732,10 @@ export const api = {
     fetchJson<PlanningSession[]>(`${API_BASE}/planning-sessions?repoId=${encodeURIComponent(repoId)}`),
   getPlanningSession: (id: string) =>
     fetchJson<PlanningSession>(`${API_BASE}/planning-sessions/${id}`),
-  createPlanningSession: (repoId: string, baseBranch: string, title?: string, type?: PlanningSessionType) =>
+  createPlanningSession: (repoId: string, baseBranch: string, title?: string, type?: PlanningSessionType, executeBranches?: string[]) =>
     fetchJson<PlanningSession>(`${API_BASE}/planning-sessions`, {
       method: "POST",
-      body: JSON.stringify({ repoId, baseBranch, title, type }),
+      body: JSON.stringify({ repoId, baseBranch, title, type, executeBranches }),
     }),
   updatePlanningSession: (id: string, data: {
     title?: string;
@@ -758,6 +760,18 @@ export const api = {
     fetchJson<{ success: boolean }>(`${API_BASE}/planning-sessions/${id}`, {
       method: "DELETE",
     }),
+  updateExecuteBranches: (id: string, executeBranches: string[]) =>
+    fetchJson<PlanningSession>(`${API_BASE}/planning-sessions/${id}/execute-branches`, {
+      method: "PATCH",
+      body: JSON.stringify({ executeBranches }),
+    }),
+  advanceExecuteTask: (id: string) =>
+    fetchJson<PlanningSession & { completed?: boolean; currentBranch?: string }>(
+      `${API_BASE}/planning-sessions/${id}/advance-task`,
+      {
+        method: "POST",
+      }
+    ),
 
   // Task Instructions
   getTaskInstruction: (repoId: string, branchName: string) =>

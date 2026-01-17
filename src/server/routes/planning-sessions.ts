@@ -37,6 +37,8 @@ interface PlanningSession {
   nodes: TaskNode[];
   edges: TaskEdge[];
   chatSessionId: string | null;
+  executeBranches: string[] | null; // Selected branches for execute session
+  currentExecuteIndex: number; // Current index in executeBranches
   createdAt: string;
   updatedAt: string;
 }
@@ -53,6 +55,8 @@ function toSession(row: typeof schema.planningSessions.$inferSelect): PlanningSe
     nodes: JSON.parse(row.nodesJson) as TaskNode[],
     edges: JSON.parse(row.edgesJson) as TaskEdge[],
     chatSessionId: row.chatSessionId,
+    executeBranches: row.executeBranchesJson ? JSON.parse(row.executeBranchesJson) as string[] : null,
+    currentExecuteIndex: row.currentExecuteIndex ?? 0,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -64,6 +68,11 @@ const createSessionSchema = z.object({
   baseBranch: z.string().min(1),
   title: z.string().optional(),
   type: z.enum(["refinement", "planning", "execute"]).optional(),
+  executeBranches: z.array(z.string()).optional(), // For execute sessions
+});
+
+const updateExecuteBranchesSchema = z.object({
+  executeBranches: z.array(z.string()),
 });
 
 const updateSessionSchema = z.object({
@@ -118,7 +127,7 @@ planningSessionsRouter.get("/:id", async (c) => {
 // POST /api/planning-sessions - Create new planning session
 planningSessionsRouter.post("/", async (c) => {
   const body = await c.req.json();
-  const { repoId, baseBranch, title, type } = validateOrThrow(createSessionSchema, body);
+  const { repoId, baseBranch, title, type, executeBranches } = validateOrThrow(createSessionSchema, body);
 
   const now = new Date().toISOString();
   const sessionId = randomUUID();
@@ -135,6 +144,8 @@ planningSessionsRouter.post("/", async (c) => {
     nodesJson: "[]",
     edgesJson: "[]",
     chatSessionId,
+    executeBranchesJson: executeBranches ? JSON.stringify(executeBranches) : null,
+    currentExecuteIndex: 0,
     createdAt: now,
     updatedAt: now,
   });
@@ -577,4 +588,112 @@ planningSessionsRouter.delete("/:id", async (c) => {
   });
 
   return c.json({ success: true });
+});
+
+// PATCH /api/planning-sessions/:id/execute-branches - Update execute branches
+planningSessionsRouter.patch("/:id/execute-branches", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+  const { executeBranches } = validateOrThrow(updateExecuteBranchesSchema, body);
+
+  const [existing] = await db
+    .select()
+    .from(schema.planningSessions)
+    .where(eq(schema.planningSessions.id, id));
+
+  if (!existing) {
+    throw new NotFoundError("Planning session not found");
+  }
+
+  if (existing.type !== "execute") {
+    throw new BadRequestError("Session is not an execute session");
+  }
+
+  const now = new Date().toISOString();
+  await db
+    .update(schema.planningSessions)
+    .set({
+      executeBranchesJson: JSON.stringify(executeBranches),
+      currentExecuteIndex: 0, // Reset index when branches change
+      updatedAt: now,
+    })
+    .where(eq(schema.planningSessions.id, id));
+
+  const [updated] = await db
+    .select()
+    .from(schema.planningSessions)
+    .where(eq(schema.planningSessions.id, id));
+
+  broadcast({
+    type: "planning.updated",
+    repoId: updated!.repoId,
+    data: toSession(updated!),
+  });
+
+  return c.json(toSession(updated!));
+});
+
+// POST /api/planning-sessions/:id/advance-task - Advance to next task
+planningSessionsRouter.post("/:id/advance-task", async (c) => {
+  const id = c.req.param("id");
+
+  const [session] = await db
+    .select()
+    .from(schema.planningSessions)
+    .where(eq(schema.planningSessions.id, id));
+
+  if (!session) {
+    throw new NotFoundError("Planning session not found");
+  }
+
+  if (session.type !== "execute") {
+    throw new BadRequestError("Session is not an execute session");
+  }
+
+  const executeBranches = session.executeBranchesJson
+    ? JSON.parse(session.executeBranchesJson) as string[]
+    : [];
+  const currentIndex = session.currentExecuteIndex ?? 0;
+
+  if (currentIndex >= executeBranches.length - 1) {
+    // Already at last task or no tasks
+    return c.json({
+      ...toSession(session),
+      completed: true,
+      message: "All tasks completed",
+    });
+  }
+
+  const now = new Date().toISOString();
+  const newIndex = currentIndex + 1;
+
+  await db
+    .update(schema.planningSessions)
+    .set({
+      currentExecuteIndex: newIndex,
+      updatedAt: now,
+    })
+    .where(eq(schema.planningSessions.id, id));
+
+  const [updated] = await db
+    .select()
+    .from(schema.planningSessions)
+    .where(eq(schema.planningSessions.id, id));
+
+  broadcast({
+    type: "planning.taskAdvanced",
+    repoId: updated!.repoId,
+    data: {
+      ...toSession(updated!),
+      previousIndex: currentIndex,
+      newIndex,
+      currentBranch: executeBranches[newIndex],
+    },
+  });
+
+  return c.json({
+    ...toSession(updated!),
+    completed: newIndex >= executeBranches.length - 1,
+    currentBranch: executeBranches[newIndex],
+  });
 });

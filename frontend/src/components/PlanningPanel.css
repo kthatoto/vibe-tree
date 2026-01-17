@@ -183,21 +183,24 @@
 /* Session List View */
 .planning-panel__session-list-view {
   display: flex;
-  flex-direction: column;
   flex: 1;
   overflow: hidden;
-  padding: 12px;
 }
 
-/* New Form Item (inline in grid) */
-.planning-panel__new-form-item {
+/* Two Column mode (when New Session form is open) */
+.planning-panel__session-list-view--two-column {
+  display: flex;
+}
+
+.planning-panel__create-column {
+  width: 280px;
+  flex-shrink: 0;
   padding: 12px;
-  background: #0f172a;
-  border: 1px solid #3b82f6;
-  border-radius: 6px;
+  border-right: 1px solid #374151;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  overflow-y: auto;
 }
 
 .planning-panel__new-form {
@@ -260,7 +263,7 @@
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 10px;
   align-content: start;
-  padding: 0;
+  padding: 12px;
 }
 
 .planning-panel__session-add {

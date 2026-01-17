@@ -847,50 +847,12 @@ export function PlanningPanel({
 
   // Session list view (when no session is selected or as a pane)
   const renderSessionList = () => (
-    <div className="planning-panel__session-list-view">
-      {/* Pending Planning from Branch Selection */}
-      {pendingPlanning && (
-        <div className="planning-panel__pending-planning">
-          <div className="planning-panel__pending-title">
-            Start Planning for: {pendingPlanning.branchName}
-          </div>
-          {pendingPlanning.instruction && (
-            <div className="planning-panel__pending-instruction">
-              {pendingPlanning.instruction}
-            </div>
-          )}
-          <div className="planning-panel__pending-actions">
-            <button
-              className="planning-panel__pending-start"
-              onClick={handleStartPlanningSession}
-              disabled={creating}
-            >
-              {creating ? "Starting..." : "Start Session"}
-            </button>
-            <button
-              className="planning-panel__pending-cancel"
-              onClick={() => onPlanningStarted?.()}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Sessions List */}
-      <div className="planning-panel__list">
-        {/* New Session Button/Form as first item */}
-        {!showNewForm ? (
-          <button
-            className="planning-panel__session-add"
-            onClick={() => setShowNewForm(true)}
-          >
-            <span className="planning-panel__session-add-icon">+</span>
-            <span>New Session</span>
-          </button>
-        ) : (
+    <div className={`planning-panel__session-list-view ${showNewForm ? "planning-panel__session-list-view--two-column" : ""}`}>
+      {/* Left Column: Create Form (only when showNewForm is true) */}
+      {showNewForm && (
+        <div className="planning-panel__create-column">
           <div
-            className="planning-panel__new-form-item"
+            className="planning-panel__new-form"
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !creating) {
                 handleCreateSession();
@@ -946,6 +908,49 @@ export function PlanningPanel({
               <button onClick={() => setShowNewForm(false)}>Cancel</button>
             </div>
           </div>
+
+          {/* Pending Planning from Branch Selection */}
+          {pendingPlanning && (
+            <div className="planning-panel__pending-planning">
+              <div className="planning-panel__pending-title">
+                Start Planning for: {pendingPlanning.branchName}
+              </div>
+              {pendingPlanning.instruction && (
+                <div className="planning-panel__pending-instruction">
+                  {pendingPlanning.instruction}
+                </div>
+              )}
+              <div className="planning-panel__pending-actions">
+                <button
+                  className="planning-panel__pending-start"
+                  onClick={handleStartPlanningSession}
+                  disabled={creating}
+                >
+                  {creating ? "Starting..." : "Start Session"}
+                </button>
+                <button
+                  className="planning-panel__pending-cancel"
+                  onClick={() => onPlanningStarted?.()}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Right Column: Sessions List */}
+      <div className="planning-panel__list">
+        {/* New Session Button (only when form is not shown) */}
+        {!showNewForm && (
+          <button
+            className="planning-panel__session-add"
+            onClick={() => setShowNewForm(true)}
+          >
+            <span className="planning-panel__session-add-icon">+</span>
+            <span>New Session</span>
+          </button>
         )}
 
         {/* Session items */}
@@ -1000,6 +1005,13 @@ export function PlanningPanel({
             </div>
           );
         })}
+
+        {/* Empty state (only when no sessions and form not shown) */}
+        {sessions.length === 0 && !showNewForm && (
+          <div className="planning-panel__empty">
+            No sessions yet
+          </div>
+        )}
       </div>
     </div>
   );

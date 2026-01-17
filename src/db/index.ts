@@ -16,3 +16,18 @@ const sqlite = new Database(DB_PATH);
 export const db = drizzle(sqlite, { schema });
 
 export { schema };
+
+// One-time migration: set type for existing planning sessions
+// based on title pattern (Planning: prefix = "planning", otherwise "refinement")
+try {
+  sqlite.exec(`
+    UPDATE planning_sessions
+    SET type = CASE
+      WHEN title LIKE 'Planning:%' THEN 'planning'
+      ELSE 'refinement'
+    END
+    WHERE type IS NULL OR type = '' OR type NOT IN ('refinement', 'planning', 'execute')
+  `);
+} catch {
+  // Ignore if type column doesn't exist yet (will be created on first db:push)
+}

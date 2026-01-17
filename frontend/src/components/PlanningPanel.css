@@ -1126,22 +1126,21 @@
 /* Session Type Selection (New Form) */
 .planning-panel__type-select {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   margin-bottom: 4px;
 }
 
 .planning-panel__type-btn {
-  flex: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px;
+  gap: 8px;
+  padding: 10px 12px;
   background: #1f2937;
   border: 1px solid #374151;
   border-radius: 6px;
   color: #9ca3af;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: all 0.15s;
 }

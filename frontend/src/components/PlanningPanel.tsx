@@ -1162,35 +1162,9 @@ export function PlanningPanel({
 
       {/* Execute Session: Execution Mode */}
       {sessionTypeValue === "execute" && selectedSession.executeBranches && selectedSession.executeBranches.length > 0 && (
-        <div className="planning-panel__execute-running">
-          {/* Progress */}
-          <div className="planning-panel__execute-progress">
-            <div className="planning-panel__execute-progress-text">
-              Progress: {selectedSession.currentExecuteIndex + 1} / {selectedSession.executeBranches.length} branches
-            </div>
-            <div className="planning-panel__execute-progress-bar">
-              <div
-                className="planning-panel__execute-progress-fill"
-                style={{ width: `${((selectedSession.currentExecuteIndex + 1) / selectedSession.executeBranches.length) * 100}%` }}
-              />
-            </div>
-            <div className="planning-panel__execute-current">
-              Current: <strong>{selectedSession.executeBranches[selectedSession.currentExecuteIndex]}</strong>
-            </div>
-          </div>
-
-          {/* Task Instruction */}
-          {executeCurrentTaskInstruction && (
-            <div className="planning-panel__execute-instruction">
-              <h4>Task Instruction</h4>
-              <div className="planning-panel__execute-instruction-content">
-                {executeCurrentTaskInstruction.instructionMd || "No instruction available for this branch."}
-              </div>
-            </div>
-          )}
-
+        <div className="planning-panel__detail-main">
           {/* Chat */}
-          <div className="planning-panel__execute-chat">
+          <div className="planning-panel__chat">
             {selectedSession.chatSessionId && (
               <ChatPanel
                 sessionId={selectedSession.chatSessionId}
@@ -1208,31 +1182,57 @@ export function PlanningPanel({
             )}
           </div>
 
-          {/* Control buttons */}
-          <div className="planning-panel__execute-controls">
-            <button
-              className="planning-panel__execute-abort-btn"
-              onClick={handleAbortExecution}
-              disabled={executeLoading}
-            >
-              Abort Session
-            </button>
-            <button
-              className="planning-panel__execute-skip-btn"
-              onClick={handleSkipTask}
-              disabled={executeLoading || selectedSession.currentExecuteIndex >= selectedSession.executeBranches.length - 1}
-            >
-              Skip
-            </button>
-            <button
-              className="planning-panel__execute-next-btn"
-              onClick={handleAdvanceTask}
-              disabled={executeLoading || selectedSession.currentExecuteIndex >= selectedSession.executeBranches.length - 1}
-            >
-              {selectedSession.currentExecuteIndex >= selectedSession.executeBranches.length - 1
-                ? "Completed"
-                : "Complete & Next"}
-            </button>
+          {/* Sidebar */}
+          <div className="planning-panel__sidebar">
+            {/* Progress */}
+            <div className="planning-panel__execute-progress">
+              <div className="planning-panel__execute-progress-header">
+                <span>{selectedSession.currentExecuteIndex + 1}/{selectedSession.executeBranches.length}</span>
+                <div className="planning-panel__execute-progress-bar">
+                  <div
+                    className="planning-panel__execute-progress-fill"
+                    style={{ width: `${((selectedSession.currentExecuteIndex + 1) / selectedSession.executeBranches.length) * 100}%` }}
+                  />
+                </div>
+              </div>
+              <div className="planning-panel__execute-current">
+                {selectedSession.executeBranches[selectedSession.currentExecuteIndex]}
+              </div>
+            </div>
+
+            {/* Task Instruction */}
+            <div className="planning-panel__execute-instruction">
+              <div className="planning-panel__execute-instruction-content">
+                {executeCurrentTaskInstruction?.instructionMd || "No instruction"}
+              </div>
+            </div>
+
+            {/* Control buttons */}
+            <div className="planning-panel__execute-controls">
+              <button
+                className="planning-panel__execute-next-btn"
+                onClick={handleAdvanceTask}
+                disabled={executeLoading || selectedSession.currentExecuteIndex >= selectedSession.executeBranches.length - 1}
+              >
+                {selectedSession.currentExecuteIndex >= selectedSession.executeBranches.length - 1
+                  ? "Done"
+                  : "Next"}
+              </button>
+              <button
+                className="planning-panel__execute-skip-btn"
+                onClick={handleSkipTask}
+                disabled={executeLoading || selectedSession.currentExecuteIndex >= selectedSession.executeBranches.length - 1}
+              >
+                Skip
+              </button>
+              <button
+                className="planning-panel__execute-abort-btn"
+                onClick={handleAbortExecution}
+                disabled={executeLoading}
+              >
+                Abort
+              </button>
+            </div>
           </div>
         </div>
       )}

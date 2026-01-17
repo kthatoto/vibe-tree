@@ -1262,3 +1262,130 @@
   color: #fcd34d;
   border: 1px solid #f59e0b;
 }
+
+/* Tab Bar (Browser-style tabs) */
+.planning-panel__tab-bar {
+  display: flex;
+  gap: 2px;
+  background: #0f172a;
+  border-bottom: 1px solid #374151;
+  padding: 4px 8px 0;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.planning-panel__tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  color: #9ca3af;
+  font-size: 12px;
+  cursor: pointer;
+  max-width: 200px;
+  min-width: 100px;
+  transition: all 0.15s;
+}
+
+.planning-panel__tab:hover {
+  background: #374151;
+  color: #e5e7eb;
+}
+
+.planning-panel__tab--active {
+  background: #1f2937;
+  color: #e5e7eb;
+  border-color: #374151;
+  position: relative;
+}
+
+.planning-panel__tab--active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #1f2937;
+}
+
+/* Tab type colors */
+.planning-panel__tab--refinement.planning-panel__tab--active {
+  border-top-color: #8b5cf6;
+}
+
+.planning-panel__tab--planning.planning-panel__tab--active {
+  border-top-color: #3b82f6;
+}
+
+.planning-panel__tab--execute.planning-panel__tab--active {
+  border-top-color: #f59e0b;
+}
+
+.planning-panel__tab-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.planning-panel__tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.planning-panel__tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: #6b7280;
+  font-size: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: all 0.15s;
+}
+
+.planning-panel__tab:hover .planning-panel__tab-close,
+.planning-panel__tab--active .planning-panel__tab-close {
+  opacity: 1;
+}
+
+.planning-panel__tab-close:hover {
+  background: #374151;
+  color: #e5e7eb;
+}
+
+.planning-panel__tab-thinking-indicator {
+  width: 6px;
+  height: 6px;
+  background: #22c55e;
+  border-radius: 50%;
+  animation: thinking-pulse 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+/* Content area */
+.planning-panel__content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.planning-panel__detail-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}

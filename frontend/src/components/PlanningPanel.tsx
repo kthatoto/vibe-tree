@@ -199,10 +199,16 @@ export function PlanningPanel({
   onPlanningStarted,
 }: PlanningPanelProps) {
   const [sessions, setSessions] = useState<PlanningSession[]>([]);
-  const [selectedSession, setSelectedSession] = useState<PlanningSession | null>(null);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Tab management
+  const [openTabIds, setOpenTabIds] = useState<string[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+
+  // Derived: currently selected session from active tab
+  const selectedSession = activeTabId ? sessions.find(s => s.id === activeTabId) || null : null;
 
   // New session type selection (for creation modal)
   const [newSessionType, setNewSessionType] = useState<"refinement" | "planning" | "execute">("refinement");
@@ -301,8 +307,7 @@ export function PlanningPanel({
       if (msg.data && typeof msg.data === "object" && "id" in msg.data) {
         const updated = msg.data as PlanningSession;
         setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-        if (selectedSession?.id === updated.id) {
-          setSelectedSession(updated);
+        if (activeTabId === updated.id) {
           onSessionSelect?.(updated);
           onTasksChange?.(updated.nodes, updated.edges);
         }
@@ -313,9 +318,9 @@ export function PlanningPanel({
       if (msg.data && typeof msg.data === "object" && "id" in msg.data) {
         const deleted = msg.data as { id: string };
         setSessions((prev) => prev.filter((s) => s.id !== deleted.id));
-        if (selectedSession?.id === deleted.id) {
-          setSelectedSession(null);
-          onSessionSelect?.(null);
+        // Close tab if deleted
+        if (openTabIds.includes(deleted.id)) {
+          closeTab(deleted.id);
         }
       }
     });
@@ -324,8 +329,7 @@ export function PlanningPanel({
       if (msg.data && typeof msg.data === "object" && "id" in msg.data) {
         const discarded = msg.data as PlanningSession;
         setSessions((prev) => prev.map((s) => (s.id === discarded.id ? discarded : s)));
-        if (selectedSession?.id === discarded.id) {
-          setSelectedSession(discarded);
+        if (activeTabId === discarded.id) {
           onSessionSelect?.(discarded);
         }
       }
@@ -335,8 +339,7 @@ export function PlanningPanel({
       if (msg.data && typeof msg.data === "object" && "id" in msg.data) {
         const confirmed = msg.data as PlanningSession;
         setSessions((prev) => prev.map((s) => (s.id === confirmed.id ? confirmed : s)));
-        if (selectedSession?.id === confirmed.id) {
-          setSelectedSession(confirmed);
+        if (activeTabId === confirmed.id) {
           onSessionSelect?.(confirmed);
           onTasksChange?.(confirmed.nodes, confirmed.edges);
         }
@@ -418,8 +421,7 @@ export function PlanningPanel({
         newSessionType
       );
       // State will be updated via WebSocket planning.created event
-      setSelectedSession(session);
-      onSessionSelect?.(session);
+      openTab(session);
       setShowNewForm(false);
       setNewTitle("");
       setNewBaseBranch(defaultBranch);
@@ -431,13 +433,48 @@ export function PlanningPanel({
     }
   };
 
-  const handleSelectSession = (session: PlanningSession) => {
-    setSelectedSession(session);
+  // Tab management functions
+  const openTab = useCallback((session: PlanningSession) => {
+    setOpenTabIds((prev) => {
+      if (prev.includes(session.id)) {
+        return prev; // Already open
+      }
+      return [...prev, session.id];
+    });
+    setActiveTabId(session.id);
     onSessionSelect?.(session);
-    // Mark session as seen when selected
     if (session.chatSessionId) {
       markAsSeen(session.chatSessionId);
     }
+  }, [onSessionSelect, markAsSeen]);
+
+  const closeTab = useCallback((sessionId: string) => {
+    setOpenTabIds((prev) => {
+      const newTabs = prev.filter((id) => id !== sessionId);
+      // If closing the active tab, switch to the last remaining tab or null
+      if (activeTabId === sessionId) {
+        const newActiveId = newTabs.length > 0 ? newTabs[newTabs.length - 1] : null;
+        setActiveTabId(newActiveId);
+        const newActiveSession = newActiveId ? sessions.find(s => s.id === newActiveId) : null;
+        onSessionSelect?.(newActiveSession || null);
+      }
+      return newTabs;
+    });
+  }, [activeTabId, sessions, onSessionSelect]);
+
+  const switchTab = useCallback((sessionId: string) => {
+    setActiveTabId(sessionId);
+    const session = sessions.find(s => s.id === sessionId);
+    if (session) {
+      onSessionSelect?.(session);
+      if (session.chatSessionId) {
+        markAsSeen(session.chatSessionId);
+      }
+    }
+  }, [sessions, onSessionSelect, markAsSeen]);
+
+  const handleSelectSession = (session: PlanningSession) => {
+    openTab(session);
   };
 
   // Start planning session from pending planning
@@ -452,8 +489,7 @@ export function PlanningPanel({
         `Planning: ${pendingPlanning.branchName}`,
         "planning"
       );
-      setSelectedSession(session);
-      onSessionSelect?.(session);
+      openTab(session);
       onPlanningStarted?.();
     } catch (err) {
       setError((err as Error).message);
@@ -466,7 +502,6 @@ export function PlanningPanel({
     if (!selectedSession) return;
     try {
       const updated = await api.updatePlanningSession(selectedSession.id, { title });
-      setSelectedSession(updated);
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       onSessionSelect?.(updated);
     } catch (err) {
@@ -478,7 +513,6 @@ export function PlanningPanel({
     if (!selectedSession) return;
     try {
       const updated = await api.updatePlanningSession(selectedSession.id, { baseBranch });
-      setSelectedSession(updated);
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       onSessionSelect?.(updated);
     } catch (err) {
@@ -495,7 +529,6 @@ export function PlanningPanel({
     setLoading(true);
     try {
       const updated = await api.confirmPlanningSession(selectedSession.id);
-      setSelectedSession(updated);
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       onSessionSelect?.(updated);
     } catch (err) {
@@ -513,9 +546,8 @@ export function PlanningPanel({
       const updated = await api.discardPlanningSession(selectedSession.id);
       // Update status in list (keep it visible as discarded)
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-      // Go back to list
-      setSelectedSession(null);
-      onSessionSelect?.(null);
+      // Close the tab
+      closeTab(selectedSession.id);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -529,8 +561,7 @@ export function PlanningPanel({
     setLoading(true);
     try {
       await api.deletePlanningSession(selectedSession.id);
-      setSelectedSession(null);
-      onSessionSelect?.(null);
+      closeTab(selectedSession.id);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -617,7 +648,6 @@ export function PlanningPanel({
         nodes: updatedNodes,
         edges: updatedEdges,
       });
-      setSelectedSession(updated);
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       onTasksChange?.(updated.nodes, updated.edges);
     } catch (err) {
@@ -637,7 +667,6 @@ export function PlanningPanel({
         nodes: updatedNodes,
         edges: updatedEdges,
       });
-      setSelectedSession(updated);
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       onTasksChange?.(updated.nodes, updated.edges);
     } catch (err) {
@@ -683,7 +712,6 @@ export function PlanningPanel({
       const updated = await api.updatePlanningSession(selectedSession.id, {
         edges: updatedEdges,
       });
-      setSelectedSession(updated);
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       onTasksChange?.(updated.nodes, updated.edges);
     } catch (err) {
@@ -698,7 +726,6 @@ export function PlanningPanel({
       const updated = await api.updatePlanningSession(selectedSession.id, {
         edges: updatedEdges,
       });
-      setSelectedSession(updated);
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       onTasksChange?.(updated.nodes, updated.edges);
     } catch (err) {
@@ -716,7 +743,6 @@ export function PlanningPanel({
       const updated = await api.updatePlanningSession(selectedSession.id, {
         nodes: updatedNodes,
       });
-      setSelectedSession(updated);
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       onTasksChange?.(updated.nodes, updated.edges);
     } catch (err) {
@@ -768,49 +794,86 @@ export function PlanningPanel({
     );
   }
 
-  // Session list view
-  if (!selectedSession) {
-    return (
-      <div className="planning-panel">
-        {error && <div className="planning-panel__error">{error}</div>}
+  // Helper to get open tab sessions
+  const openTabs = openTabIds
+    .map((id) => sessions.find((s) => s.id === id))
+    .filter((s): s is PlanningSession => s !== undefined);
 
-        <div className="planning-panel__two-column">
-          {/* Left Column: Create Session */}
-          <div className="planning-panel__create-column">
-            {/* New Session Button or Form */}
-            {!showNewForm ? (
+  // Render tab bar (shown when tabs are open)
+  const renderTabBar = () => {
+    if (openTabs.length === 0) return null;
+    return (
+      <div className="planning-panel__tab-bar">
+        {openTabs.map((session) => {
+          const sessionType = session.type || "refinement";
+          const typeIcon = sessionType === "refinement" ? "💭" : sessionType === "planning" ? "📋" : "⚡";
+          const isActive = session.id === activeTabId;
+          const notification = session.chatSessionId ? getNotification(session.chatSessionId) : null;
+          const isThinking = notification?.isThinking;
+          return (
+            <div
+              key={session.id}
+              className={`planning-panel__tab ${isActive ? "planning-panel__tab--active" : ""} planning-panel__tab--${sessionType}`}
+              onClick={() => switchTab(session.id)}
+            >
+              {isThinking && <span className="planning-panel__tab-thinking-indicator" />}
+              <span className="planning-panel__tab-icon">{typeIcon}</span>
+              <span className="planning-panel__tab-title">{session.title}</span>
               <button
-                className="planning-panel__session-add"
-                onClick={() => setShowNewForm(true)}
-              >
-                <span className="planning-panel__session-add-icon">+</span>
-                <span>New Session</span>
-              </button>
-            ) : (
-              <div
-                className="planning-panel__new-form"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !creating) {
-                    handleCreateSession();
-                  }
+                className="planning-panel__tab-close"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeTab(session.id);
                 }}
               >
-                <div className="planning-panel__type-select">
-                  <button
-                    className={`planning-panel__type-btn planning-panel__type-btn--refinement ${newSessionType === "refinement" ? "planning-panel__type-btn--active" : ""}`}
-                    onClick={() => setNewSessionType("refinement")}
-                    type="button"
-                  >
-                    <span className="planning-panel__type-icon">💭</span>
-                    <span>Refinement</span>
-                  </button>
-                  <button
-                    className={`planning-panel__type-btn planning-panel__type-btn--planning ${newSessionType === "planning" ? "planning-panel__type-btn--active" : ""}`}
-                    onClick={() => setNewSessionType("planning")}
-                    type="button"
-                  >
-                    <span className="planning-panel__type-icon">📋</span>
-                    <span>Planning</span>
+                ×
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Session list view (when no session is selected or as a pane)
+  const renderSessionList = () => (
+    <div className="planning-panel__two-column">
+      {/* Left Column: Create Session */}
+      <div className="planning-panel__create-column">
+        {/* New Session Button or Form */}
+        {!showNewForm ? (
+          <button
+            className="planning-panel__session-add"
+            onClick={() => setShowNewForm(true)}
+          >
+            <span className="planning-panel__session-add-icon">+</span>
+            <span>New Session</span>
+          </button>
+        ) : (
+          <div
+            className="planning-panel__new-form"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !creating) {
+                handleCreateSession();
+              }
+            }}
+          >
+            <div className="planning-panel__type-select">
+              <button
+                className={`planning-panel__type-btn planning-panel__type-btn--refinement ${newSessionType === "refinement" ? "planning-panel__type-btn--active" : ""}`}
+                onClick={() => setNewSessionType("refinement")}
+                type="button"
+              >
+                <span className="planning-panel__type-icon">💭</span>
+                <span>Refinement</span>
+              </button>
+              <button
+                className={`planning-panel__type-btn planning-panel__type-btn--planning ${newSessionType === "planning" ? "planning-panel__type-btn--active" : ""}`}
+                onClick={() => setNewSessionType("planning")}
+                type="button"
+              >
+                <span className="planning-panel__type-icon">📋</span>
+                <span>Planning</span>
                   </button>
                   <button
                     className={`planning-panel__type-btn planning-panel__type-btn--execute ${newSessionType === "execute" ? "planning-panel__type-btn--active" : ""}`}
@@ -938,28 +1001,21 @@ export function PlanningPanel({
           </div>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 
-  // Determine session type from type property
-  const sessionTypeValue = selectedSession.type || "refinement";
+  // Determine session type from type property (for detail view)
+  const sessionTypeValue = selectedSession?.type || "refinement";
   const sessionTypeLabel = sessionTypeValue === "refinement" ? "Refinement" : sessionTypeValue === "planning" ? "Planning" : "Execute";
   const sessionTypeIcon = sessionTypeValue === "refinement" ? "💭" : sessionTypeValue === "planning" ? "📋" : "⚡";
 
-  // Session detail view
-  return (
-    <div className="planning-panel planning-panel--detail">
-      <div className="planning-panel__header">
-        <button
-          className="planning-panel__back-btn"
-          onClick={() => {
-            setSelectedSession(null);
-            onSessionSelect?.(null);
-          }}
-        >
-          &larr; Back
-        </button>
-        <span className={`planning-panel__session-type planning-panel__session-type--${sessionTypeValue}`}>
+  // Render session detail content
+  const renderSessionDetail = () => {
+    if (!selectedSession) return null;
+    return (
+      <div className="planning-panel__detail-content">
+        <div className="planning-panel__header">
+          <span className={`planning-panel__session-type planning-panel__session-type--${sessionTypeValue}`}>
           <span className="planning-panel__session-type-icon">{sessionTypeIcon}</span>
           {sessionTypeLabel}
         </span>
@@ -1195,6 +1251,18 @@ export function PlanningPanel({
             </div>
           )}
         </div>
+      </div>
+    </div>
+    );
+  };
+
+  // Main render: Tab bar + content
+  return (
+    <div className="planning-panel">
+      {error && <div className="planning-panel__error">{error}</div>}
+      {renderTabBar()}
+      <div className="planning-panel__content">
+        {selectedSession ? renderSessionDetail() : renderSessionList()}
       </div>
     </div>
   );

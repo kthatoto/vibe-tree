@@ -288,6 +288,7 @@ export interface ExternalLink {
 
 // Planning Session types
 export type PlanningSessionStatus = "draft" | "confirmed" | "discarded";
+export type PlanningSessionType = "refinement" | "planning" | "execute";
 
 export interface TaskNode {
   id: string;
@@ -306,6 +307,7 @@ export interface PlanningSession {
   id: string;
   repoId: string;
   title: string;
+  type: PlanningSessionType;
   baseBranch: string;
   status: PlanningSessionStatus;
   nodes: TaskNode[];
@@ -728,13 +730,14 @@ export const api = {
     fetchJson<PlanningSession[]>(`${API_BASE}/planning-sessions?repoId=${encodeURIComponent(repoId)}`),
   getPlanningSession: (id: string) =>
     fetchJson<PlanningSession>(`${API_BASE}/planning-sessions/${id}`),
-  createPlanningSession: (repoId: string, baseBranch: string, title?: string) =>
+  createPlanningSession: (repoId: string, baseBranch: string, title?: string, type?: PlanningSessionType) =>
     fetchJson<PlanningSession>(`${API_BASE}/planning-sessions`, {
       method: "POST",
-      body: JSON.stringify({ repoId, baseBranch, title }),
+      body: JSON.stringify({ repoId, baseBranch, title, type }),
     }),
   updatePlanningSession: (id: string, data: {
     title?: string;
+    type?: PlanningSessionType;
     baseBranch?: string;
     nodes?: TaskNode[];
     edges?: TaskEdge[];

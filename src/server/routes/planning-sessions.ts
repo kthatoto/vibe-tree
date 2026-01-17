@@ -12,6 +12,8 @@ import { existsSync } from "fs";
 export const planningSessionsRouter = new Hono();
 
 // Types
+export type PlanningSessionType = "refinement" | "planning" | "execute";
+
 interface TaskNode {
   id: string;
   title: string;
@@ -29,6 +31,7 @@ interface PlanningSession {
   id: string;
   repoId: string;
   title: string;
+  type: PlanningSessionType;
   baseBranch: string;
   status: "draft" | "confirmed" | "discarded";
   nodes: TaskNode[];
@@ -44,6 +47,7 @@ function toSession(row: typeof schema.planningSessions.$inferSelect): PlanningSe
     id: row.id,
     repoId: row.repoId,
     title: row.title,
+    type: (row.type || "refinement") as PlanningSessionType,
     baseBranch: row.baseBranch,
     status: row.status as PlanningSession["status"],
     nodes: JSON.parse(row.nodesJson) as TaskNode[],
@@ -59,10 +63,12 @@ const createSessionSchema = z.object({
   repoId: z.string().min(1),
   baseBranch: z.string().min(1),
   title: z.string().optional(),
+  type: z.enum(["refinement", "planning", "execute"]).optional(),
 });
 
 const updateSessionSchema = z.object({
   title: z.string().optional(),
+  type: z.enum(["refinement", "planning", "execute"]).optional(),
   baseBranch: z.string().optional(),
   nodes: z.array(z.object({
     id: z.string(),
@@ -112,7 +118,7 @@ planningSessionsRouter.get("/:id", async (c) => {
 // POST /api/planning-sessions - Create new planning session
 planningSessionsRouter.post("/", async (c) => {
   const body = await c.req.json();
-  const { repoId, baseBranch, title } = validateOrThrow(createSessionSchema, body);
+  const { repoId, baseBranch, title, type } = validateOrThrow(createSessionSchema, body);
 
   const now = new Date().toISOString();
   const sessionId = randomUUID();
@@ -122,7 +128,8 @@ planningSessionsRouter.post("/", async (c) => {
   await db.insert(schema.planningSessions).values({
     id: sessionId,
     repoId,
-    title: title || "Untitled Planning",
+    title: title || "Untitled Session",
+    type: type || "refinement",
     baseBranch,
     status: "draft",
     nodesJson: "[]",
@@ -202,6 +209,9 @@ planningSessionsRouter.patch("/:id", async (c) => {
 
   if (updates.title !== undefined) {
     updateData.title = updates.title;
+  }
+  if (updates.type !== undefined) {
+    updateData.type = updates.type;
   }
   if (updates.baseBranch !== undefined) {
     updateData.baseBranch = updates.baseBranch;

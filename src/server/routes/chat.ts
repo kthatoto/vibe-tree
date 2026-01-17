@@ -926,7 +926,8 @@ async function buildPrompt(
       .select()
       .from(schema.planningSessions)
       .where(eq(schema.planningSessions.id, planningSessionId));
-    if (planningSession?.title.startsWith("Planning:")) {
+    // Use type property if available, fall back to title-based detection for legacy data
+    if (planningSession?.type === "planning" || planningSession?.title.startsWith("Planning:")) {
       isInstructionReviewSession = true;
     }
   }

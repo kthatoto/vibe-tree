@@ -65,6 +65,7 @@ export const planningSessions = sqliteTable("planning_sessions", {
   id: text("id").primaryKey(), // uuid
   repoId: text("repo_id").notNull(),
   title: text("title").notNull().default("Untitled"),
+  type: text("type").notNull().default("refinement"), // 'refinement' | 'planning' | 'execute'
   baseBranch: text("base_branch").notNull(),
   status: text("status").notNull().default("draft"), // 'draft' | 'confirmed' | 'discarded'
   nodesJson: text("nodes_json").notNull().default("[]"), // JSON array of task nodes

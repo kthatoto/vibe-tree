@@ -1255,7 +1255,7 @@ export default function TreeDashboard() {
                       setPendingPlanning({ branchName, instruction });
                     }}
                     activePlanningBranch={
-                      selectedPlanningSession?.title.startsWith("Planning:")
+                      selectedPlanningSession?.type === "planning"
                         ? selectedPlanningSession.baseBranch
                         : null
                     }

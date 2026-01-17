@@ -1103,3 +1103,144 @@
   color: #9ca3af;
   cursor: not-allowed;
 }
+
+/* Session Type Selection (New Form) */
+.planning-panel__type-select {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.planning-panel__type-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  color: #9ca3af;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.planning-panel__type-btn:hover {
+  background: #374151;
+  color: #e5e7eb;
+}
+
+.planning-panel__type-btn--active {
+  color: #e5e7eb;
+  border-color: #3b82f6;
+  background: #1e3a5f;
+}
+
+.planning-panel__type-btn--refinement.planning-panel__type-btn--active {
+  border-color: #8b5cf6;
+  background: #2e1065;
+}
+
+.planning-panel__type-btn--planning.planning-panel__type-btn--active {
+  border-color: #3b82f6;
+  background: #1e3a5f;
+}
+
+.planning-panel__type-btn--execute.planning-panel__type-btn--active {
+  border-color: #f59e0b;
+  background: #451a03;
+}
+
+.planning-panel__type-icon {
+  font-size: 14px;
+}
+
+/* Session Type Badge (in list) */
+.planning-panel__session-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.planning-panel__session-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.planning-panel__session-type-badge--refinement {
+  background: #2e1065;
+  color: #c4b5fd;
+  border: 1px solid #8b5cf6;
+}
+
+.planning-panel__session-type-badge--planning {
+  background: #1e3a5f;
+  color: #93c5fd;
+  border: 1px solid #3b82f6;
+}
+
+.planning-panel__session-type-badge--execute {
+  background: #451a03;
+  color: #fcd34d;
+  border: 1px solid #f59e0b;
+}
+
+.planning-panel__session-type-icon {
+  font-size: 12px;
+}
+
+.planning-panel__session-type-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Session item type colors (left border) */
+.planning-panel__session-item--type-refinement {
+  border-left: 3px solid #8b5cf6;
+}
+
+.planning-panel__session-item--type-planning {
+  border-left: 3px solid #3b82f6;
+}
+
+.planning-panel__session-item--type-execute {
+  border-left: 3px solid #f59e0b;
+}
+
+/* Session Type in Detail View */
+.planning-panel__session-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.planning-panel__session-type--refinement {
+  background: #2e1065;
+  color: #c4b5fd;
+  border: 1px solid #8b5cf6;
+}
+
+.planning-panel__session-type--planning {
+  background: #1e3a5f;
+  color: #93c5fd;
+  border: 1px solid #3b82f6;
+}
+
+.planning-panel__session-type--execute {
+  background: #451a03;
+  color: #fcd34d;
+  border: 1px solid #f59e0b;
+}

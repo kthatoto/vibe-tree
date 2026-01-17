@@ -180,22 +180,24 @@
   font-size: 13px;
 }
 
-/* Two Column Layout */
-.planning-panel__two-column {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
-
-.planning-panel__create-column {
-  width: 280px;
-  flex-shrink: 0;
-  padding: 12px;
-  border-right: 1px solid #374151;
+/* Session List View */
+.planning-panel__session-list-view {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
+  flex: 1;
+  overflow: hidden;
+  padding: 12px;
+}
+
+/* New Form Item (inline in grid) */
+.planning-panel__new-form-item {
+  padding: 12px;
+  background: #0f172a;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .planning-panel__new-form {
@@ -254,11 +256,11 @@
 .planning-panel__list {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 10px;
   align-content: start;
+  padding: 0;
 }
 
 .planning-panel__session-add {
@@ -1375,6 +1377,30 @@
   flex-shrink: 0;
 }
 
+/* Tab Add Button */
+.planning-panel__tab-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 4px 0;
+  background: transparent;
+  border: 1px dashed #374151;
+  border-radius: 4px;
+  color: #6b7280;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.planning-panel__tab-add:hover {
+  background: #374151;
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
 /* Content area */
 .planning-panel__content {
   flex: 1;
@@ -1387,5 +1413,12 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.planning-panel__detail-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }

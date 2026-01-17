@@ -314,18 +314,16 @@ export function TaskDetailPanel({
           }
         }
 
-        // Auto-refresh all links from GitHub when panel opens (non-blocking)
-        for (const link of links) {
-          if (link.number) {
-            api.refreshBranchLink(link.id)
-              .then((refreshed) => {
-                setBranchLinks((prev) =>
-                  prev.map((l) => (l.id === refreshed.id ? refreshed : l))
-                );
-              })
-              .catch((err) => {
-                console.error(`Failed to refresh link ${link.id}:`, err);
-              });
+        // Auto-refresh links from GitHub sequentially (to avoid API overload)
+        const linksToRefresh = links.filter(l => l.number);
+        for (const link of linksToRefresh) {
+          try {
+            const refreshed = await api.refreshBranchLink(link.id);
+            setBranchLinks((prev) =>
+              prev.map((l) => (l.id === refreshed.id ? refreshed : l))
+            );
+          } catch (err) {
+            console.error(`Failed to refresh link ${link.id}:`, err);
           }
         }
       } catch (err) {

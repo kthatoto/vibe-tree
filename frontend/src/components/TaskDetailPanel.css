@@ -1081,6 +1081,10 @@
 }
 
 .task-detail-panel__link-main .task-detail-panel__link-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
 }
 
 .task-detail-panel__link-meta {

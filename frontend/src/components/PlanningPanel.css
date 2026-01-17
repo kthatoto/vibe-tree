@@ -1434,24 +1434,36 @@
   flex-direction: column;
   padding: 16px;
   overflow: hidden;
+  min-height: 0;
 }
 
 .planning-panel__execute-selection h3 {
   margin: 0 0 8px 0;
   font-size: 16px;
   color: #e5e7eb;
+  flex-shrink: 0;
 }
 
 .planning-panel__execute-hint {
   margin: 0 0 16px 0;
   font-size: 13px;
   color: #6b7280;
+  flex-shrink: 0;
+}
+
+.planning-panel__execute-selection > .execute-branch-selector {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .planning-panel__execute-actions {
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+  flex-shrink: 0;
+  padding-top: 12px;
+  border-top: 1px solid #374151;
 }
 
 .planning-panel__execute-start-btn {

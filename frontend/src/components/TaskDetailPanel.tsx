@@ -1094,18 +1094,20 @@ export function TaskDetailPanel({
                         ×
                       </button>
                     </div>
-                    <div className="task-detail-panel__link-meta">
-                      {link.projectStatus && (
-                        <span className="task-detail-panel__link-project">{link.projectStatus}</span>
-                      )}
-                      {labels.length > 0 && (
-                        <span className="task-detail-panel__link-labels">
-                          {labels.map((l, i) => (
-                            <span key={i} className="task-detail-panel__link-label">{l}</span>
-                          ))}
-                        </span>
-                      )}
-                    </div>
+                    {(link.projectStatus || labels.length > 0) && (
+                      <div className="task-detail-panel__link-meta">
+                        {link.projectStatus && (
+                          <span className="task-detail-panel__link-project">{link.projectStatus}</span>
+                        )}
+                        {labels.length > 0 && (
+                          <span className="task-detail-panel__link-labels">
+                            {labels.map((l, i) => (
+                              <span key={i} className="task-detail-panel__link-label">{l}</span>
+                            ))}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}

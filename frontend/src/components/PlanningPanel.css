@@ -1044,7 +1044,7 @@
   flex-direction: column;
   padding: 12px;
   min-height: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .planning-panel__instruction-header {
@@ -1077,8 +1077,8 @@
 }
 
 .planning-panel__instruction-textarea {
-  flex: 1;
-  min-height: 100px;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 10px;
   background: #0f172a;
   color: #e5e7eb;
@@ -1087,7 +1087,7 @@
   font-size: 13px;
   font-family: inherit;
   line-height: 1.5;
-  resize: vertical;
+  resize: none;
   overflow-y: auto;
 }
 

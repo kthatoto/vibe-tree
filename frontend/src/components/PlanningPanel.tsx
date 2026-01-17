@@ -1001,7 +1001,6 @@ export function PlanningPanel({
           </div>
         </div>
       </div>
-    </div>
   );
 
   // Determine session type from type property (for detail view)

@@ -1431,61 +1431,13 @@
 .planning-panel__execute-selection {
   flex: 1;
   display: flex;
-  flex-direction: column;
-  padding: 16px;
   overflow: hidden;
   min-height: 0;
-}
-
-.planning-panel__execute-selection h3 {
-  margin: 0 0 8px 0;
-  font-size: 16px;
-  color: #e5e7eb;
-  flex-shrink: 0;
-}
-
-.planning-panel__execute-hint {
-  margin: 0 0 16px 0;
-  font-size: 13px;
-  color: #6b7280;
-  flex-shrink: 0;
 }
 
 .planning-panel__execute-selection > .execute-branch-selector {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-}
-
-.planning-panel__execute-actions {
-  margin-top: 16px;
-  display: flex;
-  justify-content: flex-end;
-  flex-shrink: 0;
-  padding-top: 12px;
-  border-top: 1px solid #374151;
-}
-
-.planning-panel__execute-start-btn {
-  padding: 10px 20px;
-  background: #f59e0b;
-  color: #1f2937;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.planning-panel__execute-start-btn:hover:not(:disabled) {
-  background: #d97706;
-}
-
-.planning-panel__execute-start-btn:disabled {
-  background: #78350f;
-  color: #9ca3af;
-  cursor: not-allowed;
 }
 
 /* Execute Session: Running Mode */

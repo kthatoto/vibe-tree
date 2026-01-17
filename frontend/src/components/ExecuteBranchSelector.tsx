@@ -7,6 +7,8 @@ interface ExecuteBranchSelectorProps {
   defaultBranch: string;
   selectedBranches: string[];
   onSelectionChange: (branches: string[]) => void;
+  onStartExecution?: () => void;
+  executeLoading?: boolean;
 }
 
 interface LayoutNode {
@@ -24,12 +26,12 @@ interface LayoutEdge {
   isDesigned: boolean;
 }
 
-const NODE_WIDTH = 180;
-const NODE_HEIGHT = 50;
-const HORIZONTAL_GAP = 24;
-const VERTICAL_GAP = 40;
-const TOP_PADDING = 20;
-const LEFT_PADDING = 12;
+const NODE_WIDTH = 140;
+const NODE_HEIGHT = 36;
+const HORIZONTAL_GAP = 16;
+const VERTICAL_GAP = 28;
+const TOP_PADDING = 12;
+const LEFT_PADDING = 8;
 
 export default function ExecuteBranchSelector({
   nodes,
@@ -37,44 +39,39 @@ export default function ExecuteBranchSelector({
   defaultBranch,
   selectedBranches,
   onSelectionChange,
+  onStartExecution,
+  executeLoading = false,
 }: ExecuteBranchSelectorProps) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  // Handle branch selection toggle
   const handleToggleBranch = useCallback((branchName: string) => {
     const index = selectedBranches.indexOf(branchName);
     if (index >= 0) {
-      // Remove from selection
       const newSelection = [...selectedBranches];
       newSelection.splice(index, 1);
       onSelectionChange(newSelection);
     } else {
-      // Add to selection
       onSelectionChange([...selectedBranches, branchName]);
     }
   }, [selectedBranches, onSelectionChange]);
 
-  // Get selection order number (1-indexed)
   const getSelectionOrder = useCallback((branchName: string): number | null => {
     const index = selectedBranches.indexOf(branchName);
     return index >= 0 ? index + 1 : null;
   }, [selectedBranches]);
 
-  // Handle drag start
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.effectAllowed = "move";
     setDraggedIndex(index);
   };
 
-  // Handle drag over
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setDragOverIndex(index);
   };
 
-  // Handle drop
   const handleDrop = (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
     if (draggedIndex !== null && draggedIndex !== dropIndex) {
@@ -87,7 +84,6 @@ export default function ExecuteBranchSelector({
     setDragOverIndex(null);
   };
 
-  // Handle drag end
   const handleDragEnd = () => {
     setDraggedIndex(null);
     setDragOverIndex(null);
@@ -95,25 +91,19 @@ export default function ExecuteBranchSelector({
 
   const { layoutNodes, layoutEdges, width, height } = useMemo(() => {
     if (nodes.length === 0) {
-      return { layoutNodes: [], layoutEdges: [], width: 400, height: 200 };
+      return { layoutNodes: [], layoutEdges: [], width: 300, height: 100 };
     }
 
-    // Build adjacency map (parent -> children)
     const childrenMap = new Map<string, string[]>();
-    const parentMap = new Map<string, string>();
-
     edges.forEach((edge) => {
       const children = childrenMap.get(edge.parent) || [];
       children.push(edge.child);
       childrenMap.set(edge.parent, children);
-      parentMap.set(edge.child, edge.parent);
     });
 
-    // Find root nodes
     const childSet = new Set(edges.map((e) => e.child));
     const rootNodes = nodes.filter((n) => !childSet.has(n.branchName));
 
-    // Sort roots: default branch first
     rootNodes.sort((a, b) => {
       if (a.branchName === defaultBranch) return -1;
       if (b.branchName === defaultBranch) return 1;
@@ -155,12 +145,10 @@ export default function ExecuteBranchSelector({
       nextCol = layoutSubtree(root.branchName, 0, nextCol);
     });
 
-    // Handle orphan nodes
     nodes.forEach((node) => {
       if (!nodeMap.has(node.branchName)) {
         const depth = 0;
         const col = nextCol++;
-
         const layoutNode: LayoutNode = {
           id: node.branchName,
           x: LEFT_PADDING + col * (NODE_WIDTH + HORIZONTAL_GAP),
@@ -174,7 +162,6 @@ export default function ExecuteBranchSelector({
       }
     });
 
-    // Create layout edges
     const layoutEdges: LayoutEdge[] = edges
       .map((edge) => {
         const from = nodeMap.get(edge.parent);
@@ -192,8 +179,8 @@ export default function ExecuteBranchSelector({
     return {
       layoutNodes,
       layoutEdges,
-      width: Math.max(400, maxX),
-      height: Math.max(150, maxY),
+      width: Math.max(300, maxX),
+      height: Math.max(80, maxY),
     };
   }, [nodes, edges, defaultBranch]);
 
@@ -202,20 +189,14 @@ export default function ExecuteBranchSelector({
     const startY = edge.from.y + NODE_HEIGHT;
     const endX = edge.to.x + NODE_WIDTH / 2;
     const endY = edge.to.y;
-
-    const cornerY = startY + 15;
+    const cornerY = startY + 10;
     const path = `M ${startX} ${startY} L ${startX} ${cornerY} L ${endX} ${cornerY} L ${endX} ${endY}`;
 
     return (
       <g key={`edge-${index}`}>
-        <path
-          d={path}
-          fill="none"
-          stroke="#4b5563"
-          strokeWidth={1.5}
-        />
+        <path d={path} fill="none" stroke="#4b5563" strokeWidth={1} />
         <polygon
-          points={`${endX},${endY} ${endX - 4},${endY - 6} ${endX + 4},${endY - 6}`}
+          points={`${endX},${endY} ${endX - 3},${endY - 5} ${endX + 3},${endY - 5}`}
           fill="#4b5563"
         />
       </g>
@@ -229,214 +210,228 @@ export default function ExecuteBranchSelector({
     const isSelected = selectionOrder !== null;
     const isMerged = node.pr?.state === "MERGED";
 
-    // Determine node color
     let fillColor = "#1f2937";
-    let strokeColor = isSelected ? "#3b82f6" : "#4b5563";
+    let strokeColor = isSelected ? "#f59e0b" : "#4b5563";
 
     if (isMerged) {
       fillColor = "#1a1625";
-      strokeColor = isSelected ? "#3b82f6" : "#6b21a8";
+      strokeColor = isSelected ? "#f59e0b" : "#6b21a8";
     }
 
     return (
       <g
         key={id}
         style={{ cursor: isDefault ? "not-allowed" : "pointer" }}
-        opacity={isMerged ? 0.6 : 1}
+        opacity={isMerged ? 0.5 : 1}
         onClick={() => !isDefault && handleToggleBranch(id)}
       >
-        {/* Node rectangle */}
         <rect
           x={x}
           y={y}
           width={NODE_WIDTH}
           height={NODE_HEIGHT}
-          rx={6}
-          ry={6}
+          rx={4}
+          ry={4}
           fill={fillColor}
           stroke={strokeColor}
-          strokeWidth={isSelected ? 2 : 1.5}
+          strokeWidth={isSelected ? 2 : 1}
         />
-
-        {/* Selection order badge */}
         {isSelected && (
           <g>
-            <circle
-              cx={x + NODE_WIDTH - 12}
-              cy={y + 12}
-              r={10}
-              fill="#3b82f6"
-            />
+            <circle cx={x + NODE_WIDTH - 10} cy={y + 10} r={8} fill="#f59e0b" />
             <text
-              x={x + NODE_WIDTH - 12}
-              y={y + 13}
+              x={x + NODE_WIDTH - 10}
+              y={y + 11}
               textAnchor="middle"
               dominantBaseline="middle"
-              fontSize={11}
-              fill="white"
+              fontSize={10}
+              fill="#1f2937"
               fontWeight="bold"
             >
               {selectionOrder}
             </text>
           </g>
         )}
-
-        {/* Branch name */}
         <foreignObject
-          x={x + 8}
-          y={y + 4}
-          width={NODE_WIDTH - (isSelected ? 32 : 16)}
-          height={NODE_HEIGHT - 8}
+          x={x + 6}
+          y={y + 2}
+          width={NODE_WIDTH - (isSelected ? 26 : 12)}
+          height={NODE_HEIGHT - 4}
           style={{ pointerEvents: "none" }}
         >
-          <div
-            style={{
-              width: "100%",
-              height: "100%",
-              display: "flex",
-              alignItems: "center",
-              overflow: "hidden",
-            }}
-          >
-            <span
-              style={{
-                fontSize: 11,
-                fontFamily: "monospace",
-                fontWeight: isDefault ? "bold" : "normal",
-                color: isMerged ? "#9ca3af" : "#e5e7eb",
-                wordBreak: "break-all",
-                lineHeight: 1.2,
-              }}
-            >
+          <div style={{
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            overflow: "hidden",
+          }}>
+            <span style={{
+              fontSize: 10,
+              fontFamily: "monospace",
+              fontWeight: isDefault ? "bold" : "normal",
+              color: isMerged ? "#6b7280" : "#d1d5db",
+              wordBreak: "break-all",
+              lineHeight: 1.2,
+            }}>
               {id}
             </span>
           </div>
         </foreignObject>
-
-        {/* Default branch indicator */}
-        {isDefault && (
-          <text
-            x={x + NODE_WIDTH / 2}
-            y={y + NODE_HEIGHT + 12}
-            textAnchor="middle"
-            fontSize={9}
-            fill="#6b7280"
-          >
-            (base)
-          </text>
-        )}
       </g>
     );
   };
 
   if (nodes.length === 0) {
     return (
-      <div className="execute-branch-selector execute-branch-selector--empty">
-        <p>No branches available</p>
+      <div className="execute-branch-selector" style={{ padding: 16, color: "#6b7280", textAlign: "center" }}>
+        No branches available
       </div>
     );
   }
 
   return (
-    <div className="execute-branch-selector" style={{ display: "flex", gap: 16 }}>
-      {/* Graph view */}
-      <div style={{ flex: 1, overflow: "auto", maxHeight: 400 }}>
-        <svg
-          width={width}
-          height={height}
-          style={{ minWidth: "100%" }}
-        >
-          <g className="edges">
-            {layoutEdges.map((edge, i) => renderEdge(edge, i))}
-          </g>
-          <g className="nodes">
-            {layoutNodes.map((node) => renderNode(node))}
-          </g>
+    <div className="execute-branch-selector" style={{ display: "flex", height: "100%" }}>
+      {/* Graph */}
+      <div style={{ flex: 1, overflow: "auto", minWidth: 0 }}>
+        <svg width={width} height={height} style={{ display: "block" }}>
+          <g className="edges">{layoutEdges.map((edge, i) => renderEdge(edge, i))}</g>
+          <g className="nodes">{layoutNodes.map((node) => renderNode(node))}</g>
         </svg>
       </div>
 
-      {/* Selected branches list */}
+      {/* Selection Panel */}
       <div style={{
-        width: 200,
+        width: 180,
         borderLeft: "1px solid #374151",
-        paddingLeft: 16,
+        display: "flex",
+        flexDirection: "column",
+        flexShrink: 0,
       }}>
-        <h4 style={{ margin: "0 0 12px", fontSize: 13, color: "#9ca3af" }}>
-          Selected Branches ({selectedBranches.length})
-        </h4>
-        {selectedBranches.length === 0 ? (
-          <p style={{ fontSize: 12, color: "#6b7280" }}>
-            Click branches to select execution order
-          </p>
-        ) : (
-          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {selectedBranches.map((branch, index) => (
-              <li
-                key={branch}
-                draggable
-                onDragStart={(e) => handleDragStart(e, index)}
-                onDragOver={(e) => handleDragOver(e, index)}
-                onDrop={(e) => handleDrop(e, index)}
-                onDragEnd={handleDragEnd}
-                style={{
-                  padding: "8px 10px",
-                  marginBottom: 6,
-                  background: dragOverIndex === index ? "#2563eb" : "#1f2937",
-                  border: "1px solid #374151",
-                  borderRadius: 4,
-                  cursor: "grab",
-                  opacity: draggedIndex === index ? 0.5 : 1,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-                <span style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: "50%",
-                  background: "#3b82f6",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 11,
-                  fontWeight: "bold",
-                  color: "white",
-                  flexShrink: 0,
-                }}>
-                  {index + 1}
-                </span>
-                <span style={{
-                  fontSize: 11,
-                  fontFamily: "monospace",
-                  color: "#e5e7eb",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  flex: 1,
-                }}>
-                  {branch}
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleToggleBranch(branch);
-                  }}
+        <div style={{
+          padding: "8px 12px",
+          borderBottom: "1px solid #374151",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}>
+          <span style={{ fontSize: 11, color: "#9ca3af" }}>
+            Queue ({selectedBranches.length})
+          </span>
+          {selectedBranches.length > 0 && (
+            <button
+              onClick={() => onSelectionChange([])}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#6b7280",
+                cursor: "pointer",
+                fontSize: 10,
+                padding: "2px 4px",
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
+        <div style={{ flex: 1, overflow: "auto", padding: "6px" }}>
+          {selectedBranches.length === 0 ? (
+            <div style={{ fontSize: 10, color: "#6b7280", padding: "8px", textAlign: "center" }}>
+              Click branches to add
+            </div>
+          ) : (
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {selectedBranches.map((branch, index) => (
+                <li
+                  key={branch}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
                   style={{
-                    background: "none",
-                    border: "none",
-                    color: "#9ca3af",
-                    cursor: "pointer",
-                    padding: 0,
-                    fontSize: 14,
-                    lineHeight: 1,
+                    padding: "4px 6px",
+                    marginBottom: 4,
+                    background: dragOverIndex === index ? "#2563eb" : "#0f172a",
+                    border: "1px solid #374151",
+                    borderRadius: 3,
+                    cursor: "grab",
+                    opacity: draggedIndex === index ? 0.5 : 1,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
                   }}
                 >
-                  ×
-                </button>
-              </li>
-            ))}
-          </ul>
+                  <span style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: "50%",
+                    background: "#f59e0b",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 9,
+                    fontWeight: "bold",
+                    color: "#1f2937",
+                    flexShrink: 0,
+                  }}>
+                    {index + 1}
+                  </span>
+                  <span style={{
+                    fontSize: 10,
+                    fontFamily: "monospace",
+                    color: "#d1d5db",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    flex: 1,
+                  }}>
+                    {branch}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleBranch(branch);
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#6b7280",
+                      cursor: "pointer",
+                      padding: 0,
+                      fontSize: 12,
+                      lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {onStartExecution && (
+          <div style={{ padding: "8px", borderTop: "1px solid #374151" }}>
+            <button
+              onClick={onStartExecution}
+              disabled={selectedBranches.length === 0 || executeLoading}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                background: selectedBranches.length === 0 ? "#78350f" : "#f59e0b",
+                color: selectedBranches.length === 0 ? "#9ca3af" : "#1f2937",
+                border: "none",
+                borderRadius: 4,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: selectedBranches.length === 0 ? "not-allowed" : "pointer",
+              }}
+            >
+              {executeLoading ? "Starting..." : "Start"}
+            </button>
+          </div>
         )}
       </div>
     </div>

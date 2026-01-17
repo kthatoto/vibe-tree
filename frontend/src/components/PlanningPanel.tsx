@@ -1148,26 +1148,15 @@ export function PlanningPanel({
       {/* Execute Session: Branch Selection Mode */}
       {sessionTypeValue === "execute" && (!selectedSession.executeBranches || selectedSession.executeBranches.length === 0) && (
         <div className="planning-panel__execute-selection">
-          <h3>Select Branches to Execute</h3>
-          <p className="planning-panel__execute-hint">
-            Click on branches to select them. Drag items in the list to reorder execution.
-          </p>
           <ExecuteBranchSelector
             nodes={graphNodes}
             edges={graphEdges}
             defaultBranch={defaultBranch}
             selectedBranches={executeSelectedBranches}
             onSelectionChange={handleExecuteBranchesChange}
+            onStartExecution={handleStartExecution}
+            executeLoading={executeLoading}
           />
-          <div className="planning-panel__execute-actions">
-            <button
-              className="planning-panel__execute-start-btn"
-              onClick={handleStartExecution}
-              disabled={executeSelectedBranches.length === 0 || executeLoading}
-            >
-              {executeLoading ? "Starting..." : `Start Execution (${executeSelectedBranches.length} branches)`}
-            </button>
-          </div>
         </div>
       )}
 

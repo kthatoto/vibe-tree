@@ -245,7 +245,12 @@ aiRouter.post("/start", async (c) => {
   const sessionId = randomUUID();
   const startedAt = new Date().toISOString();
 
-  const claudeProcess = spawn("claude", ["-p", prompt, "--dangerously-skip-permissions"], {
+  const claudeProcess = spawn("claude", [
+    "-p", prompt,
+    "--output-format", "stream-json",
+    "--verbose",
+    "--dangerously-skip-permissions",
+  ], {
     cwd: localPath,
     stdio: ["ignore", "pipe", "pipe"],
     detached: false,
@@ -319,19 +324,41 @@ aiRouter.post("/start", async (c) => {
     data: { sessionId, pid, startedAt, localPath, branch },
   });
 
-  // Stream stdout
+  // Stream stdout - parse stream-json format
+  let lineBuffer = "";
   claudeProcess.stdout?.on("data", (data) => {
-    const output = data.toString();
-    broadcast({
-      type: "agent.output",
-      repoId,
-      data: {
-        sessionId,
-        stream: "stdout",
-        data: output,
-        timestamp: new Date().toISOString(),
-      },
-    });
+    lineBuffer += data.toString();
+    const lines = lineBuffer.split("\n");
+    lineBuffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const json = JSON.parse(line);
+        broadcast({
+          type: "agent.output",
+          repoId,
+          data: {
+            sessionId,
+            stream: "stdout",
+            json,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      } catch {
+        // Non-JSON line, broadcast as raw text
+        broadcast({
+          type: "agent.output",
+          repoId,
+          data: {
+            sessionId,
+            stream: "stdout",
+            data: line,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+    }
   });
 
   // Stream stderr

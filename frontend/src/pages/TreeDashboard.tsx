@@ -1176,23 +1176,36 @@ export default function TreeDashboard() {
                         // Create a new edge from parent to child (reparent operation)
                         if (!selectedPin || !snapshot?.repoId) return;
 
-                        // Check if this exact edge already exists
-                        const currentEdges = snapshot.treeSpec?.specJson.edges ?? [];
-                        const edgeExists = currentEdges.some(
-                          (e) => e.parent === parentBranch && e.child === childBranch
-                        ) || snapshot.edges.some(
-                          (e) => e.parent === parentBranch && e.child === childBranch
-                        );
-                        if (edgeExists) return;
-
-                        // Prepare new edges
-                        const filteredTreeSpecEdges = currentEdges.filter((e) => e.child !== childBranch);
-                        const newTreeSpecEdges = [...filteredTreeSpecEdges, { parent: parentBranch, child: childBranch }];
-                        const currentNodes = snapshot.treeSpec?.specJson.nodes ?? [];
-
-                        // Optimistic update: Update UI immediately
+                        // Optimistic update with functional setState to use latest prev values
                         setSnapshot((prev) => {
                           if (!prev) return prev;
+
+                          // Check if this exact edge already exists (using prev)
+                          const currentEdges = prev.treeSpec?.specJson.edges ?? [];
+                          const edgeExists = currentEdges.some(
+                            (e) => e.parent === parentBranch && e.child === childBranch
+                          ) || prev.edges.some(
+                            (e) => e.parent === parentBranch && e.child === childBranch
+                          );
+                          if (edgeExists) return prev;
+
+                          // Prepare new edges (using prev)
+                          const filteredTreeSpecEdges = currentEdges.filter((e) => e.child !== childBranch);
+                          const newTreeSpecEdges = [...filteredTreeSpecEdges, { parent: parentBranch, child: childBranch }];
+                          const latestNodes = prev.treeSpec?.specJson.nodes ?? [];
+
+                          // Save to server in background (using prev values)
+                          api.updateTreeSpec({
+                            repoId: prev.repoId,
+                            baseBranch: prev.treeSpec?.baseBranch ?? prev.defaultBranch,
+                            nodes: latestNodes,
+                            edges: newTreeSpecEdges,
+                          }).catch((err) => {
+                            console.error("Failed to save edge:", err);
+                            setError((err as Error).message);
+                            api.scan(selectedPin.localPath).then(setSnapshot);
+                          });
+
                           return {
                             ...prev,
                             edges: prev.edges
@@ -1209,23 +1222,11 @@ export default function TreeDashboard() {
                               repoId: prev.repoId,
                               baseBranch: prev.treeSpec?.baseBranch ?? prev.defaultBranch,
                               status: prev.treeSpec?.status ?? "draft" as const,
-                              specJson: { nodes: currentNodes, edges: newTreeSpecEdges },
+                              specJson: { nodes: latestNodes, edges: newTreeSpecEdges },
                               createdAt: prev.treeSpec?.createdAt ?? new Date().toISOString(),
                               updatedAt: new Date().toISOString(),
                             },
                           };
-                        });
-
-                        // Save to server in background
-                        api.updateTreeSpec({
-                          repoId: snapshot.repoId,
-                          baseBranch: snapshot.treeSpec?.baseBranch ?? snapshot.defaultBranch,
-                          nodes: currentNodes,
-                          edges: newTreeSpecEdges,
-                        }).catch((err) => {
-                          console.error("Failed to save edge:", err);
-                          setError((err as Error).message);
-                          api.scan(selectedPin.localPath).then(setSnapshot);
                         });
                       }}
                       tentativeBaseBranch={selectedPlanningSession?.baseBranch}

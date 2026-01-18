@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useCallback } from "react";
+import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import type { TreeNode, TreeEdge, TaskNode, TaskEdge } from "../lib/api";
 
 interface BranchGraphProps {
@@ -96,29 +96,43 @@ export default function BranchGraph({
     });
   }, []);
 
-  // Handle drag move
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+  // Store refs for use in document event handlers to avoid stale closures
+  const dropTargetRef = useRef<string | null>(null);
+  dropTargetRef.current = dropTarget;
+
+  const dragStateRef = useRef<DragState | null>(null);
+  dragStateRef.current = dragState;
+
+  const onEdgeCreateRef = useRef(onEdgeCreate);
+  onEdgeCreateRef.current = onEdgeCreate;
+
+  // Handle drag with document-level events for better UX
+  useEffect(() => {
     if (!dragState) return;
-    const coords = getSVGCoords(e);
-    setDragState((prev) => prev ? { ...prev, currentX: coords.x, currentY: coords.y } : null);
+
+    const handleDocumentMouseMove = (e: MouseEvent) => {
+      const coords = getSVGCoords(e);
+      setDragState((prev) => prev ? { ...prev, currentX: coords.x, currentY: coords.y } : null);
+    };
+
+    const handleDocumentMouseUp = () => {
+      const currentDragState = dragStateRef.current;
+      const currentDropTarget = dropTargetRef.current;
+      if (currentDragState && currentDropTarget && currentDropTarget !== currentDragState.fromBranch) {
+        onEdgeCreateRef.current?.(currentDropTarget, currentDragState.fromBranch);
+      }
+      setDragState(null);
+      setDropTarget(null);
+    };
+
+    document.addEventListener("mousemove", handleDocumentMouseMove);
+    document.addEventListener("mouseup", handleDocumentMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleDocumentMouseMove);
+      document.removeEventListener("mouseup", handleDocumentMouseUp);
+    };
   }, [dragState, getSVGCoords]);
-
-  // Handle drag end
-  const handleMouseUp = useCallback(() => {
-    if (dragState && dropTarget && dropTarget !== dragState.fromBranch) {
-      // Create edge: dropTarget becomes parent of dragState.fromBranch
-      // (User drags a branch TO its new parent)
-      onEdgeCreate?.(dropTarget, dragState.fromBranch);
-    }
-    setDragState(null);
-    setDropTarget(null);
-  }, [dragState, dropTarget, onEdgeCreate]);
-
-  // Handle mouse leave SVG
-  const handleMouseLeave = useCallback(() => {
-    setDragState(null);
-    setDropTarget(null);
-  }, []);
 
   const { layoutNodes, layoutEdges, width, height } = useMemo(() => {
     if (nodes.length === 0 && tentativeNodes.length === 0) {
@@ -758,9 +772,6 @@ export default function BranchGraph({
         width={width}
         height={height}
         className="branch-graph__svg"
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
         style={{
           cursor: dragState ? "grabbing" : undefined,
           userSelect: dragState ? "none" : undefined,

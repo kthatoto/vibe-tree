@@ -266,6 +266,10 @@ export function PlanningPanel({
   const [executeSelectedBranches, setExecuteSelectedBranches] = useState<string[]>([]);
   const [executeCurrentTaskInstruction, setExecuteCurrentTaskInstruction] = useState<TaskInstruction | null>(null);
   const [executeLoading, setExecuteLoading] = useState(false);
+  const [executeEditMode, setExecuteEditMode] = useState(false);
+  const [executeEditTitle, setExecuteEditTitle] = useState("");
+  const [executeEditBaseBranch, setExecuteEditBaseBranch] = useState("");
+  const [executeEditBranches, setExecuteEditBranches] = useState<string[]>([]);
 
   // Load execute branches from session when selected
   useEffect(() => {
@@ -664,6 +668,43 @@ export function PlanningPanel({
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       onSessionSelect?.(updated);
       setExecuteSelectedBranches([]);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setExecuteLoading(false);
+    }
+  };
+
+  // Execute Session edit mode handlers
+  const handleStartExecuteEdit = () => {
+    if (!selectedSession) return;
+    setExecuteEditTitle(selectedSession.title);
+    setExecuteEditBaseBranch(selectedSession.baseBranch);
+    setExecuteEditBranches(selectedSession.executeBranches || []);
+    setExecuteEditMode(true);
+  };
+
+  const handleCancelExecuteEdit = () => {
+    setExecuteEditMode(false);
+  };
+
+  const handleSaveExecuteEdit = async () => {
+    if (!selectedSession) return;
+    setExecuteLoading(true);
+    try {
+      // Update title and base branch
+      let updated = await api.updatePlanningSession(selectedSession.id, {
+        title: executeEditTitle,
+        baseBranch: executeEditBaseBranch,
+      });
+      // Update execute branches if changed
+      const branchesChanged = JSON.stringify(executeEditBranches) !== JSON.stringify(selectedSession.executeBranches);
+      if (branchesChanged) {
+        updated = await api.updateExecuteBranches(selectedSession.id, executeEditBranches);
+      }
+      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      onSessionSelect?.(updated);
+      setExecuteEditMode(false);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -1116,6 +1157,186 @@ export function PlanningPanel({
   // Render session detail content
   const renderSessionDetail = () => {
     if (!selectedSession) return null;
+
+    // Execute Session header (read-only with edit button)
+    if (sessionTypeValue === "execute") {
+      const isInProgress = selectedSession.executeBranches && selectedSession.executeBranches.length > 0;
+      const executeStatus = isInProgress ? "in_progress" : "draft";
+      const executeStatusLabel = isInProgress ? "In Progress" : "Draft";
+
+      return (
+        <div className="planning-panel__detail-content">
+          <div className="planning-panel__header">
+            <span className={`planning-panel__session-type planning-panel__session-type--${sessionTypeValue}`}>
+              <span className="planning-panel__session-type-icon">{sessionTypeIcon}</span>
+              {sessionTypeLabel}
+            </span>
+            <span className={`planning-panel__execute-status planning-panel__execute-status--${executeStatus}`}>
+              {executeStatusLabel}
+            </span>
+            <span className="planning-panel__header-branch">{selectedSession.baseBranch}</span>
+            <span className="planning-panel__header-title">{selectedSession.title}</span>
+            <button
+              className="planning-panel__edit-btn"
+              onClick={handleStartExecuteEdit}
+            >
+              Edit
+            </button>
+          </div>
+
+          {error && <div className="planning-panel__error">{error}</div>}
+
+          {/* Edit Mode */}
+          {executeEditMode && (
+            <div className="planning-panel__execute-edit">
+              <div className="planning-panel__execute-edit-form">
+                <div className="planning-panel__execute-edit-row">
+                  <label>Title</label>
+                  <input
+                    type="text"
+                    value={executeEditTitle}
+                    onChange={(e) => setExecuteEditTitle(e.target.value)}
+                    className="planning-panel__input"
+                  />
+                </div>
+                <div className="planning-panel__execute-edit-row">
+                  <label>Base Branch</label>
+                  <select
+                    value={executeEditBaseBranch}
+                    onChange={(e) => setExecuteEditBaseBranch(e.target.value)}
+                    className="planning-panel__select"
+                  >
+                    {branches.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="planning-panel__execute-edit-row">
+                  <label>Target Branches</label>
+                </div>
+                <ExecuteBranchSelector
+                  nodes={graphNodes}
+                  edges={graphEdges}
+                  defaultBranch={defaultBranch}
+                  selectedBranches={executeEditBranches}
+                  onSelectionChange={setExecuteEditBranches}
+                />
+              </div>
+              <div className="planning-panel__execute-edit-actions">
+                <button
+                  className="planning-panel__cancel-btn"
+                  onClick={handleCancelExecuteEdit}
+                  disabled={executeLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="planning-panel__save-btn"
+                  onClick={handleSaveExecuteEdit}
+                  disabled={executeLoading}
+                >
+                  {executeLoading ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Branch Selection Mode (initial setup) */}
+          {!executeEditMode && (!selectedSession.executeBranches || selectedSession.executeBranches.length === 0) && (
+            <div className="planning-panel__execute-selection">
+              <ExecuteBranchSelector
+                nodes={graphNodes}
+                edges={graphEdges}
+                defaultBranch={defaultBranch}
+                selectedBranches={executeSelectedBranches}
+                onSelectionChange={handleExecuteBranchesChange}
+                onStartExecution={handleStartExecution}
+                executeLoading={executeLoading}
+              />
+            </div>
+          )}
+
+          {/* Execution Mode */}
+          {!executeEditMode && selectedSession.executeBranches && selectedSession.executeBranches.length > 0 && (
+            <div className="planning-panel__detail-main">
+              {/* Chat */}
+              <div className="planning-panel__chat">
+                {selectedSession.chatSessionId && (
+                  <ChatPanel
+                    sessionId={selectedSession.chatSessionId}
+                    onTaskSuggested={handleTaskSuggested}
+                    existingTaskLabels={selectedSession.nodes.map((n) => n.title)}
+                    disabled={false}
+                    executeMode={true}
+                    executeContext={{
+                      branchName: selectedSession.executeBranches[selectedSession.currentExecuteIndex],
+                      instruction: executeCurrentTaskInstruction?.instructionMd || null,
+                      taskIndex: selectedSession.currentExecuteIndex,
+                      totalTasks: selectedSession.executeBranches.length,
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Sidebar */}
+              <div className="planning-panel__sidebar">
+                {/* Progress */}
+                <div className="planning-panel__execute-progress">
+                  <div className="planning-panel__execute-progress-header">
+                    <span>{selectedSession.currentExecuteIndex + 1}/{selectedSession.executeBranches.length}</span>
+                    <div className="planning-panel__execute-progress-bar">
+                      <div
+                        className="planning-panel__execute-progress-fill"
+                        style={{ width: `${((selectedSession.currentExecuteIndex + 1) / selectedSession.executeBranches.length) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="planning-panel__execute-current">
+                    {selectedSession.executeBranches[selectedSession.currentExecuteIndex]}
+                  </div>
+                </div>
+
+                {/* Task Instruction */}
+                <div className="planning-panel__execute-instruction">
+                  <div className="planning-panel__execute-instruction-content">
+                    {executeCurrentTaskInstruction?.instructionMd || "No instruction"}
+                  </div>
+                </div>
+
+                {/* Control buttons */}
+                <div className="planning-panel__execute-controls">
+                  <button
+                    className="planning-panel__execute-next-btn"
+                    onClick={handleAdvanceTask}
+                    disabled={executeLoading || selectedSession.currentExecuteIndex >= selectedSession.executeBranches.length - 1}
+                  >
+                    {selectedSession.currentExecuteIndex >= selectedSession.executeBranches.length - 1
+                      ? "Done"
+                      : "Next"}
+                  </button>
+                  <button
+                    className="planning-panel__execute-skip-btn"
+                    onClick={handleSkipTask}
+                    disabled={executeLoading || selectedSession.currentExecuteIndex >= selectedSession.executeBranches.length - 1}
+                  >
+                    Skip
+                  </button>
+                  <button
+                    className="planning-panel__execute-abort-btn"
+                    onClick={handleAbortExecution}
+                    disabled={executeLoading}
+                  >
+                    Abort
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Non-Execute Session header (editable)
     return (
       <div className="planning-panel__detail-content">
         <div className="planning-panel__header">
@@ -1144,98 +1365,6 @@ export function PlanningPanel({
       </div>
 
       {error && <div className="planning-panel__error">{error}</div>}
-
-      {/* Execute Session: Branch Selection Mode */}
-      {sessionTypeValue === "execute" && (!selectedSession.executeBranches || selectedSession.executeBranches.length === 0) && (
-        <div className="planning-panel__execute-selection">
-          <ExecuteBranchSelector
-            nodes={graphNodes}
-            edges={graphEdges}
-            defaultBranch={defaultBranch}
-            selectedBranches={executeSelectedBranches}
-            onSelectionChange={handleExecuteBranchesChange}
-            onStartExecution={handleStartExecution}
-            executeLoading={executeLoading}
-          />
-        </div>
-      )}
-
-      {/* Execute Session: Execution Mode */}
-      {sessionTypeValue === "execute" && selectedSession.executeBranches && selectedSession.executeBranches.length > 0 && (
-        <div className="planning-panel__detail-main">
-          {/* Chat */}
-          <div className="planning-panel__chat">
-            {selectedSession.chatSessionId && (
-              <ChatPanel
-                sessionId={selectedSession.chatSessionId}
-                onTaskSuggested={handleTaskSuggested}
-                existingTaskLabels={selectedSession.nodes.map((n) => n.title)}
-                disabled={false}
-                executeMode={true}
-                executeContext={{
-                  branchName: selectedSession.executeBranches[selectedSession.currentExecuteIndex],
-                  instruction: executeCurrentTaskInstruction?.instructionMd || null,
-                  taskIndex: selectedSession.currentExecuteIndex,
-                  totalTasks: selectedSession.executeBranches.length,
-                }}
-              />
-            )}
-          </div>
-
-          {/* Sidebar */}
-          <div className="planning-panel__sidebar">
-            {/* Progress */}
-            <div className="planning-panel__execute-progress">
-              <div className="planning-panel__execute-progress-header">
-                <span>{selectedSession.currentExecuteIndex + 1}/{selectedSession.executeBranches.length}</span>
-                <div className="planning-panel__execute-progress-bar">
-                  <div
-                    className="planning-panel__execute-progress-fill"
-                    style={{ width: `${((selectedSession.currentExecuteIndex + 1) / selectedSession.executeBranches.length) * 100}%` }}
-                  />
-                </div>
-              </div>
-              <div className="planning-panel__execute-current">
-                {selectedSession.executeBranches[selectedSession.currentExecuteIndex]}
-              </div>
-            </div>
-
-            {/* Task Instruction */}
-            <div className="planning-panel__execute-instruction">
-              <div className="planning-panel__execute-instruction-content">
-                {executeCurrentTaskInstruction?.instructionMd || "No instruction"}
-              </div>
-            </div>
-
-            {/* Control buttons */}
-            <div className="planning-panel__execute-controls">
-              <button
-                className="planning-panel__execute-next-btn"
-                onClick={handleAdvanceTask}
-                disabled={executeLoading || selectedSession.currentExecuteIndex >= selectedSession.executeBranches.length - 1}
-              >
-                {selectedSession.currentExecuteIndex >= selectedSession.executeBranches.length - 1
-                  ? "Done"
-                  : "Next"}
-              </button>
-              <button
-                className="planning-panel__execute-skip-btn"
-                onClick={handleSkipTask}
-                disabled={executeLoading || selectedSession.currentExecuteIndex >= selectedSession.executeBranches.length - 1}
-              >
-                Skip
-              </button>
-              <button
-                className="planning-panel__execute-abort-btn"
-                onClick={handleAbortExecution}
-                disabled={executeLoading}
-              >
-                Abort
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Non-Execute Session: Original layout */}
       {sessionTypeValue !== "execute" && (

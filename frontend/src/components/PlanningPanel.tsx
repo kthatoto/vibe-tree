@@ -692,10 +692,9 @@ export function PlanningPanel({
     if (!selectedSession) return;
     setExecuteLoading(true);
     try {
-      // Update title and base branch
+      // Update title
       let updated = await api.updatePlanningSession(selectedSession.id, {
         title: executeEditTitle,
-        baseBranch: executeEditBaseBranch,
       });
       // Update execute branches if changed
       const branchesChanged = JSON.stringify(executeEditBranches) !== JSON.stringify(selectedSession.executeBranches);
@@ -1174,55 +1173,20 @@ export function PlanningPanel({
             <span className={`planning-panel__execute-status planning-panel__execute-status--${executeStatus}`}>
               {executeStatusLabel}
             </span>
-            <span className="planning-panel__header-branch">{selectedSession.baseBranch}</span>
-            <span className="planning-panel__header-title">{selectedSession.title}</span>
-            <button
-              className="planning-panel__edit-btn"
-              onClick={handleStartExecuteEdit}
-            >
-              Edit
-            </button>
-          </div>
-
-          {error && <div className="planning-panel__error">{error}</div>}
-
-          {/* Edit Mode */}
-          {executeEditMode && (
-            <div className="planning-panel__execute-edit">
-              <div className="planning-panel__execute-edit-form">
-                <div className="planning-panel__execute-edit-row">
-                  <label>Title</label>
-                  <input
-                    type="text"
-                    value={executeEditTitle}
-                    onChange={(e) => setExecuteEditTitle(e.target.value)}
-                    className="planning-panel__input"
-                  />
-                </div>
-                <div className="planning-panel__execute-edit-row">
-                  <label>Base Branch</label>
-                  <select
-                    value={executeEditBaseBranch}
-                    onChange={(e) => setExecuteEditBaseBranch(e.target.value)}
-                    className="planning-panel__select"
-                  >
-                    {branches.map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="planning-panel__execute-edit-row">
-                  <label>Target Branches</label>
-                </div>
-                <ExecuteBranchSelector
-                  nodes={graphNodes}
-                  edges={graphEdges}
-                  defaultBranch={defaultBranch}
-                  selectedBranches={executeEditBranches}
-                  onSelectionChange={setExecuteEditBranches}
-                />
-              </div>
-              <div className="planning-panel__execute-edit-actions">
+            {executeEditMode ? (
+              <input
+                type="text"
+                value={executeEditTitle}
+                onChange={(e) => setExecuteEditTitle(e.target.value)}
+                className="planning-panel__title-input"
+                placeholder="Untitled Session"
+                autoFocus
+              />
+            ) : (
+              <span className="planning-panel__header-title">{selectedSession.title}</span>
+            )}
+            {executeEditMode ? (
+              <>
                 <button
                   className="planning-panel__cancel-btn"
                   onClick={handleCancelExecuteEdit}
@@ -1237,7 +1201,29 @@ export function PlanningPanel({
                 >
                   {executeLoading ? "Saving..." : "Save"}
                 </button>
-              </div>
+              </>
+            ) : (
+              <button
+                className="planning-panel__edit-btn"
+                onClick={handleStartExecuteEdit}
+              >
+                Edit
+              </button>
+            )}
+          </div>
+
+          {error && <div className="planning-panel__error">{error}</div>}
+
+          {/* Edit Mode - Target Branches */}
+          {executeEditMode && (
+            <div className="planning-panel__execute-edit">
+              <ExecuteBranchSelector
+                nodes={graphNodes}
+                edges={graphEdges}
+                defaultBranch={defaultBranch}
+                selectedBranches={executeEditBranches}
+                onSelectionChange={setExecuteEditBranches}
+              />
             </div>
           )}
 

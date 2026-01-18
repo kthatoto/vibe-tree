@@ -1615,47 +1615,13 @@
 .planning-panel__execute-edit {
   flex: 1;
   display: flex;
-  flex-direction: column;
   overflow: hidden;
-}
-
-.planning-panel__execute-edit-form {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 12px;
-  gap: 12px;
-  overflow: hidden;
-}
-
-.planning-panel__execute-edit-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.planning-panel__execute-edit-row label {
-  font-size: 11px;
-  color: #9ca3af;
-}
-
-.planning-panel__execute-edit-row .planning-panel__input,
-.planning-panel__execute-edit-row .planning-panel__select {
-  width: 100%;
-  max-width: 300px;
-}
-
-.planning-panel__execute-edit-form > .execute-branch-selector {
-  flex: 1;
   min-height: 0;
 }
 
-.planning-panel__execute-edit-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px;
-  border-top: 1px solid #374151;
+.planning-panel__execute-edit > .execute-branch-selector {
+  flex: 1;
+  min-height: 0;
 }
 
 .planning-panel__cancel-btn {

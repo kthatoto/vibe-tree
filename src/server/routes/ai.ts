@@ -245,7 +245,7 @@ aiRouter.post("/start", async (c) => {
   const sessionId = randomUUID();
   const startedAt = new Date().toISOString();
 
-  const claudeProcess = spawn("claude", ["-p", prompt], {
+  const claudeProcess = spawn("claude", ["-p", prompt, "--dangerously-skip-permissions"], {
     cwd: localPath,
     stdio: ["ignore", "pipe", "pipe"],
     detached: false,

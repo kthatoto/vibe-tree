@@ -1180,16 +1180,15 @@ export default function TreeDashboard() {
                         setSnapshot((prev) => {
                           if (!prev) return prev;
 
-                          // Check if this exact edge already exists (using prev)
-                          const currentEdges = prev.treeSpec?.specJson.edges ?? [];
-                          const edgeExists = currentEdges.some(
-                            (e) => e.parent === parentBranch && e.child === childBranch
-                          ) || prev.edges.some(
+                          // Check if this exact edge already exists in UI edges only
+                          // (specJson.edges may be out of sync with UI)
+                          const edgeExists = prev.edges.some(
                             (e) => e.parent === parentBranch && e.child === childBranch
                           );
                           if (edgeExists) return prev;
 
                           // Prepare new edges (using prev)
+                          const currentEdges = prev.treeSpec?.specJson.edges ?? [];
                           const filteredTreeSpecEdges = currentEdges.filter((e) => e.child !== childBranch);
                           const newTreeSpecEdges = [...filteredTreeSpecEdges, { parent: parentBranch, child: childBranch }];
                           const latestNodes = prev.treeSpec?.specJson.nodes ?? [];

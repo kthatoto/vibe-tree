@@ -766,13 +766,15 @@ export default function BranchGraph({
   }
 
   return (
-    <div className="branch-graph">
+    <div className="branch-graph" style={{ width: "100%", height: "100%" }}>
       <svg
         ref={svgRef}
-        width={width}
-        height={height}
         className="branch-graph__svg"
         style={{
+          width: "100%",
+          height: "100%",
+          minWidth: width,
+          minHeight: height,
           cursor: dragState ? "grabbing" : undefined,
           userSelect: dragState ? "none" : undefined,
         }}

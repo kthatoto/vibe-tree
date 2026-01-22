@@ -604,7 +604,8 @@ export function PlanningPanel({
 
   const handleConfirm = async () => {
     if (!selectedSession) return;
-    if (selectedSession.nodes.length === 0) {
+    const isPlanningType = selectedSession.title.startsWith("Planning:");
+    if (!isPlanningType && selectedSession.nodes.length === 0) {
       setError("No tasks to confirm");
       return;
     }
@@ -1591,7 +1592,7 @@ export function PlanningPanel({
               <button
                 className="planning-panel__confirm-btn"
                 onClick={handleConfirm}
-                disabled={loading || selectedSession.nodes.length === 0}
+                disabled={loading || (sessionTypeValue !== "planning" && selectedSession.nodes.length === 0)}
               >
                 Confirm
               </button>

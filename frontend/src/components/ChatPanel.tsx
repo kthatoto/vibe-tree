@@ -346,8 +346,8 @@ export function ChatPanel({
               </div>
             )}
             {(chunk.type === "text" || chunk.type === "text_delta") && (() => {
-              // Remove task tags and clean up leftover separators
-              const cleaned = removeTaskTags(chunk.content || "")
+              // Remove task tags, instruction edit tags, and clean up leftover separators
+              const cleaned = removeInstructionEditTags(removeTaskTags(chunk.content || ""))
                 .replace(/\n---\n*$/g, "") // Remove trailing ---
                 .replace(/^\n*---\n/g, "") // Remove leading ---
                 .trim();
@@ -559,17 +559,92 @@ export function ChatPanel({
           if (msg.role === "assistant") {
             const chunks = parseChunks(msg.content);
             if (chunks) {
-              // Extract text content from chunks for task suggestions
+              // Extract text content from chunks for task suggestions and instruction edits
               const textContent = chunks
                 .filter(c => c.type === "text" || c.type === "text_delta")
                 .map(c => c.content || "")
                 .join("");
               const suggestions = extractTaskSuggestions(textContent);
+              const instructionEdit = extractInstructionEdit(textContent);
+              const isInstructionAccepted = acceptedInstructions.has(msg.id);
 
-              // Render chunks separately with task suggestions at the end
+              // Render chunks separately with task suggestions and instruction edits at the end
               return (
                 <div key={msg.id} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {chunks.map((chunk, i) => renderChunk(chunk, i, i === 0))}
+
+                  {/* Instruction Edit Proposal from chunks */}
+                  {instructionEdit && (
+                    <div style={{
+                      border: "1px solid #374151",
+                      background: "#1f2937",
+                      borderRadius: 6,
+                      overflow: "hidden",
+                    }}>
+                      <div style={{
+                        padding: "8px 12px",
+                        background: "#0f172a",
+                        borderBottom: "1px solid #374151",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: "#9ca3af" }}>
+                          Task Instruction の変更提案
+                        </span>
+                        {isInstructionAccepted && (
+                          <span style={{ fontSize: 11, padding: "2px 8px", background: "#14532d", color: "#4ade80", borderRadius: 3 }}>
+                            Accepted
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ padding: 12, fontSize: 12, fontFamily: "monospace" }}>
+                        {computeSimpleDiff(currentInstruction, instructionEdit.newContent).map((line, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              padding: "1px 4px",
+                              background: line.type === "added" ? "rgba(34, 197, 94, 0.15)" :
+                                         line.type === "removed" ? "rgba(239, 68, 68, 0.15)" : "transparent",
+                              color: line.type === "added" ? "#4ade80" :
+                                     line.type === "removed" ? "#f87171" : "#9ca3af",
+                            }}
+                          >
+                            <span style={{ display: "inline-block", width: 16, opacity: 0.6 }}>
+                              {line.type === "added" ? "+" : line.type === "removed" ? "-" : " "}
+                            </span>
+                            {line.content || " "}
+                          </div>
+                        ))}
+                      </div>
+                      {!isInstructionAccepted && (
+                        <div style={{
+                          padding: "8px 12px",
+                          borderTop: "1px solid #374151",
+                          display: "flex",
+                          gap: 8,
+                          justifyContent: "flex-end",
+                        }}>
+                          <button
+                            onClick={() => handleAcceptInstruction(msg.id, instructionEdit.newContent)}
+                            style={{
+                              padding: "4px 12px",
+                              background: "#22c55e",
+                              color: "#fff",
+                              border: "none",
+                              borderRadius: 4,
+                              fontSize: 12,
+                              fontWeight: 500,
+                              cursor: "pointer",
+                            }}
+                          >
+                            Accept
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Task Suggestions from chunks */}
                   {suggestions.length > 0 && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -677,6 +752,59 @@ export function ChatPanel({
 
         {/* Streaming chunks - each chunk as separate block */}
         {streamingChunks.map((chunk, i) => renderChunk(chunk, i, i === 0))}
+
+        {/* Instruction Edit from streaming chunks */}
+        {streamingChunks.length > 0 && (() => {
+          const streamingTextContent = streamingChunks
+            .filter(c => c.type === "text" || c.type === "text_delta")
+            .map(c => c.content || "")
+            .join("");
+          const streamingInstructionEdit = extractInstructionEdit(streamingTextContent);
+          if (!streamingInstructionEdit) return null;
+          return (
+            <div style={{
+              border: "1px solid #374151",
+              background: "#1f2937",
+              borderRadius: 6,
+              overflow: "hidden",
+            }}>
+              <div style={{
+                padding: "8px 12px",
+                background: "#0f172a",
+                borderBottom: "1px solid #374151",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}>
+                <span style={{ fontSize: 12, fontWeight: 500, color: "#9ca3af" }}>
+                  Task Instruction の変更提案
+                </span>
+              </div>
+              <div style={{ padding: 12, fontSize: 12, fontFamily: "monospace" }}>
+                {computeSimpleDiff(currentInstruction, streamingInstructionEdit.newContent).map((line, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      padding: "1px 4px",
+                      background: line.type === "added" ? "rgba(34, 197, 94, 0.15)" :
+                                 line.type === "removed" ? "rgba(239, 68, 68, 0.15)" : "transparent",
+                      color: line.type === "added" ? "#4ade80" :
+                             line.type === "removed" ? "#f87171" : "#9ca3af",
+                    }}
+                  >
+                    <span style={{ display: "inline-block", width: 16, opacity: 0.6 }}>
+                      {line.type === "added" ? "+" : line.type === "removed" ? "-" : " "}
+                    </span>
+                    {line.content || " "}
+                  </div>
+                ))}
+              </div>
+              <div style={{ padding: "8px 12px", borderTop: "1px solid #374151", fontSize: 11, color: "#6b7280" }}>
+                ストリーミング完了後にAcceptできます
+              </div>
+            </div>
+          );
+        })()}
 
         {loading && (
           <div style={{ display: "flex", justifyContent: "flex-start" }}>

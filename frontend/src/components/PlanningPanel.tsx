@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -247,6 +247,10 @@ export function PlanningPanel({
 
   // Title editing with IME support
   const [editingTitle, setEditingTitle] = useState("");
+
+  // Resizable sidebar
+  const [sidebarWidth, setSidebarWidth] = useState(350);
+  const isResizing = useRef(false);
 
   // Session notifications (unread counts, thinking state)
   const chatSessionIds = sessions
@@ -568,6 +572,35 @@ export function PlanningPanel({
       console.error("Failed to update base branch:", err);
     }
   };
+
+  // Sidebar resize handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizing.current) return;
+      const delta = startX - moveEvent.clientX;
+      const newWidth = Math.max(200, Math.min(600, startWidth + delta));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }, [sidebarWidth]);
 
   const handleConfirm = async () => {
     if (!selectedSession) return;
@@ -1395,8 +1428,14 @@ export function PlanningPanel({
           )}
         </div>
 
+        {/* Resizer */}
+        <div
+          className="planning-panel__resizer"
+          onMouseDown={handleResizeStart}
+        />
+
         {/* Sidebar: Links + Tasks */}
-        <div className="planning-panel__sidebar">
+        <div className="planning-panel__sidebar" style={{ width: sidebarWidth }}>
           {/* External Links */}
           <div className="planning-panel__links">
             <h4>Links</h4>

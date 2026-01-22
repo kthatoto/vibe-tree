@@ -506,8 +506,19 @@
   border-right: 1px solid #374151;
 }
 
+.planning-panel__resizer {
+  width: 4px;
+  background: #374151;
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.planning-panel__resizer:hover {
+  background: #60a5fa;
+}
+
 .planning-panel__sidebar {
-  width: 280px;
   display: flex;
   flex-direction: column;
   overflow-y: auto;

@@ -172,17 +172,13 @@ scanRouter.post("/", async (c) => {
         // Check if this child already has an edge
         const existingIndex = edges.findIndex((e) => e.child === childBranch);
         if (existingIndex >= 0) {
-          const existingEdge = edges[existingIndex];
-          // Only replace if git didn't detect a confident relationship (medium = git ancestry detected)
-          // Planning session edges should not override git-detected linear relationships
-          if (existingEdge.confidence !== "medium") {
-            edges[existingIndex] = {
-              parent: parentBranch,
-              child: childBranch,
-              confidence: "high" as const,
-              isDesigned: true,
-            };
-          }
+          // Planning session edges (user-designed) always take priority over git-inferred edges
+          edges[existingIndex] = {
+            parent: parentBranch,
+            child: childBranch,
+            confidence: "high" as const,
+            isDesigned: true,
+          };
         } else {
           // Add new edge
           edges.push({
@@ -213,16 +209,13 @@ scanRouter.post("/", async (c) => {
         // This is a root task - connect to base branch
         const existingIndex = edges.findIndex((e) => e.child === node.branchName);
         if (existingIndex >= 0) {
-          const existingEdge = edges[existingIndex];
-          // Don't override git-detected linear relationships
-          if (existingEdge.confidence !== "medium") {
-            edges[existingIndex] = {
-              parent: session.baseBranch,
-              child: node.branchName,
-              confidence: "high" as const,
-              isDesigned: true,
-            };
-          }
+          // Planning session edges (user-designed) always take priority
+          edges[existingIndex] = {
+            parent: session.baseBranch,
+            child: node.branchName,
+            confidence: "high" as const,
+            isDesigned: true,
+          };
         } else {
           edges.push({
             parent: session.baseBranch,

@@ -256,7 +256,9 @@ planningSessionsRouter.post("/:id/confirm", async (c) => {
   const nodes = JSON.parse(session.nodesJson) as TaskNode[];
   const edges = JSON.parse(session.edgesJson) as TaskEdge[];
 
-  if (nodes.length === 0) {
+  // Planning type sessions don't require tasks (they focus on instruction editing)
+  const isPlanningType = session.type === "planning";
+  if (!isPlanningType && nodes.length === 0) {
     throw new BadRequestError("No tasks to confirm");
   }
 

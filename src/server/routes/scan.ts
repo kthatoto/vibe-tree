@@ -230,7 +230,9 @@ scanRouter.post("/", async (c) => {
 
   // 8.5. Merge treeSpec edges LAST (manual edits take highest priority)
   if (treeSpec) {
+    console.log(`[Scan] treeSpec found with ${(treeSpec.specJson.edges as Array<unknown>).length} edges`);
     for (const designedEdge of treeSpec.specJson.edges as Array<{ parent: string; child: string }>) {
+      console.log(`[Scan] Processing treeSpec edge: ${designedEdge.parent} -> ${designedEdge.child}`);
       // Skip edges that contradict git ancestry (child is ancestor of parent in git)
       try {
         const mergeBase = execSync(
@@ -253,12 +255,14 @@ scanRouter.post("/", async (c) => {
       // User-designed edges (from branch graph) always take priority over git-inferred edges
       const existingIndex = edges.findIndex((e) => e.child === designedEdge.child);
       if (existingIndex >= 0) {
+        const oldParent = edges[existingIndex].parent;
         edges[existingIndex] = {
           parent: designedEdge.parent,
           child: designedEdge.child,
           confidence: "high" as const,
           isDesigned: true,
         };
+        console.log(`[Scan] Replaced edge for ${designedEdge.child}: ${oldParent} -> ${designedEdge.parent}`);
       } else {
         edges.push({
           parent: designedEdge.parent,
@@ -266,9 +270,13 @@ scanRouter.post("/", async (c) => {
           confidence: "high" as const,
           isDesigned: true,
         });
+        console.log(`[Scan] Added new edge: ${designedEdge.parent} -> ${designedEdge.child}`);
       }
     }
   }
+
+  // Log final edges for debugging
+  console.log(`[Scan] Final edges:`, edges.map(e => `${e.parent}->${e.child}(${e.confidence}${e.isDesigned ? ',designed' : ''})`).join(', '));
 
   // 9. Calculate ahead/behind based on finalized edges (parent branch, not default)
   calculateAheadBehind(nodes, edges, localPath, defaultBranch);

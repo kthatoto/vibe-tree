@@ -8,6 +8,8 @@ import {
   removeInstructionEditTags,
   computeSimpleDiff,
 } from "../lib/instruction-parser";
+import { extractAskUserQuestion } from "../lib/ask-user-question";
+import { AskUserQuestionUI } from "./AskUserQuestionUI";
 import { wsClient } from "../lib/ws";
 import githubIcon from "../assets/github.svg";
 
@@ -264,6 +266,38 @@ export function ChatPanel({
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setLoading(false);
       inputRef.current?.focus();
+    }
+  };
+
+  // Send answer to AskUserQuestion
+  const sendQuestionAnswer = async (answer: string) => {
+    if (loading) return;
+
+    setLoading(true);
+    setError(null);
+
+    // Add user answer as a message
+    const tempId = Date.now();
+    const tempUserMsg: ChatMessage = {
+      id: tempId,
+      sessionId,
+      role: "user",
+      content: answer,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempUserMsg]);
+
+    try {
+      const context = buildExecuteContext();
+      const chatMode = executeMode ? "execution" : undefined;
+      const result = await api.sendChatMessage(sessionId, answer, context, chatMode, quickMode);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? result.userMessage : m))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send answer");
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setLoading(false);
     }
   };
 
@@ -828,6 +862,41 @@ export function ChatPanel({
               </div>
             </div>
           );
+        })()}
+
+        {/* AskUserQuestion UI - check last message or streaming chunks */}
+        {!loading && (() => {
+          // First, check streaming chunks (when just completed)
+          const askFromStreaming = extractAskUserQuestion(streamingChunks);
+          if (askFromStreaming) {
+            return (
+              <AskUserQuestionUI
+                data={askFromStreaming}
+                onSubmit={sendQuestionAnswer}
+                disabled={loading}
+              />
+            );
+          }
+
+          // Then check the last assistant message
+          const lastMessage = messages[messages.length - 1];
+          if (lastMessage?.role === "assistant") {
+            const chunks = parseChunks(lastMessage.content);
+            if (chunks) {
+              const askFromMessage = extractAskUserQuestion(chunks);
+              if (askFromMessage) {
+                return (
+                  <AskUserQuestionUI
+                    data={askFromMessage}
+                    onSubmit={sendQuestionAnswer}
+                    disabled={loading}
+                  />
+                );
+              }
+            }
+          }
+
+          return null;
         })()}
 
         {loading && (

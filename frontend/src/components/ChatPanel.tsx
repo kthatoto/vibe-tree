@@ -58,6 +58,8 @@ export function ChatPanel({
   const hasStreamingChunksRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Quick mode (use haiku for faster responses)
+  const [quickMode, setQuickMode] = useState(false);
 
   // Load messages
   const loadMessages = useCallback(async () => {
@@ -200,7 +202,7 @@ export function ChatPanel({
       const context = buildExecuteContext();
       const chatMode = executeMode ? "execution" : undefined;
       // API returns immediately, assistant message comes via WebSocket
-      const result = await api.sendChatMessage(sessionId, userMessage, context, chatMode);
+      const result = await api.sendChatMessage(sessionId, userMessage, context, chatMode, quickMode);
       // Replace temp message with real one
       setMessages((prev) =>
         prev.map((m) => (m.id === tempId ? result.userMessage : m))
@@ -691,46 +693,89 @@ export function ChatPanel({
         borderTop: "1px solid #374151",
         padding: 12,
         display: "flex",
+        flexDirection: "column",
         gap: 8,
       }}>
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Type a message... (⌘+Enter to send)"
-          style={{
-            flex: 1,
-            resize: "none",
-            border: "1px solid #374151",
-            borderRadius: 4,
-            padding: "8px 12px",
-            fontSize: 14,
-            fontFamily: "inherit",
-            outline: "none",
-            background: "#1f2937",
-            color: "#f3f4f6",
-            minHeight: 80,
-          }}
-          disabled={disabled}
-        />
-        <button
-          onClick={sendMessage}
-          disabled={!input.trim() || loading || disabled}
-          style={{
-            padding: "12px 16px",
-            background: !input.trim() || loading || disabled ? "#4b5563" : "#3b82f6",
-            color: "white",
-            border: "none",
-            borderRadius: 4,
-            cursor: !input.trim() || loading || disabled ? "not-allowed" : "pointer",
-            fontWeight: 500,
-            fontSize: 13,
-            alignSelf: "flex-end",
-          }}
-        >
-          Send
-        </button>
+        {/* Quick mode toggle */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}>
+          <label style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            cursor: "pointer",
+            fontSize: 12,
+            color: quickMode ? "#60a5fa" : "#9ca3af",
+          }}>
+            <div
+              onClick={() => setQuickMode(!quickMode)}
+              style={{
+                width: 32,
+                height: 18,
+                borderRadius: 9,
+                background: quickMode ? "#3b82f6" : "#4b5563",
+                position: "relative",
+                transition: "background 0.2s",
+                cursor: "pointer",
+              }}
+            >
+              <div style={{
+                width: 14,
+                height: 14,
+                borderRadius: 7,
+                background: "#fff",
+                position: "absolute",
+                top: 2,
+                left: quickMode ? 16 : 2,
+                transition: "left 0.2s",
+              }} />
+            </div>
+            Quick (Haiku)
+          </label>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type a message... (⌘+Enter to send)"
+            style={{
+              flex: 1,
+              resize: "none",
+              border: "1px solid #374151",
+              borderRadius: 4,
+              padding: "8px 12px",
+              fontSize: 14,
+              fontFamily: "inherit",
+              outline: "none",
+              background: "#1f2937",
+              color: "#f3f4f6",
+              minHeight: 80,
+            }}
+            disabled={disabled}
+          />
+          <button
+            onClick={sendMessage}
+            disabled={!input.trim() || loading || disabled}
+            style={{
+              padding: "12px 16px",
+              background: !input.trim() || loading || disabled ? "#4b5563" : "#3b82f6",
+              color: "white",
+              border: "none",
+              borderRadius: 4,
+              cursor: !input.trim() || loading || disabled ? "not-allowed" : "pointer",
+              fontWeight: 500,
+              fontSize: 13,
+              alignSelf: "flex-end",
+            }}
+          >
+            Send
+          </button>
+        </div>
       </div>
 
       <style>{`

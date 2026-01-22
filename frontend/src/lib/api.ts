@@ -622,10 +622,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ sessionId }),
     }),
-  sendChatMessage: (sessionId: string, userMessage: string, context?: string, chatMode?: ChatMode) =>
+  sendChatMessage: (sessionId: string, userMessage: string, context?: string, chatMode?: ChatMode, quickMode?: boolean) =>
     fetchJson<{ userMessage: ChatMessage; runId: number; status: string }>(`${API_BASE}/chat/send`, {
       method: "POST",
-      body: JSON.stringify({ sessionId, userMessage, context, chatMode }),
+      body: JSON.stringify({ sessionId, userMessage, context, chatMode, quickMode }),
     }),
   updateInstructionEditStatus: (messageId: number, status: InstructionEditStatus) =>
     fetchJson<{ success: boolean; status: InstructionEditStatus }>(

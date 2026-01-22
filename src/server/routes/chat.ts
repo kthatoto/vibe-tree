@@ -434,6 +434,10 @@ chatRouter.post("/send", async (c) => {
   const claudeArgs = ["-p", prompt];
   // All sessions use streaming output
   claudeArgs.push("--output-format", "stream-json", "--verbose", "--include-partial-messages");
+  // Quick mode: use haiku for faster responses
+  if (input.quickMode) {
+    claudeArgs.push("--model", "haiku");
+  }
   if (isExecution) {
     // Execution mode: bypass permissions
     claudeArgs.push("--dangerously-skip-permissions");

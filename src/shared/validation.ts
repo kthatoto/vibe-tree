@@ -211,6 +211,7 @@ export const chatSendSchema = z.object({
   userMessage: z.string().min(1, "Message is required"),
   context: z.string().optional(),
   chatMode: chatModeSchema.optional(),
+  quickMode: z.boolean().optional(),
 });
 
 export type ChatSendInput = z.infer<typeof chatSendSchema>;

@@ -246,34 +246,46 @@ export function findBestParent(
         if (candidate === defaultBranch) continue;
 
         try {
-          // Check if candidate's tip commit is an ancestor of branchName
-          // Using git merge-base: if merge-base(A, B) == A, then A is ancestor of B
+          // Find merge-base between candidate and branchName
           const mergeBase = execSync(
             `cd "${repoPath}" && git merge-base "${candidate}" "${branchName}" 2>/dev/null`,
             { encoding: "utf-8" }
           ).trim();
 
-          const candidateTip = execSync(
-            `cd "${repoPath}" && git rev-parse "${candidate}" 2>/dev/null`,
+          if (!mergeBase) continue;
+
+          // Get merge-base with default branch
+          const defaultMergeBase = execSync(
+            `cd "${repoPath}" && git merge-base "${defaultBranch}" "${branchName}" 2>/dev/null`,
             { encoding: "utf-8" }
           ).trim();
 
-          if (mergeBase === candidateTip) {
-            // candidate is an ancestor of branchName
-            // Count commits between candidate and branchName
-            const count = parseInt(
-              execSync(
-                `cd "${repoPath}" && git rev-list --count "${candidate}..${branchName}" 2>/dev/null`,
-                { encoding: "utf-8" }
-              ).trim(),
-              10
-            );
+          // If merge-base with candidate is same as merge-base with default,
+          // then candidate is not a better parent than default
+          if (mergeBase === defaultMergeBase) continue;
 
-            // Find the candidate with the smallest distance (closest ancestor)
-            if (!isNaN(count) && count > 0 && count < minDistance) {
-              minDistance = count;
-              closestParent = candidate;
-            }
+          // Check if candidate's merge-base is a descendant of default's merge-base
+          // (meaning candidate is "closer" to branchName in the tree)
+          const isDescendant = execSync(
+            `cd "${repoPath}" && git merge-base --is-ancestor "${defaultMergeBase}" "${mergeBase}" 2>/dev/null && echo "yes" || echo "no"`,
+            { encoding: "utf-8" }
+          ).trim();
+
+          if (isDescendant !== "yes") continue;
+
+          // Count commits from merge-base to branchName
+          const count = parseInt(
+            execSync(
+              `cd "${repoPath}" && git rev-list --count "${mergeBase}..${branchName}" 2>/dev/null`,
+              { encoding: "utf-8" }
+            ).trim(),
+            10
+          );
+
+          // Find the candidate with the smallest distance (closest ancestor)
+          if (!isNaN(count) && count >= 0 && count < minDistance) {
+            minDistance = count;
+            closestParent = candidate;
           }
         } catch {
           // Ignore errors for individual branches

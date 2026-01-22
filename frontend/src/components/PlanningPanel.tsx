@@ -272,10 +272,10 @@ export function PlanningPanel({
   // Execute Session state
   const [executeSelectedBranches, setExecuteSelectedBranches] = useState<string[]>([]);
   const [executeCurrentTaskInstruction, setExecuteCurrentTaskInstruction] = useState<TaskInstruction | null>(null);
+  const [executeAllTasksInstructions, setExecuteAllTasksInstructions] = useState<Array<{ branchName: string; instruction: string | null }>>([]);
   const [executeLoading, setExecuteLoading] = useState(false);
   const [executeEditMode, setExecuteEditMode] = useState(false);
   const [executeEditTitle, setExecuteEditTitle] = useState("");
-  const [executeEditBaseBranch, setExecuteEditBaseBranch] = useState("");
   const [executeEditBranches, setExecuteEditBranches] = useState<string[]>([]);
 
   // Load execute branches from session when selected
@@ -302,6 +302,17 @@ export function PlanningPanel({
       .then(setExecuteCurrentTaskInstruction)
       .catch(() => setExecuteCurrentTaskInstruction(null));
   }, [selectedSession?.id, selectedSession?.currentExecuteIndex, selectedSession?.executeBranches, repoId]);
+
+  // Load all task instructions when execute session starts
+  useEffect(() => {
+    if (!selectedSession || selectedSession.type !== "execute" || !selectedSession.executeBranches || selectedSession.executeBranches.length === 0) {
+      setExecuteAllTasksInstructions([]);
+      return;
+    }
+    api.getTaskInstructions(repoId, selectedSession.executeBranches)
+      .then(setExecuteAllTasksInstructions)
+      .catch(() => setExecuteAllTasksInstructions([]));
+  }, [selectedSession?.id, selectedSession?.executeBranches, repoId]);
 
   // Load sessions
   useEffect(() => {
@@ -402,6 +413,37 @@ export function PlanningPanel({
       unsubConfirmed();
     };
   }, [repoId, selectedSession?.id]);
+
+  // Auto-advance for Execute Session when streaming ends
+  useEffect(() => {
+    if (!selectedSession || selectedSession.type !== "execute" || !selectedSession.executeBranches || !selectedSession.chatSessionId) {
+      return;
+    }
+
+    const unsubStreamingEnd = wsClient.on("chat.streaming.end", (msg) => {
+      const data = msg.data as { sessionId: string };
+      if (data.sessionId === selectedSession.chatSessionId) {
+        // Auto-advance to next task after a short delay
+        // Check if there are more tasks to execute
+        if (selectedSession.currentExecuteIndex < selectedSession.executeBranches!.length - 1) {
+          // Wait a bit before auto-advancing to let user see the result
+          setTimeout(async () => {
+            try {
+              const result = await api.advanceExecuteTask(selectedSession.id);
+              setSessions((prev) => prev.map((s) => (s.id === result.id ? result : s)));
+              onSessionSelect?.(result);
+            } catch (err) {
+              setError((err as Error).message);
+            }
+          }, 1500);
+        }
+      }
+    });
+
+    return () => {
+      unsubStreamingEnd();
+    };
+  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, selectedSession?.chatSessionId, selectedSession?.currentExecuteIndex, onSessionSelect]);
 
   // Load external links when session changes
   useEffect(() => {
@@ -680,25 +722,6 @@ export function PlanningPanel({
     }
   };
 
-  const handleAdvanceTask = async () => {
-    if (!selectedSession) return;
-    setExecuteLoading(true);
-    try {
-      const result = await api.advanceExecuteTask(selectedSession.id);
-      setSessions((prev) => prev.map((s) => (s.id === result.id ? result : s)));
-      onSessionSelect?.(result);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setExecuteLoading(false);
-    }
-  };
-
-  const handleSkipTask = async () => {
-    // Same as advance but without marking as complete
-    await handleAdvanceTask();
-  };
-
   const handleAbortExecution = async () => {
     if (!selectedSession) return;
     if (!confirm("実行を中止しますか？ブランチ選択画面に戻ります。")) return;
@@ -720,7 +743,6 @@ export function PlanningPanel({
   const handleStartExecuteEdit = () => {
     if (!selectedSession) return;
     setExecuteEditTitle(selectedSession.title);
-    setExecuteEditBaseBranch(selectedSession.baseBranch);
     setExecuteEditBranches(selectedSession.executeBranches || []);
     setExecuteEditMode(true);
   };
@@ -1298,21 +1320,30 @@ export function PlanningPanel({
                       instruction: executeCurrentTaskInstruction?.instructionMd || null,
                       taskIndex: selectedSession.currentExecuteIndex,
                       totalTasks: selectedSession.executeBranches.length,
+                      allTasks: executeAllTasksInstructions.length > 0
+                        ? executeAllTasksInstructions
+                        : selectedSession.executeBranches.map(b => ({ branchName: b, instruction: null })),
                     }}
                   />
                 )}
               </div>
 
+              {/* Resizer */}
+              <div
+                className="planning-panel__resizer"
+                onMouseDown={handleResizeStart}
+              />
+
               {/* Sidebar */}
-              <div className="planning-panel__sidebar">
+              <div className="planning-panel__sidebar" style={{ width: sidebarWidth }}>
                 {/* Progress */}
                 <div className="planning-panel__execute-progress">
                   <div className="planning-panel__execute-progress-header">
-                    <span>{selectedSession.currentExecuteIndex + 1}/{selectedSession.executeBranches.length}</span>
+                    <span>Task {selectedSession.currentExecuteIndex + 1} of {selectedSession.executeBranches.length}</span>
                     <div className="planning-panel__execute-progress-bar">
                       <div
                         className="planning-panel__execute-progress-fill"
-                        style={{ width: `${((selectedSession.currentExecuteIndex + 1) / selectedSession.executeBranches.length) * 100}%` }}
+                        style={{ width: `${(selectedSession.currentExecuteIndex / selectedSession.executeBranches.length) * 100}%` }}
                       />
                     </div>
                   </div>
@@ -1330,22 +1361,6 @@ export function PlanningPanel({
 
                 {/* Control buttons */}
                 <div className="planning-panel__execute-controls">
-                  <button
-                    className="planning-panel__execute-next-btn"
-                    onClick={handleAdvanceTask}
-                    disabled={executeLoading || selectedSession.currentExecuteIndex >= selectedSession.executeBranches.length - 1}
-                  >
-                    {selectedSession.currentExecuteIndex >= selectedSession.executeBranches.length - 1
-                      ? "Done"
-                      : "Next"}
-                  </button>
-                  <button
-                    className="planning-panel__execute-skip-btn"
-                    onClick={handleSkipTask}
-                    disabled={executeLoading || selectedSession.currentExecuteIndex >= selectedSession.executeBranches.length - 1}
-                  >
-                    Skip
-                  </button>
                   <button
                     className="planning-panel__execute-abort-btn"
                     onClick={handleAbortExecution}
@@ -1395,7 +1410,6 @@ export function PlanningPanel({
       </div>
 
       {/* Non-Execute Session: Original layout */}
-      {sessionTypeValue !== "execute" && (
       <div className="planning-panel__detail-main">
         {/* Chat section */}
         <div className="planning-panel__chat">
@@ -1613,7 +1627,6 @@ export function PlanningPanel({
           )}
         </div>
       </div>
-      )}
     </div>
     );
   };

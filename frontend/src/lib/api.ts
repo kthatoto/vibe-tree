@@ -789,6 +789,22 @@ export const api = {
     fetchJson<TaskInstruction>(
       `${API_BASE}/instructions/task?repoId=${encodeURIComponent(repoId)}&branchName=${encodeURIComponent(branchName)}`
     ),
+  getTaskInstructions: async (repoId: string, branchNames: string[]) => {
+    // Fetch multiple task instructions in parallel
+    const results = await Promise.all(
+      branchNames.map(async (branchName) => {
+        try {
+          const instruction = await fetchJson<TaskInstruction>(
+            `${API_BASE}/instructions/task?repoId=${encodeURIComponent(repoId)}&branchName=${encodeURIComponent(branchName)}`
+          );
+          return { branchName, instruction: instruction?.instructionMd || null };
+        } catch {
+          return { branchName, instruction: null };
+        }
+      })
+    );
+    return results;
+  },
   updateTaskInstruction: (repoId: string, branchName: string, instructionMd: string) =>
     fetchJson<TaskInstruction>(`${API_BASE}/instructions/task`, {
       method: "PATCH",

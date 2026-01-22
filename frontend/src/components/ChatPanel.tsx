@@ -11,11 +11,17 @@ import {
 import { wsClient } from "../lib/ws";
 import githubIcon from "../assets/github.svg";
 
+interface ExecuteTaskInfo {
+  branchName: string;
+  instruction: string | null;
+}
+
 interface ExecuteContext {
   branchName: string;
   instruction: string | null;
   taskIndex: number;
   totalTasks: number;
+  allTasks: ExecuteTaskInfo[];
 }
 
 interface ChatPanelProps {
@@ -195,11 +201,29 @@ export function ChatPanel({
     if (!executeMode || !executeContext) return undefined;
     const lines = [
       `## Execute Mode - Task ${executeContext.taskIndex + 1}/${executeContext.totalTasks}`,
-      `**Branch:** ${executeContext.branchName}`,
+      "",
+      "### 全タスク一覧:",
     ];
-    if (executeContext.instruction) {
-      lines.push("", "### Task Instruction:", executeContext.instruction);
-    }
+
+    // Add all tasks with their instructions
+    executeContext.allTasks.forEach((task, i) => {
+      const isCurrent = i === executeContext.taskIndex;
+      const marker = isCurrent ? "→ " : "  ";
+      const status = i < executeContext.taskIndex ? "[完了]" : isCurrent ? "[実行中]" : "[未実行]";
+      lines.push(`${marker}${i + 1}. ${task.branchName} ${status}`);
+      if (task.instruction) {
+        // Add instruction preview (truncated for non-current tasks)
+        const preview = isCurrent
+          ? task.instruction
+          : task.instruction.length > 100
+            ? task.instruction.slice(0, 100) + "..."
+            : task.instruction;
+        if (isCurrent) {
+          lines.push("", "### 現在のタスク Instruction:", preview);
+        }
+      }
+    });
+
     return lines.join("\n");
   };
 

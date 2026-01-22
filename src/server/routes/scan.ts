@@ -229,27 +229,11 @@ scanRouter.post("/", async (c) => {
   }
 
   // 8.5. Merge treeSpec edges LAST (manual edits take highest priority)
+  // User-designed edges are trusted - no git ancestry validation needed
   if (treeSpec) {
     console.log(`[Scan] treeSpec found with ${(treeSpec.specJson.edges as Array<unknown>).length} edges`);
     for (const designedEdge of treeSpec.specJson.edges as Array<{ parent: string; child: string }>) {
       console.log(`[Scan] Processing treeSpec edge: ${designedEdge.parent} -> ${designedEdge.child}`);
-      // Skip edges that contradict git ancestry (child is ancestor of parent in git)
-      try {
-        const mergeBase = execSync(
-          `cd "${localPath}" && git merge-base "${designedEdge.child}" "${designedEdge.parent}" 2>/dev/null`,
-          { encoding: "utf-8" }
-        ).trim();
-        const childTip = execSync(
-          `cd "${localPath}" && git rev-parse "${designedEdge.child}" 2>/dev/null`,
-          { encoding: "utf-8" }
-        ).trim();
-        // If child is ancestor of parent, this edge is backwards - skip it
-        if (mergeBase === childTip) {
-          continue;
-        }
-      } catch {
-        // If git commands fail, allow the edge
-      }
 
       // Find and replace existing edge for this child
       // User-designed edges (from branch graph) always take priority over git-inferred edges

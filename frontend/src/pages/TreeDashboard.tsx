@@ -1193,12 +1193,15 @@ export default function TreeDashboard() {
                           const newTreeSpecEdges = [...filteredTreeSpecEdges, { parent: parentBranch, child: childBranch }];
                           const latestNodes = prev.treeSpec?.specJson.nodes ?? [];
 
-                          // Save to server in background (using prev values)
+                          // Save to server and rescan to ensure consistency
                           api.updateTreeSpec({
                             repoId: prev.repoId,
                             baseBranch: prev.treeSpec?.baseBranch ?? prev.defaultBranch,
                             nodes: latestNodes,
                             edges: newTreeSpecEdges,
+                          }).then(() => {
+                            // Rescan after treeSpec is saved to ensure edges are applied
+                            api.scan(selectedPin.localPath).then(setSnapshot);
                           }).catch((err) => {
                             console.error("Failed to save edge:", err);
                             setError((err as Error).message);

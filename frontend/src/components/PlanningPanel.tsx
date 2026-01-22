@@ -604,8 +604,7 @@ export function PlanningPanel({
 
   const handleConfirm = async () => {
     if (!selectedSession) return;
-    const isPlanningType = selectedSession.title.startsWith("Planning:");
-    if (!isPlanningType && selectedSession.nodes.length === 0) {
+    if (selectedSession.type !== "planning" && selectedSession.nodes.length === 0) {
       setError("No tasks to confirm");
       return;
     }
@@ -1254,8 +1253,6 @@ export function PlanningPanel({
             )}
           </div>
 
-          {error && <div className="planning-panel__error">{error}</div>}
-
           {/* Edit Mode - Target Branches */}
           {executeEditMode && (
             <div className="planning-panel__execute-edit">
@@ -1396,8 +1393,6 @@ export function PlanningPanel({
           disabled={selectedSession.status !== "draft"}
         />
       </div>
-
-      {error && <div className="planning-panel__error">{error}</div>}
 
       {/* Non-Execute Session: Original layout */}
       {sessionTypeValue !== "execute" && (

@@ -178,18 +178,6 @@ chatRouter.post("/sessions/planning", async (c) => {
     updatedAt: now,
   });
 
-  // Add initial assistant message
-  const initialMessage = `こんにちは！何を作りたいですか？
-
-URLやドキュメント（Notion、Google Docs など）があれば共有してください。内容を確認して、タスクを分解するお手伝いをします。`;
-
-  await db.insert(schema.chatMessages).values({
-    sessionId,
-    role: "assistant",
-    content: initialMessage,
-    createdAt: now,
-  });
-
   const session: ChatSession = {
     id: sessionId,
     repoId: input.repoId,

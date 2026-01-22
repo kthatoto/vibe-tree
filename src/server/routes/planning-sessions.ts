@@ -163,23 +163,6 @@ planningSessionsRouter.post("/", async (c) => {
     updatedAt: now,
   });
 
-  // Add initial assistant message based on session type
-  const isInstructionReview = (title || "").startsWith("Planning:");
-  const initialMessage = isInstructionReview
-    ? `タスクインストラクションの内容を確認します。
-
-気になる点や不明確な箇所があれば指摘しますので、一緒に精査していきましょう。`
-    : `こんにちは！何を作りたいですか？
-
-URLやドキュメント（Notion、GitHub Issue、Figma など）があれば共有してください。内容を確認して、タスクを分解するお手伝いをします。`;
-
-  await db.insert(schema.chatMessages).values({
-    sessionId: chatSessionId,
-    role: "assistant",
-    content: initialMessage,
-    createdAt: now,
-  });
-
   const [session] = await db
     .select()
     .from(schema.planningSessions)

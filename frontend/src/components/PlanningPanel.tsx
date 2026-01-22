@@ -245,6 +245,9 @@ export function PlanningPanel({
   const [instructionSaving, setInstructionSaving] = useState(false);
   const [instructionDirty, setInstructionDirty] = useState(false);
 
+  // Title editing with IME support
+  const [editingTitle, setEditingTitle] = useState("");
+
   // Session notifications (unread counts, thinking state)
   const chatSessionIds = sessions
     .filter((s) => s.chatSessionId)
@@ -449,6 +452,11 @@ export function PlanningPanel({
       .catch(console.error)
       .finally(() => setInstructionLoading(false));
   }, [selectedSession?.id, repoId]);
+
+  // Sync editing title with selected session
+  useEffect(() => {
+    setEditingTitle(selectedSession?.title || "");
+  }, [selectedSession?.id, selectedSession?.title]);
 
   const handleCreateSession = async () => {
     if (!newBaseBranch.trim()) return;
@@ -1334,7 +1342,7 @@ export function PlanningPanel({
           value={selectedSession.baseBranch}
           onChange={(e) => handleUpdateBaseBranch(e.target.value)}
           className="planning-panel__branch-select"
-          disabled={selectedSession.status !== "draft"}
+          disabled={selectedSession.status !== "draft" || sessionTypeValue === "planning"}
         >
           {branches.map((b) => (
             <option key={b} value={b}>{b}</option>
@@ -1342,8 +1350,13 @@ export function PlanningPanel({
         </select>
         <input
           type="text"
-          value={selectedSession.title}
-          onChange={(e) => handleUpdateTitle(e.target.value)}
+          value={editingTitle}
+          onChange={(e) => setEditingTitle(e.target.value)}
+          onBlur={() => {
+            if (editingTitle !== selectedSession.title) {
+              handleUpdateTitle(editingTitle);
+            }
+          }}
           className="planning-panel__title-input"
           placeholder="Untitled Session"
           disabled={selectedSession.status !== "draft"}

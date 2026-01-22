@@ -228,7 +228,7 @@ scanRouter.post("/", async (c) => {
     }
   }
 
-  // 8.5. Merge treeSpec edges LAST (manual edits take highest priority, but not over git ancestry)
+  // 8.5. Merge treeSpec edges LAST (manual edits take highest priority)
   if (treeSpec) {
     for (const designedEdge of treeSpec.specJson.edges as Array<{ parent: string; child: string }>) {
       // Skip edges that contradict git ancestry (child is ancestor of parent in git)
@@ -250,18 +250,15 @@ scanRouter.post("/", async (c) => {
       }
 
       // Find and replace existing edge for this child
+      // User-designed edges (from branch graph) always take priority over git-inferred edges
       const existingIndex = edges.findIndex((e) => e.child === designedEdge.child);
       if (existingIndex >= 0) {
-        const existingEdge = edges[existingIndex];
-        // Don't override git-detected linear relationships
-        if (existingEdge.confidence !== "medium") {
-          edges[existingIndex] = {
-            parent: designedEdge.parent,
-            child: designedEdge.child,
-            confidence: "high" as const,
-            isDesigned: true,
-          };
-        }
+        edges[existingIndex] = {
+          parent: designedEdge.parent,
+          child: designedEdge.child,
+          confidence: "high" as const,
+          isDesigned: true,
+        };
       } else {
         edges.push({
           parent: designedEdge.parent,

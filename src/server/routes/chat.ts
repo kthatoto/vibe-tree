@@ -968,6 +968,28 @@ ${branchNaming.examples?.length ? `\n例: ${branchNaming.examples.join(", ")}` :
 ## Project Rules
 ${branchNaming ? `- Branch naming: \`${branchNaming.pattern}\`` : "- No specific rules configured"}
 `);
+
+    // Add task instruction for execution sessions
+    if (session.branchName) {
+      const instructions = await db
+        .select()
+        .from(schema.taskInstructions)
+        .where(
+          and(
+            eq(schema.taskInstructions.repoId, session.repoId),
+            eq(schema.taskInstructions.branchName, session.branchName)
+          )
+        )
+        .limit(1);
+
+      if (instructions[0]) {
+        parts.push(`## タスクインストラクション
+以下がこのタスクの実装指示です。この内容に従って実装を進めてください。
+
+${instructions[0].instructionMd}
+`);
+      }
+    }
   }
 
   // 2. Context: Git status (skip for planning sessions)
@@ -1003,6 +1025,30 @@ ${gitStatus || "Clean working directory"}
 このPlanning Sessionのベースブランチ: \`${planningSession[0].baseBranch}\`
 提案するタスクは、このブランチを起点として作成されます。
 `);
+
+      // Add task instruction for Planning sessions
+      if (isInstructionReviewSession) {
+        const instructions = await db
+          .select()
+          .from(schema.taskInstructions)
+          .where(
+            and(
+              eq(schema.taskInstructions.repoId, session.repoId),
+              eq(schema.taskInstructions.branchName, planningSession[0].baseBranch)
+            )
+          )
+          .limit(1);
+
+        if (instructions[0]) {
+          parts.push(`## タスクインストラクション【精査対象】
+以下がこのタスクのインストラクションです。内容を確認し、不明瞭な点や改善点があれば指摘してください。
+
+\`\`\`markdown
+${instructions[0].instructionMd}
+\`\`\`
+`);
+        }
+      }
 
       const links = await db
         .select()

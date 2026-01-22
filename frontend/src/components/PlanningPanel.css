@@ -507,7 +507,6 @@
 
 .planning-panel__resizer {
   width: 4px;
-  margin: 0 8px;
   background: #374151;
   cursor: col-resize;
   flex-shrink: 0;

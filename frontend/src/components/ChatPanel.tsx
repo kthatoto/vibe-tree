@@ -810,6 +810,11 @@ export function ChatPanel({
         .chat-markdown h1 { font-size: 18px; }
         .chat-markdown h2 { font-size: 16px; }
         .chat-markdown h3 { font-size: 14px; }
+        .chat-markdown hr {
+          margin: 16px 0;
+          border: none;
+          border-top: 1px solid #4b5563;
+        }
       `}</style>
     </div>
   );

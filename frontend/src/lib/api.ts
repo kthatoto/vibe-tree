@@ -645,6 +645,17 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ sessionId, keepLastN: keepLastN ?? 50 }),
     }),
+  getStreamingState: (sessionId: string) =>
+    fetchJson<{
+      isStreaming: boolean;
+      runId?: number;
+      chunks: Array<{
+        type: "thinking" | "text" | "tool_use" | "tool_result";
+        content?: string;
+        toolName?: string;
+        toolInput?: unknown;
+      }>;
+    }>(`${API_BASE}/chat/streaming/${sessionId}`),
 
   // Terminal
   createTerminalSession: (repoId: string, worktreePath: string) =>

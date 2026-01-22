@@ -25,6 +25,23 @@ import type {
 
 export const chatRouter = new Hono();
 
+// Server-side storage for streaming states (keyed by sessionId)
+interface StreamingChunk {
+  type: "thinking" | "text" | "tool_use" | "tool_result";
+  content?: string;
+  toolName?: string;
+  toolInput?: unknown;
+}
+
+interface StreamingState {
+  sessionId: string;
+  runId: number;
+  chunks: StreamingChunk[];
+  isComplete: boolean;
+}
+
+const streamingStates = new Map<string, StreamingState>();
+
 // Helper to convert DB row to ChatSession
 function toSession(row: typeof schema.chatSessions.$inferSelect): ChatSession {
   return {
@@ -459,20 +476,23 @@ chatRouter.post("/send", async (c) => {
   }
 
   let accumulatedText = "";
-  const streamingChunks: Array<{
-    type: "thinking" | "text" | "tool_use" | "tool_result";
-    content?: string;
-    toolName?: string;
-    toolInput?: unknown;
-  }> = [];
+  const streamingChunks: StreamingChunk[] = [];
   let stderr = "";
   let lineBuffer = "";
+
+  // Initialize streaming state (server-side storage for session recovery)
+  streamingStates.set(input.sessionId, {
+    sessionId: input.sessionId,
+    runId,
+    chunks: streamingChunks,
+    isComplete: false,
+  });
 
   // Broadcast streaming start
   broadcast({
     type: "chat.streaming.start",
     repoId: session.repoId,
-    data: { sessionId: input.sessionId, chatMode: input.chatMode },
+    data: { sessionId: input.sessionId, chatMode: input.chatMode, runId },
   });
 
   claudeProcess.stdout.on("data", (data: Buffer) => {
@@ -630,6 +650,11 @@ chatRouter.post("/send", async (c) => {
         data: toMessage(assistantMsg),
       });
 
+      // Clear streaming state after a delay (allow late clients to fetch)
+      setTimeout(() => {
+        streamingStates.delete(input.sessionId);
+      }, 5000);
+
       // Auto-link PRs found in assistant response (for execution mode)
       if (input.chatMode === "execution" && session.branchName) {
         const prUrls = extractGitHubPrUrls(assistantContent);
@@ -685,6 +710,9 @@ chatRouter.post("/send", async (c) => {
         data: toMessage(assistantMsg),
       });
     }
+
+    // Clear streaming state
+    streamingStates.delete(input.sessionId);
   });
 
   // Return immediately with user message and run ID
@@ -693,6 +721,22 @@ chatRouter.post("/send", async (c) => {
     userMessage: toMessage(userMsg),
     runId: runId,
     status: "processing",
+  });
+});
+
+// GET /api/chat/streaming/:sessionId - Get current streaming state for session recovery
+chatRouter.get("/streaming/:sessionId", async (c) => {
+  const sessionId = c.req.param("sessionId");
+  const state = streamingStates.get(sessionId);
+
+  if (!state) {
+    return c.json({ isStreaming: false, chunks: [] });
+  }
+
+  return c.json({
+    isStreaming: !state.isComplete,
+    runId: state.runId,
+    chunks: state.chunks,
   });
 });
 

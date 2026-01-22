@@ -61,20 +61,46 @@ export function ChatPanel({
   // Quick mode (use haiku for faster responses)
   const [quickMode, setQuickMode] = useState(false);
 
-  // Load messages
+  // Load messages and restore streaming state if active
   const loadMessages = useCallback(async () => {
     try {
-      const msgs = await api.getChatMessages(sessionId);
+      const [msgs, streamingState] = await Promise.all([
+        api.getChatMessages(sessionId),
+        api.getStreamingState(sessionId),
+      ]);
       setMessages(msgs);
-      setStreamingChunks([]);
-      hasStreamingChunksRef.current = false;
-      // If last message is from user, AI is still generating response
-      if (msgs.length > 0 && msgs[msgs.length - 1].role === "user") {
+
+      // Restore streaming state if there's an active stream
+      if (streamingState.isStreaming && streamingState.chunks.length > 0) {
+        const restoredChunks: StreamingChunk[] = streamingState.chunks.map((chunk) => ({
+          type: chunk.type as StreamingChunk["type"],
+          content: chunk.content,
+          toolName: chunk.toolName,
+          toolInput: chunk.toolInput as Record<string, unknown> | undefined,
+        }));
+        setStreamingChunks(restoredChunks);
+        hasStreamingChunksRef.current = true;
         setLoading(true);
+      } else {
+        setStreamingChunks([]);
+        hasStreamingChunksRef.current = false;
+        // If last message is from user and no streaming state, AI might still be starting
+        if (msgs.length > 0 && msgs[msgs.length - 1].role === "user") {
+          setLoading(true);
+        }
       }
     } catch (err) {
       console.error("Failed to load messages:", err);
     }
+  }, [sessionId]);
+
+  // Clear state immediately when sessionId changes (before loading new data)
+  useEffect(() => {
+    setMessages([]);
+    setStreamingChunks([]);
+    hasStreamingChunksRef.current = false;
+    setLoading(false);
+    setError(null);
   }, [sessionId]);
 
   useEffect(() => {

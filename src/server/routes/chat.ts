@@ -444,9 +444,10 @@ chatRouter.post("/send", async (c) => {
   // Return immediately, process in background
   const isExecution = input.chatMode === "execution";
   const claudeArgs = ["-p", prompt];
+  // All sessions use streaming output
+  claudeArgs.push("--output-format", "stream-json", "--verbose", "--include-partial-messages");
   if (isExecution) {
-    // Execution mode: use streaming + bypass permissions
-    claudeArgs.push("--output-format", "stream-json", "--verbose", "--include-partial-messages");
+    // Execution mode: bypass permissions
     claudeArgs.push("--dangerously-skip-permissions");
   }
 
@@ -483,101 +484,96 @@ chatRouter.post("/send", async (c) => {
   });
 
   claudeProcess.stdout.on("data", (data: Buffer) => {
-    if (isExecution) {
-      // Execution mode: parse stream-json format
-      lineBuffer += data.toString();
-      const lines = lineBuffer.split("\n");
-      lineBuffer = lines.pop() || "";
+    // Parse stream-json format for all sessions
+    lineBuffer += data.toString();
+    const lines = lineBuffer.split("\n");
+    lineBuffer = lines.pop() || "";
 
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const json = JSON.parse(line);
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const json = JSON.parse(line);
 
-          if (json.type === "assistant" && json.message?.content) {
-            for (const block of json.message.content) {
-              if (block.type === "thinking" && block.thinking) {
-                streamingChunks.push({ type: "thinking", content: block.thinking });
-                broadcast({
-                  type: "chat.streaming.chunk",
-                  repoId: session.repoId,
-                  data: {
-                    sessionId: input.sessionId,
-                    chunkType: "thinking",
-                    content: block.thinking,
-                  },
-                });
-              } else if (block.type === "text" && block.text) {
-                accumulatedText += block.text;
-                streamingChunks.push({ type: "text", content: block.text });
-                broadcast({
-                  type: "chat.streaming.chunk",
-                  repoId: session.repoId,
-                  data: {
-                    sessionId: input.sessionId,
-                    chunkType: "text",
-                    content: block.text,
-                  },
-                });
-              } else if (block.type === "tool_use") {
-                streamingChunks.push({ type: "tool_use", toolName: block.name, toolInput: block.input });
-                broadcast({
-                  type: "chat.streaming.chunk",
-                  repoId: session.repoId,
-                  data: {
-                    sessionId: input.sessionId,
-                    chunkType: "tool_use",
-                    toolName: block.name,
-                    toolInput: block.input,
-                  },
-                });
-              } else if (block.type === "tool_result") {
-                const resultContent = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
-                streamingChunks.push({ type: "tool_result", content: resultContent });
-                broadcast({
-                  type: "chat.streaming.chunk",
-                  repoId: session.repoId,
-                  data: {
-                    sessionId: input.sessionId,
-                    chunkType: "tool_result",
-                    content: resultContent,
-                  },
-                });
-              }
-            }
-          } else if (json.type === "content_block_delta") {
-            if (json.delta?.thinking) {
-              streamingChunks.push({ type: "thinking", content: json.delta.thinking });
+        if (json.type === "assistant" && json.message?.content) {
+          for (const block of json.message.content) {
+            if (block.type === "thinking" && block.thinking) {
+              streamingChunks.push({ type: "thinking", content: block.thinking });
               broadcast({
                 type: "chat.streaming.chunk",
                 repoId: session.repoId,
                 data: {
                   sessionId: input.sessionId,
-                  chunkType: "thinking_delta",
-                  content: json.delta.thinking,
+                  chunkType: "thinking",
+                  content: block.thinking,
                 },
               });
-            } else if (json.delta?.text) {
-              accumulatedText += json.delta.text;
-              streamingChunks.push({ type: "text", content: json.delta.text });
+            } else if (block.type === "text" && block.text) {
+              accumulatedText += block.text;
+              streamingChunks.push({ type: "text", content: block.text });
               broadcast({
                 type: "chat.streaming.chunk",
                 repoId: session.repoId,
                 data: {
                   sessionId: input.sessionId,
-                  chunkType: "text_delta",
-                  content: json.delta.text,
+                  chunkType: "text",
+                  content: block.text,
+                },
+              });
+            } else if (block.type === "tool_use") {
+              streamingChunks.push({ type: "tool_use", toolName: block.name, toolInput: block.input });
+              broadcast({
+                type: "chat.streaming.chunk",
+                repoId: session.repoId,
+                data: {
+                  sessionId: input.sessionId,
+                  chunkType: "tool_use",
+                  toolName: block.name,
+                  toolInput: block.input,
+                },
+              });
+            } else if (block.type === "tool_result") {
+              const resultContent = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
+              streamingChunks.push({ type: "tool_result", content: resultContent });
+              broadcast({
+                type: "chat.streaming.chunk",
+                repoId: session.repoId,
+                data: {
+                  sessionId: input.sessionId,
+                  chunkType: "tool_result",
+                  content: resultContent,
                 },
               });
             }
           }
-        } catch {
-          // Non-JSON line, ignore
+        } else if (json.type === "content_block_delta") {
+          if (json.delta?.thinking) {
+            streamingChunks.push({ type: "thinking", content: json.delta.thinking });
+            broadcast({
+              type: "chat.streaming.chunk",
+              repoId: session.repoId,
+              data: {
+                sessionId: input.sessionId,
+                chunkType: "thinking_delta",
+                content: json.delta.thinking,
+              },
+            });
+          } else if (json.delta?.text) {
+            accumulatedText += json.delta.text;
+            streamingChunks.push({ type: "text", content: json.delta.text });
+            broadcast({
+              type: "chat.streaming.chunk",
+              repoId: session.repoId,
+              data: {
+                sessionId: input.sessionId,
+                chunkType: "text_delta",
+                content: json.delta.text,
+              },
+            });
+          }
         }
+      } catch {
+        // Non-JSON line, ignore
       }
-    } else {
-      // Planning mode: plain text output
-      accumulatedText += data.toString();
     }
   });
 
@@ -589,10 +585,9 @@ chatRouter.post("/send", async (c) => {
     const finishedAt = new Date().toISOString();
     const status = code === 0 ? "success" : "failed";
 
-    // For execution mode with chunks, save structured content
-    // For planning mode, save plain text
+    // Save structured content with chunks for all sessions
     let assistantContent: string;
-    if (isExecution && streamingChunks.length > 0) {
+    if (streamingChunks.length > 0) {
       assistantContent = JSON.stringify({ chunks: streamingChunks });
     } else {
       assistantContent = accumulatedText.trim() || "Claude execution failed. Please try again.";

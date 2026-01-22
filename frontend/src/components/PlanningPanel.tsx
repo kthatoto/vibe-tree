@@ -1266,12 +1266,21 @@ export function PlanningPanel({
                 </button>
               </>
             ) : (
-              <button
-                className="planning-panel__edit-btn"
-                onClick={handleStartExecuteEdit}
-              >
-                Edit
-              </button>
+              <>
+                <button
+                  className="planning-panel__edit-btn"
+                  onClick={handleStartExecuteEdit}
+                >
+                  Edit
+                </button>
+                <button
+                  className="planning-panel__delete-btn"
+                  onClick={handleDelete}
+                  title="Delete this session"
+                >
+                  Delete
+                </button>
+              </>
             )}
           </div>
 

@@ -17,7 +17,7 @@ export interface AskUserQuestionData {
 }
 
 // Tag regex for <<ASK_USER_QUESTION>>...<</ASK_USER_QUESTION>>
-const ASK_TAG_REGEX = /<<ASK_USER_QUESTION>>([\s\S]*?)<\/ASK_USER_QUESTION>>/g;
+const ASK_TAG_REGEX = /<<ASK_USER_QUESTION>>([\s\S]*?)<<\/ASK_USER_QUESTION>>/g;
 
 // Extract AskUserQuestion from text content (tag-based format)
 export function extractAskUserQuestionFromText(text: string): AskUserQuestionData | null {
@@ -28,7 +28,7 @@ export function extractAskUserQuestionFromText(text: string): AskUserQuestionDat
   const match = matches[matches.length - 1];
   const jsonContent = match
     .replace(/<<ASK_USER_QUESTION>>/, "")
-    .replace(/<\/ASK_USER_QUESTION>>/, "")
+    .replace(/<<\/ASK_USER_QUESTION>>/, "")
     .trim();
 
   try {
@@ -67,7 +67,9 @@ export function extractAskUserQuestionFromText(text: string): AskUserQuestionDat
 
 // Remove ASK_USER_QUESTION tags from text
 export function removeAskUserQuestionTags(text: string): string {
-  return text.replace(ASK_TAG_REGEX, "").trim();
+  // Match both formats: <</TAG>> and </TAG>>
+  const regex = /<<ASK_USER_QUESTION>>[\s\S]*?<<\/ASK_USER_QUESTION>>/g;
+  return text.replace(regex, "").trim();
 }
 
 // Format answers for sending back to Claude

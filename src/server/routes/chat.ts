@@ -886,7 +886,7 @@ const REFINEMENT_SYSTEM_PROMPT = `あなたはプロジェクト計画のアシ�
     }
   ]
 }
-</ASK_USER_QUESTION>>
+<</ASK_USER_QUESTION>>
 \`\`\`
 
 ### フィールド説明：
@@ -968,7 +968,7 @@ const INSTRUCTION_REVIEW_SYSTEM_PROMPT = `あなたはタスクインストラ�
     }
   ]
 }
-</ASK_USER_QUESTION>>
+<</ASK_USER_QUESTION>>
 \`\`\`
 
 ### フィールド説明：

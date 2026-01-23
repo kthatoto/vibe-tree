@@ -1,9 +1,9 @@
 import { useState } from "react";
-import type { AskUserQuestionTool, AskUserQuestion } from "../lib/ask-user-question";
+import type { AskUserQuestionData, AskUserQuestion } from "../lib/ask-user-question";
 import { formatAnswers } from "../lib/ask-user-question";
 
 interface AskUserQuestionUIProps {
-  data: AskUserQuestionTool;
+  data: AskUserQuestionData;
   onSubmit: (answer: string) => void;
   disabled?: boolean;
 }

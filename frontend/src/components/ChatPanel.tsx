@@ -8,7 +8,10 @@ import {
   removeInstructionEditTags,
   computeSimpleDiff,
 } from "../lib/instruction-parser";
-import { extractAskUserQuestion } from "../lib/ask-user-question";
+import {
+  extractAskUserQuestionFromText,
+  removeAskUserQuestionTags,
+} from "../lib/ask-user-question";
 import { AskUserQuestionUI } from "./AskUserQuestionUI";
 import { wsClient } from "../lib/ws";
 import githubIcon from "../assets/github.svg";
@@ -404,8 +407,10 @@ export function ChatPanel({
               </div>
             )}
             {(chunk.type === "text" || chunk.type === "text_delta") && (() => {
-              // Remove task tags, instruction edit tags, and clean up leftover separators
-              const cleaned = removeInstructionEditTags(removeTaskTags(chunk.content || ""))
+              // Remove task tags, instruction edit tags, ask user question tags, and clean up leftover separators
+              const cleaned = removeAskUserQuestionTags(
+                removeInstructionEditTags(removeTaskTags(chunk.content || ""))
+              )
                 .replace(/\n---\n*$/g, "") // Remove trailing ---
                 .replace(/^\n*---\n/g, "") // Remove leading ---
                 .trim();
@@ -866,8 +871,12 @@ export function ChatPanel({
 
         {/* AskUserQuestion UI - check last message or streaming chunks */}
         {!loading && (() => {
-          // First, check streaming chunks (when just completed)
-          const askFromStreaming = extractAskUserQuestion(streamingChunks);
+          // First, check streaming chunks text content (when just completed)
+          const streamingTextContent = streamingChunks
+            .filter(c => c.type === "text" || c.type === "text_delta")
+            .map(c => c.content || "")
+            .join("");
+          const askFromStreaming = extractAskUserQuestionFromText(streamingTextContent);
           if (askFromStreaming) {
             return (
               <AskUserQuestionUI
@@ -883,7 +892,12 @@ export function ChatPanel({
           if (lastMessage?.role === "assistant") {
             const chunks = parseChunks(lastMessage.content);
             if (chunks) {
-              const askFromMessage = extractAskUserQuestion(chunks);
+              // Extract text from chunks
+              const textContent = chunks
+                .filter(c => c.type === "text" || c.type === "text_delta")
+                .map(c => c.content || "")
+                .join("");
+              const askFromMessage = extractAskUserQuestionFromText(textContent);
               if (askFromMessage) {
                 return (
                   <AskUserQuestionUI

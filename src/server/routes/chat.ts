@@ -1574,16 +1574,18 @@ function fetchGitHubPRInfo(repoId: string, prNumber: number): {
     }
     const checks = Array.from(checksMap.values());
 
-    // Extract reviewers
+    // Extract reviewers (filter out bots like GitHub Copilot)
+    const isBot = (login: string) =>
+      login.toLowerCase().includes("copilot") || login.endsWith("[bot]");
     const reviewers: string[] = [];
     if (data.reviewRequests) {
       for (const r of data.reviewRequests) {
-        if (r.login) reviewers.push(r.login);
+        if (r.login && !isBot(r.login)) reviewers.push(r.login);
       }
     }
     if (data.reviews) {
       for (const r of data.reviews) {
-        if (r.author?.login && !reviewers.includes(r.author.login)) {
+        if (r.author?.login && !isBot(r.author.login) && !reviewers.includes(r.author.login)) {
           reviewers.push(r.author.login);
         }
       }

@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   DndContext,
   DragOverlay,
@@ -724,23 +726,6 @@ export function PlanningPanel({
     }
   };
 
-  const handleAbortExecution = async () => {
-    if (!selectedSession) return;
-    if (!confirm("実行を中止しますか？ブランチ選択画面に戻ります。")) return;
-    setExecuteLoading(true);
-    try {
-      // Clear execute branches to go back to selection mode
-      const updated = await api.updateExecuteBranches(selectedSession.id, []);
-      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-      onSessionSelect?.(updated);
-      setExecuteSelectedBranches([]);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setExecuteLoading(false);
-    }
-  };
-
   // Execute Session edit mode handlers
   const handleStartExecuteEdit = () => {
     if (!selectedSession) return;
@@ -1373,20 +1358,15 @@ export function PlanningPanel({
 
                 {/* Task Instruction */}
                 <div className="planning-panel__execute-instruction">
-                  <div className="planning-panel__execute-instruction-content">
-                    {executeCurrentTaskInstruction?.instructionMd || "No instruction"}
+                  <div className="planning-panel__execute-instruction-content chat-markdown">
+                    {executeCurrentTaskInstruction?.instructionMd ? (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {executeCurrentTaskInstruction.instructionMd}
+                      </ReactMarkdown>
+                    ) : (
+                      <span className="planning-panel__no-instruction">No instruction</span>
+                    )}
                   </div>
-                </div>
-
-                {/* Control buttons */}
-                <div className="planning-panel__execute-controls">
-                  <button
-                    className="planning-panel__execute-abort-btn"
-                    onClick={handleAbortExecution}
-                    disabled={executeLoading}
-                  >
-                    Abort
-                  </button>
                 </div>
               </div>
             </div>

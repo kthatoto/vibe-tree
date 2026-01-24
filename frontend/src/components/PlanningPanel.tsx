@@ -1358,7 +1358,7 @@ export function PlanningPanel({
 
                 {/* Task Instruction */}
                 <div className="planning-panel__execute-instruction">
-                  <div className="planning-panel__execute-instruction-content chat-markdown">
+                  <div className="planning-panel__execute-instruction-content">
                     {executeCurrentTaskInstruction?.instructionMd ? (
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {executeCurrentTaskInstruction.instructionMd}

@@ -1498,8 +1498,59 @@
 .planning-panel__execute-instruction-content {
   font-size: 12px;
   color: #d1d5db;
-  line-height: 1.5;
-  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+.planning-panel__execute-instruction-content p {
+  margin: 0 0 0.4em 0;
+}
+
+.planning-panel__execute-instruction-content p:last-child {
+  margin-bottom: 0;
+}
+
+.planning-panel__execute-instruction-content ul,
+.planning-panel__execute-instruction-content ol {
+  margin: 0.2em 0;
+  padding-left: 1.25em;
+}
+
+.planning-panel__execute-instruction-content li {
+  margin: 0.1em 0;
+}
+
+.planning-panel__execute-instruction-content h1,
+.planning-panel__execute-instruction-content h2,
+.planning-panel__execute-instruction-content h3,
+.planning-panel__execute-instruction-content h4 {
+  margin: 0.4em 0 0.2em 0;
+  font-size: 1em;
+  font-weight: 600;
+}
+
+.planning-panel__execute-instruction-content code {
+  background: #374151;
+  padding: 0.1em 0.25em;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+.planning-panel__execute-instruction-content pre {
+  background: #1f2937;
+  padding: 0.4em;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 0.2em 0;
+}
+
+.planning-panel__execute-instruction-content pre code {
+  background: none;
+  padding: 0;
+}
+
+.planning-panel__no-instruction {
+  color: #6b7280;
+  font-style: italic;
 }
 
 .planning-panel__execute-controls {

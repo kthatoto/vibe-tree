@@ -484,14 +484,9 @@ chatRouter.post("/send", async (c) => {
     throw new BadRequestError("Failed to save user message");
   }
 
-  // Broadcast user message when sending during execution (for real-time display)
+  // If already running, just save user message and return (don't start new process)
+  // Don't broadcast - frontend already has the message from API response
   if (isAlreadyRunning) {
-    broadcast({
-      type: "chat.message",
-      repoId: session.repoId,
-      data: toMessage(userMsg),
-    });
-
     // Return immediately - message will be seen by Claude in next turn
     return c.json({
       userMessage: toMessage(userMsg),

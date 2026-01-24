@@ -78,6 +78,20 @@ export function ChatPanel({
       ]);
       setMessages(msgs);
 
+      // Check if last assistant message is still streaming
+      const lastMsg = msgs[msgs.length - 1];
+      let isStillStreaming = false;
+      if (lastMsg?.role === "assistant") {
+        try {
+          const parsed = JSON.parse(lastMsg.content);
+          if (parsed.streaming === true) {
+            isStillStreaming = true;
+          }
+        } catch {
+          // Not JSON, not streaming
+        }
+      }
+
       // Restore streaming state if there's an active stream
       if (streamingState.isStreaming && streamingState.chunks.length > 0) {
         const restoredChunks: StreamingChunk[] = streamingState.chunks.map((chunk) => ({
@@ -89,6 +103,13 @@ export function ChatPanel({
         setStreamingChunks(restoredChunks);
         hasStreamingChunksRef.current = true;
         setLoading(true);
+      } else if (isStillStreaming) {
+        // Last message has streaming flag but no active streaming state
+        // This means the process crashed or was cancelled without cleanup
+        // Don't set loading=true, treat as complete
+        setStreamingChunks([]);
+        hasStreamingChunksRef.current = false;
+        setLoading(false);
       } else {
         setStreamingChunks([]);
         hasStreamingChunksRef.current = false;

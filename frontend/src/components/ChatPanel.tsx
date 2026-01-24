@@ -235,7 +235,10 @@ export function ChatPanel({
 
     const userMessage = input.trim();
     setInput("");
-    setLoading(true);
+    const wasAlreadyLoading = loading;
+    if (!wasAlreadyLoading) {
+      setLoading(true);
+    }
     setError(null);
 
     // Optimistic update with temp user message
@@ -259,12 +262,15 @@ export function ChatPanel({
       setMessages((prev) =>
         prev.map((m) => (m.id === tempId ? result.userMessage : m))
       );
+      // If queued (sent during execution), don't change loading state
       // Loading will be set to false when assistant message arrives via WebSocket
       inputRef.current?.focus();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setLoading(false);
+      if (!wasAlreadyLoading) {
+        setLoading(false);
+      }
       inputRef.current?.focus();
     }
   };

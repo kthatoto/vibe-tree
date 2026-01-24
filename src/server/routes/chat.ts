@@ -38,6 +38,8 @@ interface StreamingState {
   runId: number;
   chunks: StreamingChunk[];
   isComplete: boolean;
+  assistantMsgId: number | null; // DB message ID for incremental updates
+  lastDbUpdateTime: number; // Last time we updated the DB
 }
 
 const streamingStates = new Map<string, StreamingState>();
@@ -286,10 +288,22 @@ chatRouter.post("/cancel", async (c) => {
     return c.json({ success: false, message: "No running agent found" });
   }
 
+  // Get streaming state to preserve chunks
+  const state = streamingStates.get(sessionId);
+
   // Kill the process if we have a pid
   if (run.pid) {
     try {
+      // Try SIGTERM first
       process.kill(run.pid, "SIGTERM");
+      // Also try SIGKILL after a short delay to ensure termination
+      setTimeout(() => {
+        try {
+          process.kill(run.pid!, "SIGKILL");
+        } catch {
+          // Process may already be terminated
+        }
+      }, 500);
     } catch (err) {
       console.error(`[Chat] Failed to kill process ${run.pid}:`, err);
     }
@@ -302,6 +316,25 @@ chatRouter.post("/cancel", async (c) => {
     .set({ status: "cancelled", finishedAt: now })
     .where(eq(schema.agentRuns.id, run.id));
 
+  // Update assistant message with final content (preserve what we have)
+  let updatedMsg = null;
+  if (state?.assistantMsgId) {
+    const finalContent = state.chunks.length > 0
+      ? JSON.stringify({ chunks: state.chunks, cancelled: true })
+      : JSON.stringify({ chunks: [], cancelled: true });
+
+    await db
+      .update(schema.chatMessages)
+      .set({ content: finalContent })
+      .where(eq(schema.chatMessages.id, state.assistantMsgId));
+
+    const [msg] = await db
+      .select()
+      .from(schema.chatMessages)
+      .where(eq(schema.chatMessages.id, state.assistantMsgId));
+    updatedMsg = msg;
+  }
+
   // Get session for repoId
   const sessions = await db
     .select()
@@ -311,13 +344,16 @@ chatRouter.post("/cancel", async (c) => {
 
   const session = sessions[0];
   if (session) {
-    // Broadcast streaming end
+    // Broadcast streaming end with the preserved message
     broadcast({
       type: "chat.streaming.end",
       repoId: session.repoId,
-      data: { sessionId, message: null },
+      data: { sessionId, message: updatedMsg ? toMessage(updatedMsg) : null },
     });
   }
+
+  // Clear streaming state
+  streamingStates.delete(sessionId);
 
   return c.json({ success: true });
 });
@@ -399,6 +435,20 @@ chatRouter.post("/send", async (c) => {
 
   const now = new Date().toISOString();
 
+  // Check if there's already a running agent for this session
+  const runningRuns = await db
+    .select()
+    .from(schema.agentRuns)
+    .where(
+      and(
+        eq(schema.agentRuns.sessionId, input.sessionId),
+        eq(schema.agentRuns.status, "running")
+      )
+    )
+    .limit(1);
+
+  const isAlreadyRunning = runningRuns.length > 0;
+
   // 1. Save user message
   const userMsgResult = await db
     .insert(schema.chatMessages)
@@ -414,6 +464,22 @@ chatRouter.post("/send", async (c) => {
   const userMsg = userMsgResult[0];
   if (!userMsg) {
     throw new BadRequestError("Failed to save user message");
+  }
+
+  // Broadcast user message when sending during execution (for real-time display)
+  if (isAlreadyRunning) {
+    broadcast({
+      type: "chat.message",
+      repoId: session.repoId,
+      data: toMessage(userMsg),
+    });
+
+    // Return immediately - message will be seen by Claude in next turn
+    return c.json({
+      userMessage: toMessage(userMsg),
+      runId: null,
+      status: "queued", // Message queued, not starting new execution
+    });
   }
 
   // Note: User message is returned via API response, not broadcast
@@ -480,12 +546,29 @@ chatRouter.post("/send", async (c) => {
   let stderr = "";
   let lineBuffer = "";
 
+  // Create assistant message in DB immediately (will be updated incrementally)
+  const assistantMsgResult = await db
+    .insert(schema.chatMessages)
+    .values({
+      sessionId: input.sessionId,
+      role: "assistant",
+      content: JSON.stringify({ chunks: [], streaming: true }),
+      chatMode: input.chatMode ?? null,
+      createdAt: now,
+    })
+    .returning();
+
+  const assistantMsg = assistantMsgResult[0];
+  const assistantMsgId = assistantMsg?.id ?? null;
+
   // Initialize streaming state (server-side storage for session recovery)
   streamingStates.set(input.sessionId, {
     sessionId: input.sessionId,
     runId,
     chunks: streamingChunks,
     isComplete: false,
+    assistantMsgId,
+    lastDbUpdateTime: Date.now(),
   });
 
   // Broadcast streaming start
@@ -494,6 +577,25 @@ chatRouter.post("/send", async (c) => {
     repoId: session.repoId,
     data: { sessionId: input.sessionId, chatMode: input.chatMode, runId },
   });
+
+  // Helper: Update assistant message in DB (debounced)
+  const updateAssistantMessageInDb = async () => {
+    if (!assistantMsgId) return;
+    const state = streamingStates.get(input.sessionId);
+    if (!state) return;
+
+    try {
+      await db
+        .update(schema.chatMessages)
+        .set({
+          content: JSON.stringify({ chunks: state.chunks, streaming: true }),
+        })
+        .where(eq(schema.chatMessages.id, assistantMsgId));
+      state.lastDbUpdateTime = Date.now();
+    } catch (err) {
+      console.error("[Chat] Failed to update assistant message:", err);
+    }
+  };
 
   claudeProcess.stdout.on("data", (data: Buffer) => {
     // Parse stream-json format for all sessions
@@ -587,6 +689,12 @@ chatRouter.post("/send", async (c) => {
         // Non-JSON line, ignore
       }
     }
+
+    // Periodically update DB (every 500ms)
+    const state = streamingStates.get(input.sessionId);
+    if (state && Date.now() - state.lastDbUpdateTime > 500) {
+      updateAssistantMessageInDb();
+    }
   });
 
   claudeProcess.stderr.on("data", (data: Buffer) => {
@@ -616,53 +724,56 @@ chatRouter.post("/send", async (c) => {
       })
       .where(eq(schema.agentRuns.id, runId));
 
-    // Save assistant message
-    const assistantMsgResult = await db
-      .insert(schema.chatMessages)
-      .values({
-        sessionId: input.sessionId,
-        role: "assistant",
-        content: assistantContent,
-        chatMode: input.chatMode ?? null,
-        createdAt: finishedAt,
-      })
-      .returning();
-
-    const assistantMsg = assistantMsgResult[0];
-    if (assistantMsg) {
-      // Update session lastUsedAt
+    // Update existing assistant message (created at streaming start)
+    if (assistantMsgId) {
       await db
-        .update(schema.chatSessions)
-        .set({ lastUsedAt: finishedAt, updatedAt: finishedAt })
-        .where(eq(schema.chatSessions.id, input.sessionId));
+        .update(schema.chatMessages)
+        .set({
+          content: assistantContent,
+        })
+        .where(eq(schema.chatMessages.id, assistantMsgId));
 
-      // Broadcast streaming end
-      broadcast({
-        type: "chat.streaming.end",
-        repoId: session.repoId,
-        data: { sessionId: input.sessionId, message: toMessage(assistantMsg) },
-      });
+      // Get the updated message
+      const [updatedMsg] = await db
+        .select()
+        .from(schema.chatMessages)
+        .where(eq(schema.chatMessages.id, assistantMsgId));
 
-      // Broadcast assistant message
-      broadcast({
-        type: "chat.message",
-        repoId: session.repoId,
-        data: toMessage(assistantMsg),
-      });
+      if (updatedMsg) {
+        // Update session lastUsedAt
+        await db
+          .update(schema.chatSessions)
+          .set({ lastUsedAt: finishedAt, updatedAt: finishedAt })
+          .where(eq(schema.chatSessions.id, input.sessionId));
 
-      // Clear streaming state after a delay (allow late clients to fetch)
-      setTimeout(() => {
-        streamingStates.delete(input.sessionId);
-      }, 5000);
+        // Broadcast streaming end
+        broadcast({
+          type: "chat.streaming.end",
+          repoId: session.repoId,
+          data: { sessionId: input.sessionId, message: toMessage(updatedMsg) },
+        });
 
-      // Auto-link PRs found in assistant response (for execution mode)
-      if (input.chatMode === "execution" && session.branchName) {
-        const prUrls = extractGitHubPrUrls(assistantContent);
-        for (const pr of prUrls) {
-          try {
-            await savePrLink(session.repoId, session.branchName, pr.url, pr.number);
-          } catch (err) {
-            console.error(`[Chat] Failed to auto-link PR:`, err);
+        // Broadcast assistant message
+        broadcast({
+          type: "chat.message",
+          repoId: session.repoId,
+          data: toMessage(updatedMsg),
+        });
+
+        // Clear streaming state after a delay (allow late clients to fetch)
+        setTimeout(() => {
+          streamingStates.delete(input.sessionId);
+        }, 5000);
+
+        // Auto-link PRs found in assistant response (for execution mode)
+        if (input.chatMode === "execution" && session.branchName) {
+          const prUrls = extractGitHubPrUrls(assistantContent);
+          for (const pr of prUrls) {
+            try {
+              await savePrLink(session.repoId, session.branchName, pr.url, pr.number);
+            } catch (err) {
+              console.error(`[Chat] Failed to auto-link PR:`, err);
+            }
           }
         }
       }
@@ -683,32 +794,34 @@ chatRouter.post("/send", async (c) => {
       })
       .where(eq(schema.agentRuns.id, runId));
 
-    // Save error message
-    const assistantMsgResult = await db
-      .insert(schema.chatMessages)
-      .values({
-        sessionId: input.sessionId,
-        role: "assistant",
-        content: `Claude execution failed: ${err.message}`,
-        chatMode: input.chatMode ?? null,
-        createdAt: finishedAt,
-      })
-      .returning();
+    // Update existing assistant message with error
+    if (assistantMsgId) {
+      await db
+        .update(schema.chatMessages)
+        .set({
+          content: `Claude execution failed: ${err.message}`,
+        })
+        .where(eq(schema.chatMessages.id, assistantMsgId));
 
-    const assistantMsg = assistantMsgResult[0];
-    if (assistantMsg) {
-      // Broadcast streaming end
-      broadcast({
-        type: "chat.streaming.end",
-        repoId: session.repoId,
-        data: { sessionId: input.sessionId, message: toMessage(assistantMsg) },
-      });
+      const [updatedMsg] = await db
+        .select()
+        .from(schema.chatMessages)
+        .where(eq(schema.chatMessages.id, assistantMsgId));
 
-      broadcast({
-        type: "chat.message",
-        repoId: session.repoId,
-        data: toMessage(assistantMsg),
-      });
+      if (updatedMsg) {
+        // Broadcast streaming end
+        broadcast({
+          type: "chat.streaming.end",
+          repoId: session.repoId,
+          data: { sessionId: input.sessionId, message: toMessage(updatedMsg) },
+        });
+
+        broadcast({
+          type: "chat.message",
+          repoId: session.repoId,
+          data: toMessage(updatedMsg),
+        });
+      }
     }
 
     // Clear streaming state

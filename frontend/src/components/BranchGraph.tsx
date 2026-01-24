@@ -235,18 +235,6 @@ export default function BranchGraph({
       const baseBranchNode = nodeMap.get(tentativeBaseBranch);
       const baseDepth = baseBranchNode?.depth ?? 0;
 
-      // Build tentative children map
-      const tentChildrenMap = new Map<string, string[]>();
-      tentativeEdges.forEach((edge) => {
-        const children = tentChildrenMap.get(edge.parent) || [];
-        children.push(edge.child);
-        tentChildrenMap.set(edge.parent, children);
-      });
-
-      // Find tentative root tasks (not child of any task)
-      const tentChildSet = new Set(tentativeEdges.map((e) => e.child));
-      const tentRootTasks = tentativeNodes.filter((t) => !tentChildSet.has(t.id));
-
       // Helper to generate tentative branch name
       const generateTentBranchName = (title: string, id: string): string => {
         let slug = title
@@ -260,20 +248,14 @@ export default function BranchGraph({
         return `task/${slug}`;
       };
 
-      // Layout tentative subtree (vertical)
-      function layoutTentativeSubtree(
-        taskId: string,
-        parentLayoutNode: LayoutNode | null,
-        depth: number,
-        minCol: number
-      ): number {
-        const task = tentativeNodes.find((t) => t.id === taskId);
-        if (!task) return minCol;
+      // Layout all tentative nodes at the same depth (baseDepth + 1), horizontally
+      const tentDepth = baseDepth + 1;
+      const fromNode = baseBranchNode || layoutNodes[0];
 
+      tentativeNodes.forEach((task) => {
         const branchName = task.branchName || generateTentBranchName(task.title, task.id);
-        if (nodeMap.has(branchName)) return minCol; // Already exists as real branch
+        if (nodeMap.has(branchName)) return; // Already exists as real branch
 
-        const col = minCol;
         const tentDummyNode: TreeNode = {
           branchName,
           badges: [],
@@ -282,11 +264,11 @@ export default function BranchGraph({
 
         const layoutNode: LayoutNode = {
           id: branchName,
-          x: LEFT_PADDING + col * (NODE_WIDTH + HORIZONTAL_GAP),
-          y: TOP_PADDING + depth * (NODE_HEIGHT + VERTICAL_GAP),
+          x: LEFT_PADDING + nextCol * (NODE_WIDTH + HORIZONTAL_GAP),
+          y: TOP_PADDING + tentDepth * (NODE_HEIGHT + VERTICAL_GAP),
           node: tentDummyNode,
-          depth,
-          row: col,
+          depth: tentDepth,
+          row: nextCol,
           isTentative: true,
           tentativeTitle: task.title,
         };
@@ -294,32 +276,17 @@ export default function BranchGraph({
         layoutNodes.push(layoutNode);
         nodeMap.set(branchName, layoutNode);
 
-        // Add edge from parent
-        if (parentLayoutNode) {
+        // Add edge from base branch
+        if (fromNode) {
           tentativeLayoutEdges.push({
-            from: parentLayoutNode,
+            from: fromNode,
             to: layoutNode,
             isDesigned: false,
             isTentative: true,
           });
         }
 
-        // Layout children below
-        const children = tentChildrenMap.get(taskId) || [];
-        let currentCol = minCol + 1;
-        children.forEach((childId) => {
-          currentCol = layoutTentativeSubtree(childId, layoutNode, depth + 1, currentCol);
-        });
-
-        return Math.max(currentCol, minCol + 1);
-      }
-
-      // Layout from tentative roots, connected to base branch
-      tentRootTasks.forEach((task) => {
-        const fromNode = baseBranchNode || layoutNodes[0];
-        if (fromNode) {
-          nextCol = layoutTentativeSubtree(task.id, fromNode, baseDepth + 1, nextCol);
-        }
+        nextCol++;
       });
     }
 

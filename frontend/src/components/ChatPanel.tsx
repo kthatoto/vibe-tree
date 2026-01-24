@@ -1057,22 +1057,26 @@ export function ChatPanel({
             }}
             disabled={disabled}
           />
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, alignSelf: "flex-end" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, alignSelf: "flex-end", minWidth: 52 }}>
             {loading && (
               <button
                 onClick={handleCancel}
                 style={{
-                  fontSize: 11,
+                  fontSize: 10,
                   color: "#f87171",
                   background: "transparent",
                   border: "1px solid #f87171",
                   borderRadius: 4,
-                  padding: "2px 8px",
+                  padding: "2px 6px",
                   cursor: "pointer",
-                  whiteSpace: "nowrap",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  lineHeight: 1.2,
                 }}
               >
-                Cancel (Esc)
+                <span>Cancel</span>
+                <span>(Esc)</span>
               </button>
             )}
             <button

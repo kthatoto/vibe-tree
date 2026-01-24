@@ -528,6 +528,7 @@ chatRouter.post("/send", async (c) => {
     throw new BadRequestError("Failed to create agent run record");
   }
   const runId = run.id;
+  console.log(`[Chat] Send: Created agentRun ${runId} for session ${input.sessionId}`);
 
   // 4. Execute Claude ASYNCHRONOUSLY (non-blocking)
   // Return immediately, process in background
@@ -544,6 +545,7 @@ chatRouter.post("/send", async (c) => {
     claudeArgs.push("--dangerously-skip-permissions");
   }
 
+  console.log(`[Chat] Send: Spawning claude process in ${worktreePath}`);
   // Spawn claude process in background
   const claudeProcess = spawn("claude", claudeArgs, {
     cwd: worktreePath,
@@ -553,10 +555,13 @@ chatRouter.post("/send", async (c) => {
 
   // Save pid for cancellation
   if (claudeProcess.pid) {
+    console.log(`[Chat] Send: Claude process started with pid=${claudeProcess.pid}`);
     await db
       .update(schema.agentRuns)
       .set({ pid: claudeProcess.pid })
       .where(eq(schema.agentRuns.id, runId));
+  } else {
+    console.log(`[Chat] Send: Claude process has no pid!`);
   }
 
   let accumulatedText = "";

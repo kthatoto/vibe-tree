@@ -1721,3 +1721,28 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Fullscreen Toggle Button */
+.planning-panel__fullscreen-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 4px 0;
+  margin-left: auto;
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 4px;
+  color: #9ca3af;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.planning-panel__fullscreen-toggle:hover {
+  background: #4b5563;
+  color: #e5e7eb;
+  border-color: #6b7280;
+}

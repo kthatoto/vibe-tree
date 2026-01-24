@@ -196,6 +196,9 @@ interface PlanningPanelProps {
   // For Execute Session branch selection
   graphNodes?: TreeNode[];
   graphEdges?: TreeEdge[];
+  // Fullscreen mode
+  chatFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
 export function PlanningPanel({
@@ -208,6 +211,8 @@ export function PlanningPanel({
   onPlanningStarted,
   graphNodes = [],
   graphEdges = [],
+  chatFullscreen = false,
+  onToggleFullscreen,
 }: PlanningPanelProps) {
   const [sessions, setSessions] = useState<PlanningSession[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1023,6 +1028,15 @@ export function PlanningPanel({
         >
           +
         </button>
+        {onToggleFullscreen && (
+          <button
+            className="planning-panel__fullscreen-toggle"
+            onClick={onToggleFullscreen}
+            title={chatFullscreen ? "Exit fullscreen" : "Fullscreen"}
+          >
+            {chatFullscreen ? "⊡" : "⊞"}
+          </button>
+        )}
       </div>
     );
   };

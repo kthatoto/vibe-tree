@@ -71,6 +71,9 @@ export default function TreeDashboard() {
   // Branch graph edit mode
   const [branchGraphEditMode, setBranchGraphEditMode] = useState(false);
 
+  // Chat fullscreen mode
+  const [chatFullscreen, setChatFullscreen] = useState(false);
+
   // Create branch dialog
   const [createBranchBase, setCreateBranchBase] = useState<string | null>(null);
   const [createBranchName, setCreateBranchName] = useState("");
@@ -1067,6 +1070,7 @@ export default function TreeDashboard() {
         {snapshot && (
           <div className="tree-view">
             {/* Top: Graph + Details */}
+            {!chatFullscreen && (
             <div className="tree-view__top">
               {/* Left: Graph */}
               <div className="tree-view__graph">
@@ -1279,8 +1283,10 @@ export default function TreeDashboard() {
                 )}
               </div>
             </div>
+            )}
 
             {/* Resize Handle between top and bottom */}
+            {!chatFullscreen && (
             <div
               className={`tree-view__resize-handle ${isResizingBottom ? "tree-view__resize-handle--active" : ""}`}
               onMouseDown={handleResizeStart}
@@ -1288,11 +1294,12 @@ export default function TreeDashboard() {
             >
               <div className="tree-view__resize-bar" />
             </div>
+            )}
 
             {/* Bottom: Claude Code Sessions */}
             <div
               className="tree-view__bottom"
-              style={{ flex: `0 0 ${bottomHeight}px` }}
+              style={{ flex: chatFullscreen ? 1 : `0 0 ${bottomHeight}px` }}
             >
               <div className="sessions-container">
                 <PlanningPanel
@@ -1305,6 +1312,8 @@ export default function TreeDashboard() {
                   onPlanningStarted={() => setPendingPlanning(null)}
                   graphNodes={snapshot.nodes}
                   graphEdges={snapshot.edges}
+                  chatFullscreen={chatFullscreen}
+                  onToggleFullscreen={() => setChatFullscreen(!chatFullscreen)}
                 />
               </div>
             </div>

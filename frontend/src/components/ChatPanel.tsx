@@ -229,9 +229,9 @@ export function ChatPanel({
     return lines.join("\n");
   };
 
-  // Send message
+  // Send message (allowed during loading for interruption)
   const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+    if (!input.trim()) return;
 
     const userMessage = input.trim();
     setInput("");
@@ -301,7 +301,23 @@ export function ChatPanel({
     }
   };
 
+  // Cancel current chat execution
+  const handleCancel = async () => {
+    try {
+      await api.cancelChat(sessionId);
+    } catch (err) {
+      console.error("Failed to cancel:", err);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Escape to cancel execution
+    if (e.key === "Escape" && loading) {
+      e.preventDefault();
+      handleCancel();
+      return;
+    }
+    // ⌘+Enter / Ctrl+Enter to send (allowed during loading)
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing) {
       e.preventDefault();
       sendMessage();
@@ -1020,23 +1036,29 @@ export function ChatPanel({
             }}
             disabled={disabled}
           />
-          <button
-            onClick={sendMessage}
-            disabled={!input.trim() || loading || disabled}
-            style={{
-              padding: "12px 16px",
-              background: !input.trim() || loading || disabled ? "#4b5563" : "#3b82f6",
-              color: "white",
-              border: "none",
-              borderRadius: 4,
-              cursor: !input.trim() || loading || disabled ? "not-allowed" : "pointer",
-              fontWeight: 500,
-              fontSize: 13,
-              alignSelf: "flex-end",
-            }}
-          >
-            Send
-          </button>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+            {loading && (
+              <span style={{ fontSize: 11, color: "#6b7280", marginBottom: 12, whiteSpace: "nowrap" }}>
+                Esc to cancel
+              </span>
+            )}
+            <button
+              onClick={sendMessage}
+              disabled={!input.trim() || disabled}
+              style={{
+                padding: "12px 16px",
+                background: !input.trim() || disabled ? "#4b5563" : "#3b82f6",
+                color: "white",
+                border: "none",
+                borderRadius: 4,
+                cursor: !input.trim() || disabled ? "not-allowed" : "pointer",
+                fontWeight: 500,
+                fontSize: 13,
+              }}
+            >
+              Send
+            </button>
+          </div>
         </div>
       </div>
 

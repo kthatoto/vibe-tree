@@ -329,6 +329,7 @@ chatRouter.post("/cancel", async (c) => {
   // Update assistant message with final content (preserve what we have)
   let updatedMsg = null;
   if (state?.assistantMsgId) {
+    console.log(`[Chat] Cancel: Updating assistant message ${state.assistantMsgId} with ${state.chunks.length} chunks`);
     const finalContent = state.chunks.length > 0
       ? JSON.stringify({ chunks: state.chunks, cancelled: true })
       : JSON.stringify({ chunks: [], cancelled: true });
@@ -343,6 +344,9 @@ chatRouter.post("/cancel", async (c) => {
       .from(schema.chatMessages)
       .where(eq(schema.chatMessages.id, state.assistantMsgId));
     updatedMsg = msg;
+    console.log(`[Chat] Cancel: Assistant message updated, msg=${!!msg}`);
+  } else {
+    console.log(`[Chat] Cancel: No assistantMsgId in state, state=${!!state}`);
   }
 
   // Get session for repoId
@@ -354,16 +358,20 @@ chatRouter.post("/cancel", async (c) => {
 
   const session = sessions[0];
   if (session) {
+    console.log(`[Chat] Cancel: Broadcasting streaming.end for session ${sessionId}, repoId=${session.repoId}`);
     // Broadcast streaming end with the preserved message
     broadcast({
       type: "chat.streaming.end",
       repoId: session.repoId,
       data: { sessionId, message: updatedMsg ? toMessage(updatedMsg) : null },
     });
+  } else {
+    console.log(`[Chat] Cancel: Session not found for ${sessionId}`);
   }
 
   // Clear streaming state
   streamingStates.delete(sessionId);
+  console.log(`[Chat] Cancel: Done`);
 
   return c.json({ success: true });
 });

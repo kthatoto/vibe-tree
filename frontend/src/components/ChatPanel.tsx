@@ -165,7 +165,9 @@ export function ChatPanel({
 
     const unsubEnd = wsClient.on("chat.streaming.end", (msg) => {
       const data = msg.data as { sessionId: string; message?: ChatMessage };
+      console.log(`[ChatPanel] streaming.end received, msgSessionId=${data.sessionId}, currentSessionId=${sessionId}, match=${data.sessionId === sessionId}`);
       if (data.sessionId === sessionId) {
+        console.log(`[ChatPanel] streaming.end: Setting loading=false, message=${!!data.message}`);
         // Add the message to messages list and clear streaming chunks
         if (data.message) {
           setMessages((prev) => {

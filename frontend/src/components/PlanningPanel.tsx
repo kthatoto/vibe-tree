@@ -537,11 +537,11 @@ export function PlanningPanel({
       return [...prev, session.id];
     });
     setActiveTabId(session.id);
-    onSessionSelect?.(session);
+    // onSessionSelect will be called in the useEffect below
     if (session.chatSessionId) {
       markAsSeen(session.chatSessionId);
     }
-  }, [onSessionSelect, markAsSeen]);
+  }, [markAsSeen]);
 
   const closeTab = useCallback((sessionId: string) => {
     setOpenTabIds((prev) => {
@@ -550,23 +550,25 @@ export function PlanningPanel({
       if (activeTabId === sessionId) {
         const newActiveId = newTabs.length > 0 ? newTabs[newTabs.length - 1] : null;
         setActiveTabId(newActiveId);
-        const newActiveSession = newActiveId ? sessions.find(s => s.id === newActiveId) : null;
-        onSessionSelect?.(newActiveSession || null);
+        // onSessionSelect will be called in the useEffect below
       }
       return newTabs;
     });
-  }, [activeTabId, sessions, onSessionSelect]);
+  }, [activeTabId]);
+
+  // Notify parent when active session changes (avoids setState during render)
+  useEffect(() => {
+    onSessionSelect?.(selectedSession);
+  }, [selectedSession, onSessionSelect]);
 
   const switchTab = useCallback((sessionId: string) => {
     setActiveTabId(sessionId);
     const session = sessions.find(s => s.id === sessionId);
-    if (session) {
-      onSessionSelect?.(session);
-      if (session.chatSessionId) {
-        markAsSeen(session.chatSessionId);
-      }
+    // onSessionSelect will be called in the useEffect above
+    if (session?.chatSessionId) {
+      markAsSeen(session.chatSessionId);
     }
-  }, [sessions, onSessionSelect, markAsSeen]);
+  }, [sessions, markAsSeen]);
 
   const handleSelectSession = (session: PlanningSession) => {
     openTab(session);

@@ -163,12 +163,17 @@ export function getPRs(repoPath: string): PRInfo[] {
     const prs: GhPR[] = JSON.parse(output);
     return prs.map((pr) => {
       // Filter out bot reviewers (e.g., GitHub Copilot)
+      const isBot = (login: string) =>
+        login.toLowerCase().includes("copilot") || login.endsWith("[bot]");
       const humanReviewers = (pr.reviewRequests ?? [])
         .map((r) => r.login)
-        .filter((login) => !login.toLowerCase().includes("copilot") && !login.endsWith("[bot]"));
+        .filter((login) => !isBot(login));
 
-      // Check if there are any reviews submitted
-      const hasReviews = (pr.reviews ?? []).length > 0;
+      // Check if there are any human reviews submitted (exclude bots)
+      const humanReviews = (pr.reviews ?? []).filter(
+        (r) => r.author?.login && !isBot(r.author.login)
+      );
+      const hasReviews = humanReviews.length > 0;
 
       // Compute review status
       let reviewStatus: "none" | "requested" | "reviewed" | "approved" = "none";

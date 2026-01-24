@@ -28,6 +28,8 @@ interface GhPR {
   labels: { name: string }[];
   assignees: { login: string }[];
   reviewDecision: string;
+  reviewRequests: { login: string }[];
+  reviews: { author: { login: string }; state: string }[];
   statusCheckRollup?: { conclusion?: string }[];
   additions: number;
   deletions: number;
@@ -155,11 +157,31 @@ export function getWorktrees(repoPath: string): WorktreeInfo[] {
 export function getPRs(repoPath: string): PRInfo[] {
   try {
     const output = execSync(
-      `cd "${repoPath}" && gh pr list --state all --json number,title,state,url,headRefName,isDraft,labels,assignees,reviewDecision,statusCheckRollup,additions,deletions,changedFiles --limit 50`,
+      `cd "${repoPath}" && gh pr list --state all --json number,title,state,url,headRefName,isDraft,labels,assignees,reviewDecision,reviewRequests,reviews,statusCheckRollup,additions,deletions,changedFiles --limit 50`,
       { encoding: "utf-8" }
     );
     const prs: GhPR[] = JSON.parse(output);
     return prs.map((pr) => {
+      // Filter out bot reviewers (e.g., GitHub Copilot)
+      const humanReviewers = (pr.reviewRequests ?? [])
+        .map((r) => r.login)
+        .filter((login) => !login.toLowerCase().includes("copilot") && !login.endsWith("[bot]"));
+
+      // Check if there are any reviews submitted
+      const hasReviews = (pr.reviews ?? []).length > 0;
+
+      // Compute review status
+      let reviewStatus: "none" | "requested" | "reviewed" | "approved" = "none";
+      if (pr.reviewDecision === "APPROVED") {
+        reviewStatus = "approved";
+      } else if (hasReviews) {
+        // Has reviews but not approved (could be CHANGES_REQUESTED or pending)
+        reviewStatus = "reviewed";
+      } else if (humanReviewers.length > 0) {
+        // Reviewers assigned but no reviews yet
+        reviewStatus = "requested";
+      }
+
       const prInfo: PRInfo = {
         number: pr.number,
         title: pr.title,
@@ -170,6 +192,8 @@ export function getPRs(repoPath: string): PRInfo[] {
         labels: pr.labels?.map((l) => l.name) ?? [],
         assignees: pr.assignees?.map((a) => a.login) ?? [],
         reviewDecision: pr.reviewDecision,
+        reviewStatus,
+        reviewers: humanReviewers,
         additions: pr.additions,
         deletions: pr.deletions,
         changedFiles: pr.changedFiles,

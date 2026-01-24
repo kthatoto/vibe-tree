@@ -192,11 +192,11 @@ export default function SettingsPage() {
 
           {/* Worktree Custom Commands */}
           <div style={{ marginBottom: "20px", padding: "15px", background: "#1f2937", borderRadius: "8px", border: "1px solid #374151" }}>
-            <label style={{ color: "#9ca3af", fontSize: "12px", display: "block", marginBottom: "8px" }}>WORKTREE CREATE COMMAND</label>
+            <label style={{ color: "#9ca3af", fontSize: "12px", display: "block", marginBottom: "8px" }}>POST CREATE SCRIPT</label>
             <input
               type="text"
-              value={worktreeSettings.worktreeCreateCommand || ""}
-              onChange={(e) => setWorktreeSettings({ ...worktreeSettings, worktreeCreateCommand: e.target.value })}
+              value={worktreeSettings.postCreateScript || ""}
+              onChange={(e) => setWorktreeSettings({ ...worktreeSettings, postCreateScript: e.target.value })}
               placeholder="e.g., npm install"
               style={{ width: "100%", padding: "8px", fontFamily: "monospace", background: "#111827", color: "#e5e7eb", border: "1px solid #374151", borderRadius: "4px", boxSizing: "border-box" }}
             />
@@ -206,11 +206,11 @@ export default function SettingsPage() {
           </div>
 
           <div style={{ marginBottom: "20px", padding: "15px", background: "#1f2937", borderRadius: "8px", border: "1px solid #374151" }}>
-            <label style={{ color: "#9ca3af", fontSize: "12px", display: "block", marginBottom: "8px" }}>WORKTREE DELETE COMMAND</label>
+            <label style={{ color: "#9ca3af", fontSize: "12px", display: "block", marginBottom: "8px" }}>POST DELETE SCRIPT</label>
             <input
               type="text"
-              value={worktreeSettings.worktreeDeleteCommand || ""}
-              onChange={(e) => setWorktreeSettings({ ...worktreeSettings, worktreeDeleteCommand: e.target.value })}
+              value={worktreeSettings.postDeleteScript || ""}
+              onChange={(e) => setWorktreeSettings({ ...worktreeSettings, postDeleteScript: e.target.value })}
               placeholder="e.g., cleanup-script.sh {branch}"
               style={{ width: "100%", padding: "8px", fontFamily: "monospace", background: "#111827", color: "#e5e7eb", border: "1px solid #374151", borderRadius: "4px", boxSizing: "border-box" }}
             />

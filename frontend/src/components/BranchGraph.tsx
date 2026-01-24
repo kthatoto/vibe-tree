@@ -506,8 +506,8 @@ export default function BranchGraph({
             {/* Line 1: Status labels - right aligned */}
             {hasPR && (
               <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", justifyContent: "flex-end" }}>
-                {/* Review status */}
-                {node.pr?.reviewDecision === "APPROVED" && (
+                {/* Review status - based on reviewStatus */}
+                {node.pr?.reviewStatus === "approved" && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",
@@ -529,7 +529,18 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>Changes ✗</span>
                 )}
-                {node.pr?.reviewDecision === "REVIEW_REQUIRED" && (
+                {node.pr?.reviewStatus === "reviewed" && node.pr?.reviewDecision !== "CHANGES_REQUESTED" && (
+                  <span style={{
+                    fontSize: 10,
+                    padding: "1px 5px",
+                    borderRadius: 3,
+                    background: "transparent",
+                    border: "1px solid #6b7280",
+                    color: "#9ca3af",
+                    whiteSpace: "nowrap",
+                  }}>Reviewed</span>
+                )}
+                {node.pr?.reviewStatus === "requested" && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",
@@ -538,7 +549,7 @@ export default function BranchGraph({
                     border: "1px solid #f59e0b",
                     color: "#fbbf24",
                     whiteSpace: "nowrap",
-                  }}>Review?</span>
+                  }}>Review</span>
                 )}
                 {/* CI status */}
                 {node.pr?.checks === "SUCCESS" && (

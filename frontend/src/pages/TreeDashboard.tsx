@@ -207,6 +207,7 @@ export default function TreeDashboard() {
         status: string | null;
         checksStatus: string | null;
         reviewDecision: string | null;
+        reviewStatus: string | null;
       };
       if (data.linkType === "pr") {
         setSnapshot((prev) => {
@@ -221,6 +222,7 @@ export default function TreeDashboard() {
                     ...node.pr,
                     state: data.status?.toUpperCase() || node.pr.state,
                     reviewDecision: data.reviewDecision || node.pr.reviewDecision,
+                    reviewStatus: (data.reviewStatus as "none" | "requested" | "reviewed" | "approved") || node.pr.reviewStatus,
                     checks: data.checksStatus?.toUpperCase() || node.pr.checks,
                   },
                 };
@@ -354,8 +356,10 @@ export default function TreeDashboard() {
       ];
 
       // Optimistic update: Add new branch node and edge immediately
-      const newNode = {
+      const newNode: import("../lib/api").TreeNode = {
         branchName: newBranchName,
+        badges: [],
+        lastCommitAt: new Date().toISOString(),
         aheadBehind: { ahead: 0, behind: 0 },
       };
       const newDisplayEdge = {

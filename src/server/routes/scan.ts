@@ -72,8 +72,102 @@ scanRouter.post("/", async (c) => {
   // 3. Get worktrees with heartbeat
   const worktrees = getWorktrees(localPath);
 
-  // 4. Get PRs with detailed info
-  const prs = getPRs(localPath);
+  // 4. Load cached PR info from branchLinks first (for immediate display stability)
+  const cachedPrLinks = await db
+    .select()
+    .from(schema.branchLinks)
+    .where(
+      and(
+        eq(schema.branchLinks.repoId, repoId),
+        eq(schema.branchLinks.linkType, "pr")
+      )
+    );
+
+  // Convert cached data to PRInfo format
+  const cachedPrs: import("../../shared/types").PRInfo[] = cachedPrLinks.map((link) => ({
+    branch: link.branchName,
+    number: link.number ?? 0,
+    title: link.title ?? "",
+    url: link.url,
+    state: (link.status?.toUpperCase() ?? "OPEN") as "OPEN" | "MERGED" | "CLOSED",
+    checks: link.checksStatus?.toUpperCase() as "PENDING" | "SUCCESS" | "FAILURE" | undefined,
+    reviewDecision: link.reviewDecision as "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | undefined,
+    reviewStatus: link.reviewStatus as "none" | "requested" | "reviewed" | "approved" | undefined,
+    labels: link.labels ? JSON.parse(link.labels) : undefined,
+    reviewers: link.reviewers ? JSON.parse(link.reviewers) : undefined,
+  }));
+
+  // 4.5. Fetch fresh PR info from GitHub (may be slow/fail)
+  let freshPrs: import("../../shared/types").PRInfo[] = [];
+  try {
+    freshPrs = getPRs(localPath);
+  } catch (err) {
+    console.warn("[Scan] Failed to fetch PRs from GitHub, using cache:", err);
+  }
+
+  // Use fresh PRs if available, otherwise fall back to cache
+  const prs = freshPrs.length > 0 ? freshPrs : cachedPrs;
+
+  // 4.6. Update cache with fresh PR data (if we got fresh data)
+  if (freshPrs.length > 0) {
+    const now = new Date().toISOString();
+    for (const pr of freshPrs) {
+      // Check if PR link already exists
+      const existing = await db
+        .select()
+        .from(schema.branchLinks)
+        .where(
+          and(
+            eq(schema.branchLinks.repoId, repoId),
+            eq(schema.branchLinks.branchName, pr.branch),
+            eq(schema.branchLinks.linkType, "pr"),
+            eq(schema.branchLinks.number, pr.number)
+          )
+        )
+        .limit(1);
+
+      const prData = {
+        title: pr.title,
+        status: pr.state.toLowerCase(), // OPEN -> open, MERGED -> merged
+        checksStatus: pr.checks?.toLowerCase() ?? null, // SUCCESS -> success
+        reviewDecision: pr.reviewDecision ?? null,
+        reviewStatus: pr.reviewStatus ?? null,
+        labels: pr.labels ? JSON.stringify(pr.labels) : null,
+        reviewers: pr.reviewers ? JSON.stringify(pr.reviewers) : null,
+        updatedAt: now,
+      };
+
+      if (existing[0]) {
+        // Update existing
+        await db
+          .update(schema.branchLinks)
+          .set(prData)
+          .where(eq(schema.branchLinks.id, existing[0].id));
+        // Broadcast update for real-time UI refresh
+        broadcast({
+          type: "branchLink.updated",
+          repoId,
+          data: {
+            id: existing[0].id,
+            branchName: pr.branch,
+            linkType: "pr",
+            ...prData,
+          },
+        });
+      } else {
+        // Insert new
+        await db.insert(schema.branchLinks).values({
+          repoId,
+          branchName: pr.branch,
+          linkType: "pr",
+          url: pr.url,
+          number: pr.number,
+          ...prData,
+          createdAt: now,
+        });
+      }
+    }
+  }
 
   // 5. Build tree (infer parent-child relationships)
   const { nodes, edges } = buildTree(branches, worktrees, prs, localPath, defaultBranch);

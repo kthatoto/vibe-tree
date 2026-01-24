@@ -20,8 +20,15 @@ export interface AskUserQuestionData {
 export function extractAskUserQuestion(
   chunks: Array<{ type: string; toolName?: string; toolInput?: Record<string, unknown> }>
 ): AskUserQuestionData | null {
+  // Debug: log all tool_use chunks
+  const toolUseChunks = chunks.filter(c => c.type === "tool_use");
+  if (toolUseChunks.length > 0) {
+    console.log("[AskUserQuestion] Found tool_use chunks:", toolUseChunks);
+  }
+
   for (const chunk of chunks) {
     if (chunk.type === "tool_use" && chunk.toolName === "AskUserQuestion" && chunk.toolInput) {
+      console.log("[AskUserQuestion] Found AskUserQuestion tool_use, input:", JSON.stringify(chunk.toolInput, null, 2));
       const input = chunk.toolInput as { questions?: unknown[] };
       if (input.questions && Array.isArray(input.questions)) {
         return {

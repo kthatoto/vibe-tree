@@ -229,6 +229,7 @@ export const branchLinks = sqliteTable("branch_links", {
   status: text("status"), // 'open' | 'merged' | 'closed'
   checksStatus: text("checks_status"), // PR: 'pending' | 'success' | 'failure'
   reviewDecision: text("review_decision"), // PR: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null
+  reviewStatus: text("review_status"), // PR: 'none' | 'requested' | 'reviewed' | 'approved'
   checks: text("checks"), // JSON array of individual checks [{name, status, conclusion}]
   labels: text("labels"), // JSON array of label names
   reviewers: text("reviewers"), // JSON array of reviewer logins

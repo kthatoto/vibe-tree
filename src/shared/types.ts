@@ -107,6 +107,8 @@ export interface PRInfo {
   labels?: string[];
   assignees?: string[];
   reviewDecision?: string; // APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED
+  reviewStatus?: "none" | "requested" | "reviewed" | "approved"; // Computed review status
+  reviewers?: string[]; // Requested reviewers (excluding bots like GitHub Copilot)
   checks?: string; // SUCCESS, FAILURE, PENDING
   additions?: number;
   deletions?: number;

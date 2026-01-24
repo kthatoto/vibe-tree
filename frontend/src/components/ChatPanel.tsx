@@ -193,10 +193,10 @@ export function ChatPanel({
 
   // Auto scroll to bottom
   useEffect(() => {
-    if (messages.length > 0 || streamingChunks.length > 0) {
+    if (messages.length > 0 || streamingChunks.length > 0 || !loading) {
       messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
     }
-  }, [messages, streamingChunks]);
+  }, [messages, streamingChunks, loading]);
 
   // Build execute mode context
   const buildExecuteContext = (): string | undefined => {
@@ -336,6 +336,10 @@ export function ChatPanel({
 
   // Render a single chunk (used for both streaming and saved chunks)
   const renderChunk = (chunk: StreamingChunk, index: number, isFirst: boolean) => {
+    // Hide AskUserQuestion tool_use (handled by dedicated UI)
+    if (chunk.type === "tool_use" && chunk.toolName === "AskUserQuestion") {
+      return null;
+    }
     const isToolChunk = chunk.type === "tool_use" || chunk.type === "tool_result";
     return (
       <div key={`chunk-${index}`} style={{ display: "flex", justifyContent: "flex-start" }}>
@@ -864,34 +868,45 @@ export function ChatPanel({
           );
         })()}
 
-        {/* AskUserQuestion UI - check last message or streaming chunks for tool_use */}
-        {!loading && (() => {
-          // First, check streaming chunks for AskUserQuestion tool_use
-          const askFromStreaming = extractAskUserQuestion(streamingChunks);
-          if (askFromStreaming) {
-            return (
-              <AskUserQuestionUI
-                data={askFromStreaming}
-                onSubmit={sendQuestionAnswer}
-                disabled={loading}
-              />
-            );
+        {/* AskUserQuestion UI - check last assistant message for tool_use */}
+        {(() => {
+          // First, check streaming chunks for AskUserQuestion tool_use (only when not loading)
+          if (!loading) {
+            const askFromStreaming = extractAskUserQuestion(streamingChunks);
+            if (askFromStreaming) {
+              return (
+                <AskUserQuestionUI
+                  data={askFromStreaming}
+                  onSubmit={sendQuestionAnswer}
+                  disabled={false}
+                />
+              );
+            }
           }
 
-          // Then check the last assistant message
-          const lastMessage = messages[messages.length - 1];
-          if (lastMessage?.role === "assistant") {
-            const chunks = parseChunks(lastMessage.content);
-            if (chunks) {
-              const askFromMessage = extractAskUserQuestion(chunks);
-              if (askFromMessage) {
-                return (
-                  <AskUserQuestionUI
-                    data={askFromMessage}
-                    onSubmit={sendQuestionAnswer}
-                    disabled={loading}
-                  />
-                );
+          // Find the most recent assistant message with AskUserQuestion
+          for (let i = messages.length - 1; i >= 0; i--) {
+            const msg = messages[i];
+            if (msg.role === "assistant") {
+              const chunks = parseChunks(msg.content);
+              if (chunks) {
+                const askFromMessage = extractAskUserQuestion(chunks);
+                if (askFromMessage) {
+                  // Check if there's a newer assistant message (meaning this question is done)
+                  const hasNewerAssistant = messages.slice(i + 1).some(m => m.role === "assistant");
+                  if (hasNewerAssistant) {
+                    return null; // Don't show old questions
+                  }
+                  // Check if user has already answered
+                  const hasAnswered = i < messages.length - 1;
+                  return (
+                    <AskUserQuestionUI
+                      data={askFromMessage}
+                      onSubmit={sendQuestionAnswer}
+                      disabled={hasAnswered || loading}
+                    />
+                  );
+                }
               }
             }
           }

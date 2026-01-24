@@ -50,6 +50,8 @@ export interface PRInfo {
   labels?: string[];
   assignees?: string[];
   reviewDecision?: string;
+  reviewStatus?: "none" | "requested" | "reviewed" | "approved";
+  reviewers?: string[];
   checks?: string;
   additions?: number;
   deletions?: number;

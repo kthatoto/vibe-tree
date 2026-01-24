@@ -9,6 +9,10 @@ interface AskUserQuestionUIProps {
 }
 
 export function AskUserQuestionUI({ data, onSubmit, disabled }: AskUserQuestionUIProps) {
+  // Debug: log incoming data
+  console.log("[AskUserQuestionUI] Rendering with data:", data);
+  console.log("[AskUserQuestionUI] Questions count:", data?.questions?.length);
+
   // Track selections for each question (Map<questionIndex, Set<selectedLabels>>)
   const [selections, setSelections] = useState<Map<number, Set<string>>>(new Map());
   // Track "Other" text input for each question
@@ -104,7 +108,7 @@ export function AskUserQuestionUI({ data, onSubmit, disabled }: AskUserQuestionU
       background: "#1e293b",
       border: "1px solid #3b82f6",
       borderRadius: 8,
-      overflow: "hidden",
+      margin: "8px 4px",
     }}>
       {/* Header */}
       <div style={{

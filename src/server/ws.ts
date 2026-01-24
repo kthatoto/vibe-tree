@@ -32,14 +32,19 @@ export function handleWsMessage(ws: WSClient, message: string | Buffer) {
 
 export function broadcast(message: { type: string; repoId?: string; planningSessionId?: string; data?: unknown }) {
   const json = JSON.stringify(message);
+  console.log(`[WS] Broadcast: type=${message.type}, repoId=${message.repoId}, clients=${clients.length}`);
+  let sentCount = 0;
   for (const client of clients) {
     // Send to all clients or only to clients subscribed to this repo
-    if (!message.repoId || !client.data?.repoId || client.data.repoId === message.repoId) {
+    const shouldSend = !message.repoId || !client.data?.repoId || client.data.repoId === message.repoId;
+    if (shouldSend) {
       try {
         client.send(json);
+        sentCount++;
       } catch (e) {
         console.error("Failed to send WS message:", e);
       }
     }
   }
+  console.log(`[WS] Broadcast: Sent to ${sentCount} clients`);
 }

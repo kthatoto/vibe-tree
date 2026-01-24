@@ -720,6 +720,7 @@ chatRouter.post("/send", async (c) => {
   });
 
   claudeProcess.on("close", async (code) => {
+    console.log(`[Chat] Close: Process closed with code=${code}, sessionId=${input.sessionId}`);
     const finishedAt = new Date().toISOString();
     const status = code === 0 ? "success" : "failed";
 
@@ -732,6 +733,7 @@ chatRouter.post("/send", async (c) => {
     }
 
     // Update agent run
+    console.log(`[Chat] Close: Updating agentRun ${runId} to status=${status}`);
     await db
       .update(schema.agentRuns)
       .set({
@@ -744,6 +746,7 @@ chatRouter.post("/send", async (c) => {
 
     // Update existing assistant message (created at streaming start)
     if (assistantMsgId) {
+      console.log(`[Chat] Close: Updating assistant message ${assistantMsgId}`);
       await db
         .update(schema.chatMessages)
         .set({
@@ -764,6 +767,7 @@ chatRouter.post("/send", async (c) => {
           .set({ lastUsedAt: finishedAt, updatedAt: finishedAt })
           .where(eq(schema.chatSessions.id, input.sessionId));
 
+        console.log(`[Chat] Close: Broadcasting streaming.end for sessionId=${input.sessionId}, repoId=${session.repoId}`);
         // Broadcast streaming end
         broadcast({
           type: "chat.streaming.end",

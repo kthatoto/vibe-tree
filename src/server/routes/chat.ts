@@ -285,28 +285,38 @@ chatRouter.post("/cancel", async (c) => {
 
   const run = runningRuns[0];
   if (!run) {
+    console.log(`[Chat] Cancel: No running agent found for session ${sessionId}`);
     return c.json({ success: false, message: "No running agent found" });
   }
 
+  console.log(`[Chat] Cancel: Found running agent run ${run.id}, pid=${run.pid}`);
+
   // Get streaming state to preserve chunks
   const state = streamingStates.get(sessionId);
+  console.log(`[Chat] Cancel: Streaming state exists=${!!state}, chunks=${state?.chunks?.length ?? 0}`);
 
   // Kill the process if we have a pid
   if (run.pid) {
+    console.log(`[Chat] Cancel: Killing process ${run.pid}`);
     try {
       // Try SIGTERM first
       process.kill(run.pid, "SIGTERM");
+      console.log(`[Chat] Cancel: SIGTERM sent to ${run.pid}`);
       // Also try SIGKILL after a short delay to ensure termination
       setTimeout(() => {
         try {
           process.kill(run.pid!, "SIGKILL");
+          console.log(`[Chat] Cancel: SIGKILL sent to ${run.pid}`);
         } catch {
           // Process may already be terminated
+          console.log(`[Chat] Cancel: SIGKILL failed (process likely terminated)`);
         }
       }, 500);
     } catch (err) {
-      console.error(`[Chat] Failed to kill process ${run.pid}:`, err);
+      console.error(`[Chat] Cancel: Failed to kill process ${run.pid}:`, err);
     }
+  } else {
+    console.log(`[Chat] Cancel: No pid found for agent run ${run.id}`);
   }
 
   // Update agent run status

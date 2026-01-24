@@ -115,6 +115,25 @@ export function ChatPanel({
     loadMessages();
   }, [loadMessages]);
 
+  // Cancel execution on Escape key (document-level listener)
+  useEffect(() => {
+    const handleEscapeKey = async (e: KeyboardEvent) => {
+      if (e.key === "Escape" && loading) {
+        e.preventDefault();
+        console.log("[ChatPanel] Escape pressed, cancelling...");
+        try {
+          await api.cancelChat(sessionId);
+          console.log("[ChatPanel] Cancel API called successfully");
+        } catch (err) {
+          console.error("[ChatPanel] Failed to cancel:", err);
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleEscapeKey);
+    return () => document.removeEventListener("keydown", handleEscapeKey);
+  }, [sessionId, loading]);
+
   // Listen for WebSocket streaming events
   useEffect(() => {
     const unsubStart = wsClient.on("chat.streaming.start", (msg) => {
@@ -309,20 +328,16 @@ export function ChatPanel({
 
   // Cancel current chat execution
   const handleCancel = async () => {
+    console.log("[ChatPanel] Cancel clicked");
     try {
       await api.cancelChat(sessionId);
+      console.log("[ChatPanel] Cancel API called successfully");
     } catch (err) {
-      console.error("Failed to cancel:", err);
+      console.error("[ChatPanel] Failed to cancel:", err);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Escape to cancel execution
-    if (e.key === "Escape" && loading) {
-      e.preventDefault();
-      handleCancel();
-      return;
-    }
     // ⌘+Enter / Ctrl+Enter to send (allowed during loading)
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -1044,9 +1059,21 @@ export function ChatPanel({
           />
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, alignSelf: "flex-end" }}>
             {loading && (
-              <span style={{ fontSize: 11, color: "#6b7280", whiteSpace: "nowrap" }}>
-                Esc to cancel
-              </span>
+              <button
+                onClick={handleCancel}
+                style={{
+                  fontSize: 11,
+                  color: "#f87171",
+                  background: "transparent",
+                  border: "1px solid #f87171",
+                  borderRadius: 4,
+                  padding: "2px 8px",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Cancel (Esc)
+              </button>
             )}
             <button
               onClick={sendMessage}

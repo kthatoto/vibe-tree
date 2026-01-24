@@ -254,9 +254,6 @@ export function PlanningPanel({
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const isResizing = useRef(false);
 
-  // Fullscreen chat mode
-  const [chatFullscreen, setChatFullscreen] = useState(false);
-
   // Session notifications (unread counts, thinking state)
   const chatSessionIds = sessions
     .filter((s) => s.chatSessionId)
@@ -1312,17 +1309,9 @@ export function PlanningPanel({
 
           {/* Execution Mode */}
           {!executeEditMode && selectedSession.executeBranches && selectedSession.executeBranches.length > 0 && (
-            <div className={`planning-panel__detail-main ${chatFullscreen ? "planning-panel__detail-main--fullscreen" : ""}`}>
+            <div className="planning-panel__detail-main">
               {/* Chat */}
               <div className="planning-panel__chat">
-                {/* Fullscreen Toggle */}
-                <button
-                  className="planning-panel__fullscreen-toggle"
-                  onClick={() => setChatFullscreen(!chatFullscreen)}
-                  title={chatFullscreen ? "Exit fullscreen" : "Fullscreen"}
-                >
-                  {chatFullscreen ? "⊡" : "⊞"}
-                </button>
                 {selectedSession.chatSessionId && (
                   <ChatPanel
                     sessionId={selectedSession.chatSessionId}
@@ -1344,46 +1333,42 @@ export function PlanningPanel({
               </div>
 
               {/* Resizer */}
-              {!chatFullscreen && (
-                <div
-                  className="planning-panel__resizer"
-                  onMouseDown={handleResizeStart}
-                />
-              )}
+              <div
+                className="planning-panel__resizer"
+                onMouseDown={handleResizeStart}
+              />
 
               {/* Sidebar */}
-              {!chatFullscreen && (
-                <div className="planning-panel__sidebar" style={{ width: sidebarWidth }}>
-                  {/* Progress */}
-                  <div className="planning-panel__execute-progress">
-                    <div className="planning-panel__execute-progress-header">
-                      <span>Task {selectedSession.currentExecuteIndex + 1} of {selectedSession.executeBranches.length}</span>
-                      <div className="planning-panel__execute-progress-bar">
-                        <div
-                          className="planning-panel__execute-progress-fill"
-                          style={{ width: `${(selectedSession.currentExecuteIndex / selectedSession.executeBranches.length) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                    <div className="planning-panel__execute-current">
-                      {selectedSession.executeBranches[selectedSession.currentExecuteIndex]}
+              <div className="planning-panel__sidebar" style={{ width: sidebarWidth }}>
+                {/* Progress */}
+                <div className="planning-panel__execute-progress">
+                  <div className="planning-panel__execute-progress-header">
+                    <span>Task {selectedSession.currentExecuteIndex + 1} of {selectedSession.executeBranches.length}</span>
+                    <div className="planning-panel__execute-progress-bar">
+                      <div
+                        className="planning-panel__execute-progress-fill"
+                        style={{ width: `${(selectedSession.currentExecuteIndex / selectedSession.executeBranches.length) * 100}%` }}
+                      />
                     </div>
                   </div>
-
-                  {/* Task Instruction */}
-                  <div className="planning-panel__execute-instruction">
-                    <div className="planning-panel__execute-instruction-content">
-                      {executeCurrentTaskInstruction?.instructionMd ? (
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {executeCurrentTaskInstruction.instructionMd}
-                        </ReactMarkdown>
-                      ) : (
-                        <span className="planning-panel__no-instruction">No instruction</span>
-                      )}
-                    </div>
+                  <div className="planning-panel__execute-current">
+                    {selectedSession.executeBranches[selectedSession.currentExecuteIndex]}
                   </div>
                 </div>
-              )}
+
+                {/* Task Instruction */}
+                <div className="planning-panel__execute-instruction">
+                  <div className="planning-panel__execute-instruction-content">
+                    {executeCurrentTaskInstruction?.instructionMd ? (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {executeCurrentTaskInstruction.instructionMd}
+                      </ReactMarkdown>
+                    ) : (
+                      <span className="planning-panel__no-instruction">No instruction</span>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -1424,17 +1409,9 @@ export function PlanningPanel({
       </div>
 
       {/* Non-Execute Session: Original layout */}
-      <div className={`planning-panel__detail-main ${chatFullscreen ? "planning-panel__detail-main--fullscreen" : ""}`}>
+      <div className="planning-panel__detail-main">
         {/* Chat section */}
         <div className="planning-panel__chat">
-          {/* Fullscreen Toggle */}
-          <button
-            className="planning-panel__fullscreen-toggle"
-            onClick={() => setChatFullscreen(!chatFullscreen)}
-            title={chatFullscreen ? "Exit fullscreen" : "Fullscreen"}
-          >
-            {chatFullscreen ? "⊡" : "⊞"}
-          </button>
           {selectedSession.chatSessionId && (
             <ChatPanel
               sessionId={selectedSession.chatSessionId}
@@ -1461,15 +1438,12 @@ export function PlanningPanel({
         </div>
 
         {/* Resizer */}
-        {!chatFullscreen && (
-          <div
-            className="planning-panel__resizer"
-            onMouseDown={handleResizeStart}
-          />
-        )}
+        <div
+          className="planning-panel__resizer"
+          onMouseDown={handleResizeStart}
+        />
 
         {/* Sidebar: Links + Tasks */}
-        {!chatFullscreen && (
         <div className="planning-panel__sidebar" style={{ width: sidebarWidth }}>
           {/* External Links */}
           <div className="planning-panel__links">
@@ -1651,7 +1625,6 @@ export function PlanningPanel({
             </div>
           )}
         </div>
-        )}
       </div>
     </div>
     );

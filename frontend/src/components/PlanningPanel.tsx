@@ -1243,6 +1243,14 @@ export function PlanningPanel({
                 type="text"
                 value={executeEditTitle}
                 onChange={(e) => setExecuteEditTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    handleSaveExecuteEdit();
+                  } else if (e.key === "Escape") {
+                    handleCancelExecuteEdit();
+                  }
+                }}
                 className="planning-panel__title-input"
                 placeholder="Untitled Session"
                 autoFocus

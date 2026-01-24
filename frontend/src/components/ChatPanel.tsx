@@ -1036,9 +1036,9 @@ export function ChatPanel({
             }}
             disabled={disabled}
           />
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, alignSelf: "flex-end" }}>
             {loading && (
-              <span style={{ fontSize: 11, color: "#6b7280", marginBottom: 12, whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: 11, color: "#6b7280", whiteSpace: "nowrap" }}>
                 Esc to cancel
               </span>
             )}

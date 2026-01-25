@@ -986,55 +986,68 @@ export function PlanningPanel({
     .map((id) => sessions.find((s) => s.id === id))
     .filter((s): s is PlanningSession => s !== undefined);
 
-  // Render tab bar (shown when tabs are open)
+  // Render tab bar (always shown)
   const renderTabBar = () => {
-    if (openTabs.length === 0) return null;
+    const showNewTab = openTabs.length === 0;
     return (
       <div className="planning-panel__tab-bar">
-        {openTabs.map((session) => {
-          const sessionType = session.type || "refinement";
-          const typeIcon = sessionType === "refinement" ? "💭" : sessionType === "planning" ? "📋" : "⚡";
-          const isActive = session.id === activeTabId;
-          const notification = session.chatSessionId ? getNotification(session.chatSessionId) : null;
-          const isThinking = notification?.isThinking;
-          return (
-            <div
-              key={session.id}
-              className={`planning-panel__tab ${isActive ? "planning-panel__tab--active" : ""} planning-panel__tab--${sessionType}`}
-              onClick={() => switchTab(session.id)}
+        {showNewTab ? (
+          // Show "New" tab when no sessions are open
+          <div
+            className="planning-panel__tab planning-panel__tab--active planning-panel__tab--new"
+            onClick={() => setShowNewForm(true)}
+          >
+            <span className="planning-panel__tab-icon">+</span>
+            <span className="planning-panel__tab-title">New Session</span>
+          </div>
+        ) : (
+          <>
+            {openTabs.map((session) => {
+              const sessionType = session.type || "refinement";
+              const typeIcon = sessionType === "refinement" ? "💭" : sessionType === "planning" ? "📋" : "⚡";
+              const isActive = session.id === activeTabId;
+              const notification = session.chatSessionId ? getNotification(session.chatSessionId) : null;
+              const isThinking = notification?.isThinking;
+              return (
+                <div
+                  key={session.id}
+                  className={`planning-panel__tab ${isActive ? "planning-panel__tab--active" : ""} planning-panel__tab--${sessionType}`}
+                  onClick={() => switchTab(session.id)}
+                >
+                  {isThinking && <span className="planning-panel__tab-thinking-indicator" />}
+                  <span className="planning-panel__tab-icon">{typeIcon}</span>
+                  <span className="planning-panel__tab-title">{session.title}</span>
+                  <button
+                    className="planning-panel__tab-close"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeTab(session.id);
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+            <button
+              className="planning-panel__tab-add"
+              onClick={() => {
+                setActiveTabId(null);
+                setShowNewForm(true);
+              }}
+              title="New Session"
             >
-              {isThinking && <span className="planning-panel__tab-thinking-indicator" />}
-              <span className="planning-panel__tab-icon">{typeIcon}</span>
-              <span className="planning-panel__tab-title">{session.title}</span>
-              <button
-                className="planning-panel__tab-close"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeTab(session.id);
-                }}
-              >
-                ×
-              </button>
-            </div>
-          );
-        })}
-        <button
-          className="planning-panel__tab-add"
-          onClick={() => {
-            setActiveTabId(null);
-            setShowNewForm(true);
-          }}
-          title="New Session"
-        >
-          +
-        </button>
+              +
+            </button>
+          </>
+        )}
         {onToggleFullscreen && (
           <button
             className="planning-panel__fullscreen-toggle"
             onClick={onToggleFullscreen}
             title={chatFullscreen ? "Exit fullscreen" : "Fullscreen"}
           >
-            {chatFullscreen ? "⤡" : "⤢"}
+            {chatFullscreen ? "⤓" : "⤢"}
           </button>
         )}
       </div>

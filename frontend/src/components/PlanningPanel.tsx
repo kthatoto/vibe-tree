@@ -1034,7 +1034,7 @@ export function PlanningPanel({
             onClick={onToggleFullscreen}
             title={chatFullscreen ? "Exit fullscreen" : "Fullscreen"}
           >
-            {chatFullscreen ? "⊡" : "⊞"}
+            {chatFullscreen ? "⤡" : "⤢"}
           </button>
         )}
       </div>

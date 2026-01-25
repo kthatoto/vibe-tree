@@ -74,6 +74,9 @@ export default function TreeDashboard() {
   // Chat fullscreen mode
   const [chatFullscreen, setChatFullscreen] = useState(false);
 
+  // Branch graph fullscreen mode
+  const [graphFullscreen, setGraphFullscreen] = useState(false);
+
   // Create branch dialog
   const [createBranchBase, setCreateBranchBase] = useState<string | null>(null);
   const [createBranchName, setCreateBranchName] = useState("");
@@ -1162,6 +1165,13 @@ export default function TreeDashboard() {
                           >
                             {fetching ? "Fetching..." : "Fetch"}
                           </button>
+                          <button
+                            className="btn-icon"
+                            onClick={() => setGraphFullscreen(!graphFullscreen)}
+                            title={graphFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                          >
+                            {graphFullscreen ? "⤡" : "⤢"}
+                          </button>
                         </>
                       )}
                       <span className="panel__count">{snapshot.nodes.length} branches</span>
@@ -1250,6 +1260,7 @@ export default function TreeDashboard() {
               </div>
 
               {/* Right: Details */}
+              {!graphFullscreen && (
               <div className="tree-view__details">
                 {selectedNode && selectedPin ? (
                   <TaskDetailPanel
@@ -1282,11 +1293,12 @@ export default function TreeDashboard() {
                   </div>
                 )}
               </div>
+              )}
             </div>
             )}
 
             {/* Resize Handle between top and bottom */}
-            {!chatFullscreen && (
+            {!chatFullscreen && !graphFullscreen && (
             <div
               className={`tree-view__resize-handle ${isResizingBottom ? "tree-view__resize-handle--active" : ""}`}
               onMouseDown={handleResizeStart}
@@ -1297,6 +1309,7 @@ export default function TreeDashboard() {
             )}
 
             {/* Bottom: Claude Code Sessions */}
+            {!graphFullscreen && (
             <div
               className="tree-view__bottom"
               style={{ flex: chatFullscreen ? 1 : `0 0 ${bottomHeight}px` }}
@@ -1317,6 +1330,7 @@ export default function TreeDashboard() {
                 />
               </div>
             </div>
+            )}
           </div>
         )}
 

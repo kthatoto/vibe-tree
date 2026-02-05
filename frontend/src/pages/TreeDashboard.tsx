@@ -84,6 +84,7 @@ export default function TreeDashboard() {
 
   // Fetch state
   const [fetching, setFetching] = useState(false);
+  const [fetchProgress, setFetchProgress] = useState<string | null>(null);
   const [originalTreeSpecEdges, setOriginalTreeSpecEdges] = useState<TreeSpecEdge[] | null>(null);
 
   // Settings modal state
@@ -240,10 +241,27 @@ export default function TreeDashboard() {
       }
     });
 
+    // Fetch progress updates
+    const unsubFetchProgress = wsClient.on("fetch.progress", (msg) => {
+      const data = msg.data as { step: string; message: string };
+      setFetchProgress(data.message);
+    });
+
+    const unsubFetchCompleted = wsClient.on("fetch.completed", () => {
+      setFetchProgress(null);
+    });
+
+    const unsubFetchError = wsClient.on("fetch.error", () => {
+      setFetchProgress(null);
+    });
+
     return () => {
       unsubScan();
       unsubBranches();
       unsubBranchLink();
+      unsubFetchProgress();
+      unsubFetchCompleted();
+      unsubFetchError();
     };
   }, [snapshot?.repoId, selectedPin, handleScan]);
 
@@ -1163,7 +1181,7 @@ export default function TreeDashboard() {
                             disabled={fetching}
                             title="Fetch from remote"
                           >
-                            {fetching ? "Fetching..." : "Fetch"}
+                            {fetching ? (fetchProgress || "Fetching...") : "Fetch"}
                           </button>
                           <button
                             className="btn-icon"

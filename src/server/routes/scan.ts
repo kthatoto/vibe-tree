@@ -492,14 +492,28 @@ scanRouter.post("/fetch", async (c) => {
     throw new BadRequestError(`Local path does not exist: ${localPath}`);
   }
 
+  const repoId = getRepoId(localPath);
+
   try {
-    // Fetch all remotes
+    // Step 1: Fetch all remotes
+    broadcast({
+      type: "fetch.progress",
+      repoId,
+      data: { step: "fetch", message: "git fetch --all" },
+    });
+
     execSync(`cd "${localPath}" && git fetch --all`, {
       encoding: "utf-8",
       timeout: 30000,
     });
 
-    // Get remote tracking status for all branches
+    // Step 2: Get remote tracking status for all branches
+    broadcast({
+      type: "fetch.progress",
+      repoId,
+      data: { step: "status", message: "Checking branch status..." },
+    });
+
     const branchStatus: Record<string, { ahead: number; behind: number }> = {};
 
     try {
@@ -531,7 +545,6 @@ scanRouter.post("/fetch", async (c) => {
       // Ignore errors in getting branch status
     }
 
-    const repoId = getRepoId(localPath);
     broadcast({
       type: "fetch.completed",
       repoId,
@@ -540,6 +553,11 @@ scanRouter.post("/fetch", async (c) => {
 
     return c.json({ success: true, branchStatus });
   } catch (err) {
+    broadcast({
+      type: "fetch.error",
+      repoId,
+      data: { message: err instanceof Error ? err.message : String(err) },
+    });
     throw new BadRequestError(`Fetch failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 });

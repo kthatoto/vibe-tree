@@ -99,7 +99,7 @@ export function useSessionNotifications(sessionIds: string[]) {
   useEffect(() => {
     if (!initialized) return;
 
-    const unsubscribe = wsClient.on("chat.message", (msg) => {
+    const unsubMessage = wsClient.on("chat.message", (msg) => {
       const data = msg.data as ChatMessage | undefined;
       if (!data || !sessionIds.includes(data.sessionId)) return;
 
@@ -129,7 +129,47 @@ export function useSessionNotifications(sessionIds: string[]) {
       });
     });
 
-    return unsubscribe;
+    // Listen for streaming start - AI is thinking
+    const unsubStreamingStart = wsClient.on("chat.streaming.start", (msg) => {
+      const data = msg.data as { sessionId: string } | undefined;
+      if (!data || !sessionIds.includes(data.sessionId)) return;
+
+      setNotifications((prev) => {
+        const current = prev.get(data.sessionId) || {
+          unreadCount: 0,
+          isThinking: false,
+          lastMessageAt: null,
+        };
+        return new Map(prev).set(data.sessionId, {
+          ...current,
+          isThinking: true,
+        });
+      });
+    });
+
+    // Listen for streaming end - AI finished thinking
+    const unsubStreamingEnd = wsClient.on("chat.streaming.end", (msg) => {
+      const data = msg.data as { sessionId: string } | undefined;
+      if (!data || !sessionIds.includes(data.sessionId)) return;
+
+      setNotifications((prev) => {
+        const current = prev.get(data.sessionId) || {
+          unreadCount: 0,
+          isThinking: false,
+          lastMessageAt: null,
+        };
+        return new Map(prev).set(data.sessionId, {
+          ...current,
+          isThinking: false,
+        });
+      });
+    });
+
+    return () => {
+      unsubMessage();
+      unsubStreamingStart();
+      unsubStreamingEnd();
+    };
   }, [initialized, sessionIds.join(",")]);
 
   // Mark session as seen

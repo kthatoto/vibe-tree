@@ -97,77 +97,81 @@ scanRouter.post("/", async (c) => {
     reviewers: link.reviewers ? JSON.parse(link.reviewers) : undefined,
   }));
 
-  // 4.5. Fetch fresh PR info from GitHub (may be slow/fail)
-  let freshPrs: import("../../shared/types").PRInfo[] = [];
-  try {
-    freshPrs = getPRs(localPath);
-  } catch (err) {
-    console.warn("[Scan] Failed to fetch PRs from GitHub, using cache:", err);
-  }
+  // 4.5. Use cached PRs for immediate response, fetch fresh data in background
+  const prs = cachedPrs;
 
-  // Use fresh PRs if available, otherwise fall back to cache
-  const prs = freshPrs.length > 0 ? freshPrs : cachedPrs;
+  // Fetch fresh PR info from GitHub in background (non-blocking)
+  (async () => {
+    try {
+      const freshPrs = getPRs(localPath);
+      if (freshPrs.length === 0) return;
 
-  // 4.6. Update cache with fresh PR data (if we got fresh data)
-  if (freshPrs.length > 0) {
-    const now = new Date().toISOString();
-    for (const pr of freshPrs) {
-      // Check if PR link already exists
-      const existing = await db
-        .select()
-        .from(schema.branchLinks)
-        .where(
-          and(
-            eq(schema.branchLinks.repoId, repoId),
-            eq(schema.branchLinks.branchName, pr.branch),
-            eq(schema.branchLinks.linkType, "pr"),
-            eq(schema.branchLinks.number, pr.number)
+      const now = new Date().toISOString();
+      for (const pr of freshPrs) {
+        // Check if PR link already exists
+        const existing = await db
+          .select()
+          .from(schema.branchLinks)
+          .where(
+            and(
+              eq(schema.branchLinks.repoId, repoId),
+              eq(schema.branchLinks.branchName, pr.branch),
+              eq(schema.branchLinks.linkType, "pr"),
+              eq(schema.branchLinks.number, pr.number)
+            )
           )
-        )
-        .limit(1);
+          .limit(1);
 
-      const prData = {
-        title: pr.title,
-        status: pr.state.toLowerCase(), // OPEN -> open, MERGED -> merged
-        checksStatus: pr.checks?.toLowerCase() ?? null, // SUCCESS -> success
-        reviewDecision: pr.reviewDecision ?? null,
-        reviewStatus: pr.reviewStatus ?? null,
-        labels: pr.labels ? JSON.stringify(pr.labels) : null,
-        reviewers: pr.reviewers ? JSON.stringify(pr.reviewers) : null,
-        updatedAt: now,
-      };
+        const prData = {
+          title: pr.title,
+          status: pr.state.toLowerCase(),
+          checksStatus: pr.checks?.toLowerCase() ?? null,
+          reviewDecision: pr.reviewDecision ?? null,
+          reviewStatus: pr.reviewStatus ?? null,
+          labels: pr.labels ? JSON.stringify(pr.labels) : null,
+          reviewers: pr.reviewers ? JSON.stringify(pr.reviewers) : null,
+          updatedAt: now,
+        };
 
-      if (existing[0]) {
-        // Update existing
-        await db
-          .update(schema.branchLinks)
-          .set(prData)
-          .where(eq(schema.branchLinks.id, existing[0].id));
+        if (existing[0]) {
+          await db
+            .update(schema.branchLinks)
+            .set(prData)
+            .where(eq(schema.branchLinks.id, existing[0].id));
+        } else {
+          await db.insert(schema.branchLinks).values({
+            repoId,
+            branchName: pr.branch,
+            linkType: "pr",
+            url: pr.url,
+            number: pr.number,
+            ...prData,
+            createdAt: now,
+          });
+        }
+
         // Broadcast update for real-time UI refresh
         broadcast({
           type: "branchLink.updated",
           repoId,
           data: {
-            id: existing[0].id,
             branchName: pr.branch,
             linkType: "pr",
             ...prData,
           },
         });
-      } else {
-        // Insert new
-        await db.insert(schema.branchLinks).values({
-          repoId,
-          branchName: pr.branch,
-          linkType: "pr",
-          url: pr.url,
-          number: pr.number,
-          ...prData,
-          createdAt: now,
-        });
       }
+
+      // After all PRs updated, trigger a rescan broadcast to update the graph
+      broadcast({
+        type: "scan.prsUpdated",
+        repoId,
+        data: { count: freshPrs.length },
+      });
+    } catch (err) {
+      console.warn("[Scan] Background PR fetch failed:", err);
     }
-  }
+  })();
 
   // 5. Build tree (infer parent-child relationships)
   const { nodes, edges } = buildTree(branches, worktrees, prs, localPath, defaultBranch);

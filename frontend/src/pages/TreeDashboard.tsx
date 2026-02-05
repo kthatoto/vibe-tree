@@ -222,16 +222,26 @@ export default function TreeDashboard() {
           return {
             ...prev,
             nodes: prev.nodes.map((node) => {
-              if (node.branchName === data.branchName && node.pr) {
+              if (node.branchName === data.branchName) {
+                const newPr = {
+                  branch: data.branchName,
+                  number: 0,
+                  title: "",
+                  url: "",
+                  state: (data.status?.toUpperCase() || "OPEN") as "OPEN" | "MERGED" | "CLOSED",
+                  reviewDecision: data.reviewDecision as "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | undefined,
+                  reviewStatus: (data.reviewStatus as "none" | "requested" | "reviewed" | "approved") || undefined,
+                  checks: data.checksStatus?.toUpperCase() as "PENDING" | "SUCCESS" | "FAILURE" | undefined,
+                };
                 return {
                   ...node,
-                  pr: {
+                  pr: node.pr ? {
                     ...node.pr,
-                    state: data.status?.toUpperCase() || node.pr.state,
-                    reviewDecision: data.reviewDecision || node.pr.reviewDecision,
-                    reviewStatus: (data.reviewStatus as "none" | "requested" | "reviewed" | "approved") || node.pr.reviewStatus,
-                    checks: data.checksStatus?.toUpperCase() || node.pr.checks,
-                  },
+                    state: newPr.state,
+                    reviewDecision: newPr.reviewDecision || node.pr.reviewDecision,
+                    reviewStatus: newPr.reviewStatus || node.pr.reviewStatus,
+                    checks: newPr.checks || node.pr.checks,
+                  } : newPr,
                 };
               }
               return node;

@@ -564,16 +564,15 @@ export function PlanningPanel({
   const closeTab = useCallback((tabId: string) => {
     setOpenTabIds((prev) => {
       const newTabs = prev.filter((id) => id !== tabId);
-      // If closing the last session tab, replace with empty tab
-      if (newTabs.length === 0 && !isEmptyTab(tabId)) {
+      // If closing the last tab, replace with a new empty tab
+      if (newTabs.length === 0) {
         const newEmptyTabId = `__new__${Date.now()}`;
         setActiveTabId(newEmptyTabId);
         return [newEmptyTabId];
       }
       // If closing the active tab, switch to the last remaining tab
       if (activeTabId === tabId) {
-        const newActiveId = newTabs.length > 0 ? newTabs[newTabs.length - 1] : null;
-        setActiveTabId(newActiveId);
+        setActiveTabId(newTabs[newTabs.length - 1]);
       }
       return newTabs;
     });
@@ -1035,8 +1034,6 @@ export function PlanningPanel({
             {openTabs.map((tab) => {
               if (tab.type === "empty") {
                 const isActive = tab.id === activeTabId;
-                // Empty tab can only be closed if there are other tabs
-                const canCloseEmpty = openTabs.length > 1;
                 return (
                   <div
                     key={tab.id}
@@ -1045,17 +1042,15 @@ export function PlanningPanel({
                   >
                     <span className="planning-panel__tab-icon">+</span>
                     <span className="planning-panel__tab-title">New</span>
-                    {canCloseEmpty && (
-                      <button
-                        className="planning-panel__tab-close"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          closeTab(tab.id);
-                        }}
-                      >
-                        ×
-                      </button>
-                    )}
+                    <button
+                      className="planning-panel__tab-close"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeTab(tab.id);
+                      }}
+                    >
+                      ×
+                    </button>
                   </div>
                 );
               }

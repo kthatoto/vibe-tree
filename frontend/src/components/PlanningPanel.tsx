@@ -1023,11 +1023,12 @@ export function PlanningPanel({
             }}
           >
             <span className="planning-panel__tab-icon">+</span>
-            <span className="planning-panel__tab-title">New Session</span>
+            <span className="planning-panel__tab-title">New</span>
           </div>
         ) : (
           <>
             {openTabs.map((tab) => {
+              const canClose = openTabs.length > 1;
               if (tab.type === "empty") {
                 const isActive = tab.id === activeTabId;
                 return (
@@ -1038,15 +1039,17 @@ export function PlanningPanel({
                   >
                     <span className="planning-panel__tab-icon">+</span>
                     <span className="planning-panel__tab-title">New</span>
-                    <button
-                      className="planning-panel__tab-close"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeTab(tab.id);
-                      }}
-                    >
-                      ×
-                    </button>
+                    {canClose && (
+                      <button
+                        className="planning-panel__tab-close"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          closeTab(tab.id);
+                        }}
+                      >
+                        ×
+                      </button>
+                    )}
                   </div>
                 );
               }
@@ -1065,15 +1068,17 @@ export function PlanningPanel({
                   {isThinking && <span className="planning-panel__tab-thinking-indicator" />}
                   <span className="planning-panel__tab-icon">{typeIcon}</span>
                   <span className="planning-panel__tab-title">{session.title}</span>
-                  <button
-                    className="planning-panel__tab-close"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeTab(session.id);
-                    }}
-                  >
-                    ×
-                  </button>
+                  {canClose && (
+                    <button
+                      className="planning-panel__tab-close"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeTab(session.id);
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               );
             })}

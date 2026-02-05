@@ -222,9 +222,13 @@ export function PlanningPanel({
   // Tab management
   const [openTabIds, setOpenTabIds] = useState<string[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [emptyTabCounter, setEmptyTabCounter] = useState(0);
+
+  // Helper to check if a tab ID is an empty tab
+  const isEmptyTab = (tabId: string) => tabId.startsWith("__new__");
 
   // Derived: currently selected session from active tab
-  const selectedSession = activeTabId ? sessions.find(s => s.id === activeTabId) || null : null;
+  const selectedSession = activeTabId && !isEmptyTab(activeTabId) ? sessions.find(s => s.id === activeTabId) || null : null;
 
   // New session type selection (for creation modal)
   const [newSessionType, setNewSessionType] = useState<"refinement" | "planning" | "execute">("refinement");
@@ -523,7 +527,9 @@ export function PlanningPanel({
         newSessionType
       );
       // State will be updated via WebSocket planning.created event
-      openTab(session);
+      // Replace empty tab if current tab is empty
+      const replaceEmpty = activeTabId !== null && isEmptyTab(activeTabId);
+      openTab(session, replaceEmpty);
       setShowNewForm(false);
       setNewTitle("");
       setNewBaseBranch(defaultBranch);
@@ -536,10 +542,15 @@ export function PlanningPanel({
   };
 
   // Tab management functions
-  const openTab = useCallback((session: PlanningSession) => {
+  const openTab = useCallback((session: PlanningSession, replaceEmptyTab = false) => {
     setOpenTabIds((prev) => {
+      // If session already open, just switch to it
       if (prev.includes(session.id)) {
-        return prev; // Already open
+        return prev;
+      }
+      // If replacing an empty tab, swap it with the session
+      if (replaceEmptyTab && activeTabId && isEmptyTab(activeTabId)) {
+        return prev.map((id) => (id === activeTabId ? session.id : id));
       }
       return [...prev, session.id];
     });
@@ -548,13 +559,13 @@ export function PlanningPanel({
     if (session.chatSessionId) {
       markAsSeen(session.chatSessionId);
     }
-  }, [markAsSeen]);
+  }, [markAsSeen, activeTabId]);
 
-  const closeTab = useCallback((sessionId: string) => {
+  const closeTab = useCallback((tabId: string) => {
     setOpenTabIds((prev) => {
-      const newTabs = prev.filter((id) => id !== sessionId);
+      const newTabs = prev.filter((id) => id !== tabId);
       // If closing the active tab, switch to the last remaining tab or null
-      if (activeTabId === sessionId) {
+      if (activeTabId === tabId) {
         const newActiveId = newTabs.length > 0 ? newTabs[newTabs.length - 1] : null;
         setActiveTabId(newActiveId);
         // onSessionSelect will be called in the useEffect below
@@ -578,7 +589,9 @@ export function PlanningPanel({
   }, [sessions, markAsSeen]);
 
   const handleSelectSession = (session: PlanningSession) => {
-    openTab(session);
+    // If current tab is an empty tab, replace it with the selected session
+    const replaceEmpty = activeTabId !== null && isEmptyTab(activeTabId);
+    openTab(session, replaceEmpty);
   };
 
   // Start planning session from pending planning
@@ -981,10 +994,17 @@ export function PlanningPanel({
     );
   }
 
-  // Helper to get open tab sessions
-  const openTabs = openTabIds
-    .map((id) => sessions.find((s) => s.id === id))
-    .filter((s): s is PlanningSession => s !== undefined);
+  // Helper to get open tab data (sessions or empty tabs)
+  type TabData = { type: "session"; session: PlanningSession } | { type: "empty"; id: string };
+  const openTabs: TabData[] = openTabIds
+    .map((id): TabData | null => {
+      if (isEmptyTab(id)) {
+        return { type: "empty", id };
+      }
+      const session = sessions.find((s) => s.id === id);
+      return session ? { type: "session", session } : null;
+    })
+    .filter((t): t is TabData => t !== null);
 
   // Render tab bar (always shown)
   const renderTabBar = () => {
@@ -995,14 +1015,42 @@ export function PlanningPanel({
           // Show "New" tab when no sessions are open
           <div
             className="planning-panel__tab planning-panel__tab--active planning-panel__tab--new"
-            onClick={() => setShowNewForm(true)}
+            onClick={() => {
+              const newTabId = `__new__${emptyTabCounter}`;
+              setEmptyTabCounter((c) => c + 1);
+              setOpenTabIds([newTabId]);
+              setActiveTabId(newTabId);
+            }}
           >
             <span className="planning-panel__tab-icon">+</span>
             <span className="planning-panel__tab-title">New Session</span>
           </div>
         ) : (
           <>
-            {openTabs.map((session) => {
+            {openTabs.map((tab) => {
+              if (tab.type === "empty") {
+                const isActive = tab.id === activeTabId;
+                return (
+                  <div
+                    key={tab.id}
+                    className={`planning-panel__tab planning-panel__tab--new ${isActive ? "planning-panel__tab--active" : ""}`}
+                    onClick={() => setActiveTabId(tab.id)}
+                  >
+                    <span className="planning-panel__tab-icon">+</span>
+                    <span className="planning-panel__tab-title">New</span>
+                    <button
+                      className="planning-panel__tab-close"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeTab(tab.id);
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              }
+              const session = tab.session;
               const sessionType = session.type || "refinement";
               const typeIcon = sessionType === "refinement" ? "💭" : sessionType === "planning" ? "📋" : "⚡";
               const isActive = session.id === activeTabId;
@@ -1032,8 +1080,10 @@ export function PlanningPanel({
             <button
               className="planning-panel__tab-add"
               onClick={() => {
-                setActiveTabId(null);
-                setShowNewForm(true);
+                const newTabId = `__new__${emptyTabCounter}`;
+                setEmptyTabCounter((c) => c + 1);
+                setOpenTabIds((prev) => [...prev, newTabId]);
+                setActiveTabId(newTabId);
               }}
               title="New Session"
             >

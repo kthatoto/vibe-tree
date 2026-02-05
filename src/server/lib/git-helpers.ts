@@ -28,7 +28,7 @@ interface GhPR {
   labels: { name: string }[];
   assignees: { login: string }[];
   reviewDecision: string;
-  reviewRequests: { login: string }[];
+  reviewRequests: { login?: string; name?: string }[]; // User has login, Team has name
   reviews: { author: { login: string }; state: string }[];
   statusCheckRollup?: { conclusion?: string }[];
   additions: number;
@@ -163,11 +163,13 @@ export function getPRs(repoPath: string): PRInfo[] {
     const prs: GhPR[] = JSON.parse(output);
     return prs.map((pr) => {
       // Filter out bot reviewers (e.g., GitHub Copilot)
-      const isBot = (login: string | undefined) =>
-        login && (login.toLowerCase().includes("copilot") || login.endsWith("[bot]"));
+      const isBot = (name: string | undefined) =>
+        name && (name.toLowerCase().includes("copilot") || name.endsWith("[bot]"));
+
+      // Get reviewers - supports both User (login) and Team (name)
       const humanReviewers = (pr.reviewRequests ?? [])
-        .map((r) => r.login)
-        .filter((login): login is string => !!login && !isBot(login));
+        .map((r) => r.login || r.name) // User has login, Team has name
+        .filter((name): name is string => !!name && !isBot(name));
 
       // Check if there are any human reviews submitted (exclude bots)
       const humanReviews = (pr.reviews ?? []).filter(

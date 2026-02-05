@@ -465,7 +465,55 @@ chatRouter.post("/send", async (c) => {
     )
     .limit(1);
 
-  const isAlreadyRunning = runningRuns.length > 0;
+  const runningRun = runningRuns[0];
+
+  // If already running, cancel the current execution first
+  if (runningRun) {
+    console.log(`[Chat] Send: Cancelling running agent to process new message`);
+
+    // Get streaming state to preserve chunks
+    const state = streamingStates.get(input.sessionId);
+
+    // Kill the process if we have a pid
+    if (runningRun.pid) {
+      try {
+        process.kill(runningRun.pid, "SIGTERM");
+        setTimeout(() => {
+          try {
+            process.kill(runningRun.pid!, "SIGKILL");
+          } catch {
+            // Process may already be terminated
+          }
+        }, 500);
+      } catch {
+        // Process may already be terminated
+      }
+    }
+
+    // Update agent run status to cancelled
+    await db
+      .update(schema.agentRuns)
+      .set({ status: "cancelled", finishedAt: now })
+      .where(eq(schema.agentRuns.id, runningRun.id));
+
+    // Update assistant message with final content (preserve what we have)
+    if (state?.assistantMsgId) {
+      const finalContent = state.chunks.length > 0
+        ? JSON.stringify({ chunks: state.chunks, interrupted: true })
+        : JSON.stringify({ chunks: [], interrupted: true });
+
+      await db
+        .update(schema.chatMessages)
+        .set({ content: finalContent })
+        .where(eq(schema.chatMessages.id, state.assistantMsgId));
+    }
+
+    // Clear streaming state
+    streamingStates.delete(input.sessionId);
+
+    // Small delay to ensure process cleanup
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
 
   // 1. Save user message
   const userMsgResult = await db
@@ -482,17 +530,6 @@ chatRouter.post("/send", async (c) => {
   const userMsg = userMsgResult[0];
   if (!userMsg) {
     throw new BadRequestError("Failed to save user message");
-  }
-
-  // If already running, just save user message and return (don't start new process)
-  // Don't broadcast - frontend already has the message from API response
-  if (isAlreadyRunning) {
-    // Return immediately - message will be seen by Claude in next turn
-    return c.json({
-      userMessage: toMessage(userMsg),
-      runId: null,
-      status: "queued", // Message queued, not starting new execution
-    });
   }
 
   // Note: User message is returned via API response, not broadcast

@@ -564,11 +564,16 @@ export function PlanningPanel({
   const closeTab = useCallback((tabId: string) => {
     setOpenTabIds((prev) => {
       const newTabs = prev.filter((id) => id !== tabId);
-      // If closing the active tab, switch to the last remaining tab or null
+      // If closing the last session tab, replace with empty tab
+      if (newTabs.length === 0 && !isEmptyTab(tabId)) {
+        const newEmptyTabId = `__new__${Date.now()}`;
+        setActiveTabId(newEmptyTabId);
+        return [newEmptyTabId];
+      }
+      // If closing the active tab, switch to the last remaining tab
       if (activeTabId === tabId) {
         const newActiveId = newTabs.length > 0 ? newTabs[newTabs.length - 1] : null;
         setActiveTabId(newActiveId);
-        // onSessionSelect will be called in the useEffect below
       }
       return newTabs;
     });
@@ -1028,9 +1033,10 @@ export function PlanningPanel({
         ) : (
           <>
             {openTabs.map((tab) => {
-              const canClose = openTabs.length > 1;
               if (tab.type === "empty") {
                 const isActive = tab.id === activeTabId;
+                // Empty tab can only be closed if there are other tabs
+                const canCloseEmpty = openTabs.length > 1;
                 return (
                   <div
                     key={tab.id}
@@ -1039,7 +1045,7 @@ export function PlanningPanel({
                   >
                     <span className="planning-panel__tab-icon">+</span>
                     <span className="planning-panel__tab-title">New</span>
-                    {canClose && (
+                    {canCloseEmpty && (
                       <button
                         className="planning-panel__tab-close"
                         onClick={(e) => {
@@ -1059,6 +1065,7 @@ export function PlanningPanel({
               const isActive = session.id === activeTabId;
               const notification = session.chatSessionId ? getNotification(session.chatSessionId) : null;
               const isThinking = notification?.isThinking;
+              // Session tabs can always be closed (will be replaced with empty tab if last one)
               return (
                 <div
                   key={session.id}
@@ -1068,17 +1075,15 @@ export function PlanningPanel({
                   {isThinking && <span className="planning-panel__tab-thinking-indicator" />}
                   <span className="planning-panel__tab-icon">{typeIcon}</span>
                   <span className="planning-panel__tab-title">{session.title}</span>
-                  {canClose && (
-                    <button
-                      className="planning-panel__tab-close"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeTab(session.id);
-                      }}
-                    >
-                      ×
-                    </button>
-                  )}
+                  <button
+                    className="planning-panel__tab-close"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeTab(session.id);
+                    }}
+                  >
+                    ×
+                  </button>
                 </div>
               );
             })}

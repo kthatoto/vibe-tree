@@ -278,6 +278,22 @@ export function ChatPanel({
     const userMessage = input.trim();
     setInput("");
     const wasAlreadyLoading = loading;
+
+    // If sending during streaming, convert current streaming chunks to a message first
+    if (wasAlreadyLoading && streamingChunks.length > 0) {
+      // Create an interrupted assistant message from streaming chunks
+      const interruptedMsg: ChatMessage = {
+        id: Date.now() - 1, // Temporary ID, will be replaced by actual message from server
+        sessionId,
+        role: "assistant",
+        content: JSON.stringify({ chunks: streamingChunks, interrupted: true }),
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, interruptedMsg]);
+      setStreamingChunks([]);
+      hasStreamingChunksRef.current = false;
+    }
+
     if (!wasAlreadyLoading) {
       setLoading(true);
     }

@@ -495,27 +495,26 @@ export function PlanningPanel({
 
     const unsubStreamingEnd = wsClient.on("chat.streaming.end", async (msg) => {
       const data = msg.data as { sessionId: string };
-      console.log(`[PlanningPanel] streaming.end received, sessionId=${data.sessionId}, expected=${selectedSession.chatSessionId}`);
       if (data.sessionId !== selectedSession.chatSessionId) return;
 
       // Track message count per session
       const currentCount = (messageCountRef.current.get(selectedSession.id) || 0) + 1;
       messageCountRef.current.set(selectedSession.id, currentCount);
-      console.log(`[PlanningPanel] Title generation: count=${currentCount}, title="${selectedSession.title}"`);
 
-      // Generate title for first 3 turns (6 messages = 3 user + 3 assistant)
-      // After that, only update occasionally or if title is still default
-      const shouldUpdate = currentCount <= 6 ||
+      // Always update title in first 3 turns (6 messages)
+      // After that, only update if title looks like a default
+      const isDefaultTitle =
         selectedSession.title === "Untitled Session" ||
-        selectedSession.title.startsWith("New ");
+        selectedSession.title.startsWith("New ") ||
+        selectedSession.title.startsWith("Planning:") ||
+        selectedSession.title.startsWith("Refinement:") ||
+        selectedSession.title.startsWith("Execute:");
 
-      console.log(`[PlanningPanel] shouldUpdate=${shouldUpdate}`);
+      const shouldUpdate = currentCount <= 6 || isDefaultTitle;
       if (!shouldUpdate) return;
 
       try {
-        console.log(`[PlanningPanel] Calling generateSessionTitle for ${selectedSession.id}`);
         const result = await api.generateSessionTitle(selectedSession.id, currentCount);
-        console.log(`[PlanningPanel] Title generation result:`, result);
         if (result.updated) {
           setSessions((prev) =>
             prev.map((s) => s.id === selectedSession.id ? { ...s, title: result.title } : s)

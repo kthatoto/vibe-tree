@@ -80,6 +80,22 @@ export function ChatPanel({
   // Quick mode (use haiku for faster responses)
   const [quickMode, setQuickMode] = useState(false);
 
+  // Refs for callbacks to avoid stale closures in WebSocket handlers
+  const onInstructionUpdatedRef = useRef(onInstructionUpdated);
+  const onTodoUpdateRef = useRef(onTodoUpdate);
+  const onQuestionUpdateRef = useRef(onQuestionUpdate);
+  const executeContextRef = useRef(executeContext);
+  const planningBranchNameRef = useRef(planningBranchName);
+
+  // Keep refs up to date
+  useEffect(() => {
+    onInstructionUpdatedRef.current = onInstructionUpdated;
+    onTodoUpdateRef.current = onTodoUpdate;
+    onQuestionUpdateRef.current = onQuestionUpdate;
+    executeContextRef.current = executeContext;
+    planningBranchNameRef.current = planningBranchName;
+  }, [onInstructionUpdated, onTodoUpdate, onQuestionUpdate, executeContext, planningBranchName]);
+
   // Load messages and restore streaming state if active
   const loadMessages = useCallback(async () => {
     try {
@@ -214,27 +230,27 @@ export function ChatPanel({
           .join("");
 
         // Extract todo updates (execute mode or planning mode)
-        const targetBranchName = executeContext?.branchName || planningBranchName;
-        if (onTodoUpdate && targetBranchName) {
+        const targetBranchName = executeContextRef.current?.branchName || planningBranchNameRef.current;
+        if (onTodoUpdateRef.current && targetBranchName) {
           const todoUpdate = extractTodoUpdates(textContent);
           if (todoUpdate) {
-            onTodoUpdate(todoUpdate, targetBranchName);
+            onTodoUpdateRef.current(todoUpdate, targetBranchName);
           }
         }
 
         // Extract questions (planning mode)
-        if (onQuestionUpdate) {
+        if (onQuestionUpdateRef.current) {
           const questionUpdate = extractQuestions(textContent);
           if (questionUpdate) {
-            onQuestionUpdate(questionUpdate);
+            onQuestionUpdateRef.current(questionUpdate);
           }
         }
 
         // Auto-apply instruction edits without confirmation
-        if (onInstructionUpdated) {
+        if (onInstructionUpdatedRef.current) {
           const instructionEdit = extractInstructionEdit(textContent);
           if (instructionEdit) {
-            onInstructionUpdated(instructionEdit.newContent);
+            onInstructionUpdatedRef.current(instructionEdit.newContent);
           }
         }
 
@@ -565,19 +581,21 @@ export function ChatPanel({
     }
 
     const suggestions = extractTaskSuggestions(msg.content);
-    // Only show instruction edit UI if auto-apply is not enabled
-    const instructionEdit = onInstructionUpdated ? null : extractInstructionEdit(msg.content);
+    const instructionEdit = extractInstructionEdit(msg.content);
     let cleanContent = removeTaskTags(msg.content);
-    // Always remove instruction edit tags from display
-    cleanContent = removeInstructionEditTags(cleanContent);
+    if (instructionEdit) {
+      cleanContent = removeInstructionEditTags(cleanContent);
+    }
 
-    const isInstructionAccepted = acceptedInstructions.has(msg.id);
+    // Auto-applied if onInstructionUpdated is provided
+    const isInstructionAutoApplied = !!onInstructionUpdated;
+    const isInstructionAccepted = isInstructionAutoApplied || acceptedInstructions.has(msg.id);
 
     return (
       <>
         <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{cleanContent}</p>
 
-        {/* Instruction Edit Proposal - only shown when auto-apply is disabled */}
+        {/* Instruction Edit Proposal */}
         {instructionEdit && (
           <div style={{
             marginTop: 12,
@@ -753,16 +771,17 @@ export function ChatPanel({
                 .map(c => c.content || "")
                 .join("");
               const suggestions = extractTaskSuggestions(textContent);
-              // Only show instruction edit UI if auto-apply is not enabled
-              const instructionEdit = onInstructionUpdated ? null : extractInstructionEdit(textContent);
-              const isInstructionAccepted = acceptedInstructions.has(msg.id);
+              const instructionEdit = extractInstructionEdit(textContent);
+              // Auto-applied if onInstructionUpdated is provided
+              const isInstructionAutoApplied = !!onInstructionUpdated;
+              const isInstructionAccepted = isInstructionAutoApplied || acceptedInstructions.has(msg.id);
 
               // Render chunks separately with task suggestions and instruction edits at the end
               return (
                 <div key={msg.id} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {chunks.map((chunk, i) => renderChunk(chunk, i, i === 0))}
 
-                  {/* Instruction Edit Proposal from chunks - only shown when auto-apply is disabled */}
+                  {/* Instruction Edit Proposal from chunks */}
                   {instructionEdit && (
                     <div style={{
                       border: "1px solid #374151",

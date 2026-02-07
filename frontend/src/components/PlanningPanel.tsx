@@ -270,6 +270,10 @@ export function PlanningPanel({
   const selectedSessionRef = useRef(selectedSession);
   selectedSessionRef.current = selectedSession;
 
+  // Ref to track the latest planning branch index for async operations
+  const planningCurrentBranchIndexRef = useRef(planningCurrentBranchIndex);
+  planningCurrentBranchIndexRef.current = planningCurrentBranchIndex;
+
   // Ref to track pending nodes (added but not yet saved to API) for parent lookup
   const pendingNodesRef = useRef<TaskNode[]>([]);
 
@@ -530,7 +534,7 @@ export function PlanningPanel({
 
       // Auto-advance for Planning Session - automatically advance to next branch without confirmation
       if (selectedSession.type === "planning" && selectedSession.executeBranches) {
-        const currentIdx = planningCurrentBranchIndex;
+        const currentIdx = planningCurrentBranchIndexRef.current;
         const maxIdx = selectedSession.executeBranches.length - 1;
 
         if (currentIdx < maxIdx) {
@@ -546,7 +550,7 @@ export function PlanningPanel({
     return () => {
       unsubStreamingEnd();
     };
-  }, [selectedSession?.id, selectedSession?.chatSessionId, selectedSession?.title, selectedSession?.type, selectedSession?.executeBranches, planningCurrentBranchIndex]);
+  }, [selectedSession?.id, selectedSession?.chatSessionId, selectedSession?.title, selectedSession?.type, selectedSession?.executeBranches]);
 
   // Load external links when session changes
   useEffect(() => {

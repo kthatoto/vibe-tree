@@ -737,8 +737,10 @@ const generateTitleSchema = z.object({
 // POST /api/planning-sessions/:id/generate-title - Auto-generate session title
 planningSessionsRouter.post("/:id/generate-title", async (c) => {
   const id = c.req.param("id");
+  console.log(`[PlanningSession] generate-title called for session ${id}`);
   const body = await c.req.json();
   const { messageCount } = validateOrThrow(generateTitleSchema, body);
+  console.log(`[PlanningSession] messageCount=${messageCount}`);
 
   const [session] = await db
     .select()

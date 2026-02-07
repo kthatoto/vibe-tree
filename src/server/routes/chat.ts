@@ -1097,6 +1097,7 @@ const INSTRUCTION_REVIEW_SYSTEM_PROMPT = `あなたはタスクインストラ�
 3. より良い表現や構成を提案する
 4. 技術的な観点からのフィードバックを行う
 5. 足りない情報を質問で引き出す
+6. **ToDoリストを作成・更新する**
 
 ## 【重要】AskUserQuestion ツールを積極的に使う
 ユーザーに質問する際は、**AskUserQuestion ツール**を使用してください。
@@ -1151,6 +1152,39 @@ const INSTRUCTION_REVIEW_SYSTEM_PROMPT = `あなたはタスクインストラ�
 - セッション管理
 - ログアウト機能
 <</INSTRUCTION_EDIT>>
+
+## ToDo管理フォーマット【重要】
+タスクの実装手順や作業項目を管理するために、ToDoリストを作成・更新してください。
+インストラクションの内容に基づいて、具体的なToDoを提案してください。
+
+<<TODO_UPDATE>>
+<item action="add" status="pending">ToDoの内容をここに記載</item>
+<item action="add" status="pending">別のToDoの内容</item>
+<item action="complete" id="123" />
+<item action="update" id="456" status="in_progress">更新後のタイトル</item>
+<item action="delete" id="789" />
+<</TODO_UPDATE>>
+
+### ToDoアクション一覧：
+- **add**: 新しいToDoを追加（status: pending/in_progress/completed）
+- **complete**: 既存のToDoを完了にする（idが必要）
+- **update**: 既存のToDoを更新する（id必須、status/titleを変更可能）
+- **delete**: 既存のToDoを削除する（idが必要）
+
+### 使用ガイドライン：
+- インストラクションを具体化したら、それに対応するToDoも提案する
+- ユーザーと合意した実装方針をToDoに反映する
+- ToDoは実装時の作業チェックリストとして使用される
+- 1メッセージで複数のToDoアクションを含めてOK
+
+### 例：
+「インストラクションを整理したので、ToDoリストも作成しました：」
+
+<<TODO_UPDATE>>
+<item action="add" status="pending">ログイン画面のUIを作成する</item>
+<item action="add" status="pending">認証APIエンドポイントを実装する</item>
+<item action="add" status="pending">セッション管理ロジックを追加する</item>
+<</TODO_UPDATE>>
 `;
 
 // Helper: Build prompt with full context
@@ -1288,11 +1322,29 @@ ${gitStatus || "Clean working directory"}
       .limit(1);
 
     if (planningSession[0]) {
-      // Add base branch info
-      parts.push(`## ベースブランチ
+      // Check if this is a multi-branch planning session
+      const executeBranches = planningSession[0].executeBranchesJson
+        ? JSON.parse(planningSession[0].executeBranchesJson) as string[]
+        : [];
+      const currentBranchIndex = planningSession[0].currentExecuteIndex ?? 0;
+      const currentBranch = executeBranches.length > 0
+        ? executeBranches[currentBranchIndex]
+        : planningSession[0].baseBranch;
+
+      if (executeBranches.length > 0) {
+        // Multi-branch planning session
+        parts.push(`## 作業対象ブランチ一覧
+${executeBranches.map((b, i) => `${i === currentBranchIndex ? "→ " : "  "}${i + 1}. \`${b}\`${i === currentBranchIndex ? " 【現在編集中】" : ""}`).join("\n")}
+
+現在は **${currentBranch}** のインストラクションとToDoを編集しています。
+`);
+      } else {
+        // Single branch (legacy)
+        parts.push(`## ベースブランチ
 このPlanning Sessionのベースブランチ: \`${planningSession[0].baseBranch}\`
 提案するタスクは、このブランチを起点として作成されます。
 `);
+      }
 
       // Add task instruction for Planning sessions
       if (isInstructionReviewSession) {
@@ -1302,18 +1354,64 @@ ${gitStatus || "Clean working directory"}
           .where(
             and(
               eq(schema.taskInstructions.repoId, session.repoId),
-              eq(schema.taskInstructions.branchName, planningSession[0].baseBranch)
+              eq(schema.taskInstructions.branchName, currentBranch)
             )
           )
           .limit(1);
 
         if (instructions[0]) {
           parts.push(`## タスクインストラクション【精査対象】
+ブランチ: \`${currentBranch}\`
+
 以下がこのタスクのインストラクションです。内容を確認し、不明瞭な点や改善点があれば指摘してください。
+変更がある場合は <<INSTRUCTION_EDIT>> タグで全文を提案してください。
 
 \`\`\`markdown
 ${instructions[0].instructionMd}
 \`\`\`
+`);
+        } else {
+          parts.push(`## タスクインストラクション【未作成】
+ブランチ: \`${currentBranch}\`
+
+このブランチにはまだインストラクションがありません。
+ユーザーと対話してインストラクションを作成してください。
+作成後は <<INSTRUCTION_EDIT>> タグで全文を提案してください。
+`);
+        }
+
+        // Add current todos for this branch
+        const todos = await db
+          .select()
+          .from(schema.taskTodos)
+          .where(
+            and(
+              eq(schema.taskTodos.repoId, session.repoId),
+              eq(schema.taskTodos.branchName, currentBranch)
+            )
+          )
+          .orderBy(asc(schema.taskTodos.orderIndex));
+
+        if (todos.length > 0) {
+          const todoList = todos.map((t) => {
+            const statusIcon = t.status === "completed" ? "✅" : t.status === "in_progress" ? "🔄" : "⬜";
+            return `${statusIcon} [id:${t.id}] ${t.title}`;
+          }).join("\n");
+
+          parts.push(`## 現在のToDoリスト
+ブランチ: \`${currentBranch}\`
+
+${todoList}
+
+ToDoを更新する場合は <<TODO_UPDATE>> タグを使用してください。
+`);
+        } else {
+          parts.push(`## ToDoリスト【未作成】
+ブランチ: \`${currentBranch}\`
+
+このブランチにはまだToDoがありません。
+インストラクションに基づいて、具体的な作業項目をToDoとして追加してください。
+<<TODO_UPDATE>> タグを使用してToDoを作成できます。
 `);
         }
       }

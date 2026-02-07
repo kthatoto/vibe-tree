@@ -495,11 +495,13 @@ export function PlanningPanel({
 
     const unsubStreamingEnd = wsClient.on("chat.streaming.end", async (msg) => {
       const data = msg.data as { sessionId: string };
+      console.log(`[PlanningPanel] streaming.end received, sessionId=${data.sessionId}, expected=${selectedSession.chatSessionId}`);
       if (data.sessionId !== selectedSession.chatSessionId) return;
 
       // Track message count per session
       const currentCount = (messageCountRef.current.get(selectedSession.id) || 0) + 1;
       messageCountRef.current.set(selectedSession.id, currentCount);
+      console.log(`[PlanningPanel] Title generation: count=${currentCount}, title="${selectedSession.title}"`);
 
       // Generate title for first 3 turns (6 messages = 3 user + 3 assistant)
       // After that, only update occasionally or if title is still default
@@ -507,10 +509,13 @@ export function PlanningPanel({
         selectedSession.title === "Untitled Session" ||
         selectedSession.title.startsWith("New ");
 
+      console.log(`[PlanningPanel] shouldUpdate=${shouldUpdate}`);
       if (!shouldUpdate) return;
 
       try {
+        console.log(`[PlanningPanel] Calling generateSessionTitle for ${selectedSession.id}`);
         const result = await api.generateSessionTitle(selectedSession.id, currentCount);
+        console.log(`[PlanningPanel] Title generation result:`, result);
         if (result.updated) {
           setSessions((prev) =>
             prev.map((s) => s.id === selectedSession.id ? { ...s, title: result.title } : s)

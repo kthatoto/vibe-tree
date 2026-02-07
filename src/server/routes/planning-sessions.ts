@@ -635,8 +635,8 @@ planningSessionsRouter.patch("/:id/execute-branches", async (c) => {
     throw new NotFoundError("Planning session not found");
   }
 
-  if (existing.type !== "execute") {
-    throw new BadRequestError("Session is not an execute session");
+  if (existing.type !== "execute" && existing.type !== "planning") {
+    throw new BadRequestError("Session must be execute or planning type");
   }
 
   const now = new Date().toISOString();

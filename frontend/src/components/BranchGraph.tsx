@@ -35,6 +35,7 @@ interface LayoutNode {
   row: number;
   isTentative?: boolean;
   tentativeTitle?: string;
+  taskId?: string; // For tentative nodes, stores the task ID for edge creation
 }
 
 interface LayoutEdge {
@@ -248,13 +249,54 @@ export default function BranchGraph({
         return `task/${slug}`;
       };
 
-      // Layout all tentative nodes at the same depth (baseDepth + 1), horizontally
-      const tentDepth = baseDepth + 1;
-      const fromNode = baseBranchNode || layoutNodes[0];
+      // Build parent-child map from tentativeEdges
+      const tentativeParentMap = new Map<string, string>(); // childId -> parentId
+      tentativeEdges.forEach((edge) => {
+        tentativeParentMap.set(edge.child, edge.parent);
+      });
 
+      // Build task ID to branch name map
+      const taskIdToBranchMap = new Map<string, string>();
       tentativeNodes.forEach((task) => {
         const branchName = task.branchName || generateTentBranchName(task.title, task.id);
+        taskIdToBranchMap.set(task.id, branchName);
+      });
+
+      // Calculate depth for each tentative node based on parent-child relationships
+      const tentativeDepths = new Map<string, number>();
+      const getDepth = (taskId: string): number => {
+        if (tentativeDepths.has(taskId)) return tentativeDepths.get(taskId)!;
+        const parentId = tentativeParentMap.get(taskId);
+        if (parentId) {
+          // Has a parent task - depth is parent depth + 1
+          const parentDepth = getDepth(parentId);
+          const depth = parentDepth + 1;
+          tentativeDepths.set(taskId, depth);
+          return depth;
+        }
+        // No parent task - depth is base depth + 1
+        const depth = baseDepth + 1;
+        tentativeDepths.set(taskId, depth);
+        return depth;
+      };
+
+      // Calculate depths for all tasks
+      tentativeNodes.forEach((task) => getDepth(task.id));
+
+      // Group tasks by depth for horizontal positioning
+      const tasksByDepth = new Map<number, typeof tentativeNodes>();
+      tentativeNodes.forEach((task) => {
+        const depth = tentativeDepths.get(task.id)!;
+        if (!tasksByDepth.has(depth)) tasksByDepth.set(depth, []);
+        tasksByDepth.get(depth)!.push(task);
+      });
+
+      // Layout tentative nodes
+      tentativeNodes.forEach((task) => {
+        const branchName = taskIdToBranchMap.get(task.id)!;
         if (nodeMap.has(branchName)) return; // Already exists as real branch
+
+        const tentDepth = tentativeDepths.get(task.id)!;
 
         const tentDummyNode: TreeNode = {
           branchName,
@@ -271,22 +313,44 @@ export default function BranchGraph({
           row: nextCol,
           isTentative: true,
           tentativeTitle: task.title,
+          taskId: task.id, // Store task ID for edge creation
         };
 
         layoutNodes.push(layoutNode);
         nodeMap.set(branchName, layoutNode);
+        nextCol++;
+      });
 
-        // Add edge from base branch
+      // Create edges for tentative nodes
+      tentativeNodes.forEach((task) => {
+        const branchName = taskIdToBranchMap.get(task.id)!;
+        const toNode = nodeMap.get(branchName);
+        if (!toNode) return;
+
+        const parentTaskId = tentativeParentMap.get(task.id);
+        let fromNode: LayoutNode | undefined;
+
+        if (parentTaskId) {
+          // Has a parent task - find the parent's layout node
+          const parentBranchName = taskIdToBranchMap.get(parentTaskId);
+          if (parentBranchName) {
+            fromNode = nodeMap.get(parentBranchName);
+          }
+        }
+
+        if (!fromNode) {
+          // No parent task or parent not found - connect to base branch
+          fromNode = baseBranchNode || layoutNodes[0];
+        }
+
         if (fromNode) {
           tentativeLayoutEdges.push({
             from: fromNode,
-            to: layoutNode,
+            to: toNode,
             isDesigned: false,
             isTentative: true,
           });
         }
-
-        nextCol++;
       });
     }
 

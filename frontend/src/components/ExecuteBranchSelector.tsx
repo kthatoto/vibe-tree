@@ -29,7 +29,7 @@ interface LayoutEdge {
 const NODE_WIDTH = 140;
 const NODE_HEIGHT = 36;
 const HORIZONTAL_GAP = 16;
-const VERTICAL_GAP = 28;
+const VERTICAL_GAP = 44; // Increased to make room for "select descendants" button
 const TOP_PADDING = 12;
 const LEFT_PADDING = 8;
 
@@ -98,14 +98,6 @@ export default function ExecuteBranchSelector({
       onSelectionChange([...selectedBranches, ...newBranches]);
     }
   }, [getDescendants, selectedBranches, onSelectionChange, defaultBranch]);
-
-  // Select all branches (excluding default)
-  const handleSelectAll = useCallback(() => {
-    const allBranches = nodes
-      .map(n => n.branchName)
-      .filter(b => b !== defaultBranch);
-    onSelectionChange(allBranches);
-  }, [nodes, defaultBranch, onSelectionChange]);
 
   const getSelectionOrder = useCallback((branchName: string): number | null => {
     const index = selectedBranches.indexOf(branchName);
@@ -287,7 +279,6 @@ export default function ExecuteBranchSelector({
         opacity={isMerged ? 0.5 : 1}
         onClick={() => !isDefault && handleToggleBranch(id)}
         onContextMenu={(e) => handleContextMenu(e, id)}
-        onDoubleClick={() => !isDefault && hasChildren && handleSelectSubtree(id)}
       >
         <rect
           x={x}
@@ -342,6 +333,36 @@ export default function ExecuteBranchSelector({
             </span>
           </div>
         </foreignObject>
+        {/* "Select descendants" button - show when selected and has children */}
+        {isSelected && hasChildren && (
+          <g
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSelectSubtree(id);
+            }}
+            style={{ cursor: "pointer" }}
+          >
+            <rect
+              x={x + NODE_WIDTH / 2 - 28}
+              y={y + NODE_HEIGHT + 2}
+              width={56}
+              height={16}
+              rx={3}
+              fill="#3b82f6"
+            />
+            <text
+              x={x + NODE_WIDTH / 2}
+              y={y + NODE_HEIGHT + 11}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize={9}
+              fill="#fff"
+              fontWeight="500"
+            >
+              ↓ 以下も
+            </text>
+          </g>
+        )}
       </g>
     );
   };
@@ -449,36 +470,21 @@ export default function ExecuteBranchSelector({
           <span style={{ fontSize: 11, color: "#9ca3af" }}>
             Queue ({selectedBranches.length})
           </span>
-          <div style={{ display: "flex", gap: 8 }}>
+          {selectedBranches.length > 0 && (
             <button
-              onClick={handleSelectAll}
+              onClick={() => onSelectionChange([])}
               style={{
                 background: "none",
                 border: "none",
-                color: "#3b82f6",
+                color: "#6b7280",
                 cursor: "pointer",
                 fontSize: 10,
                 padding: "2px 4px",
               }}
             >
-              All
+              Clear
             </button>
-            {selectedBranches.length > 0 && (
-              <button
-                onClick={() => onSelectionChange([])}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#6b7280",
-                  cursor: "pointer",
-                  fontSize: 10,
-                  padding: "2px 4px",
-                }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
+          )}
         </div>
 
         <div style={{ flex: 1, overflow: "auto", padding: "6px" }}>

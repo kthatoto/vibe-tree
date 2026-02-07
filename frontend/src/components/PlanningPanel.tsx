@@ -26,6 +26,7 @@ import { useSessionNotifications } from "../lib/useSessionNotifications";
 import { ChatPanel } from "./ChatPanel";
 import ExecuteBranchSelector from "./ExecuteBranchSelector";
 import ExecuteSidebar from "./ExecuteSidebar";
+import PlanningTodoOverview from "./PlanningTodoOverview";
 import type { TaskSuggestion } from "../lib/task-parser";
 import type { TodoUpdate } from "../lib/todo-parser";
 import githubIcon from "../assets/github.svg";
@@ -1810,6 +1811,19 @@ export function PlanningPanel({
                   )}
                 </>
               )}
+            </div>
+          )}
+
+          {/* ToDo Overview - for sessions with tasks */}
+          {selectedSession.nodes.length > 0 && (
+            <div className="planning-panel__todo-overview">
+              <PlanningTodoOverview
+                repoId={repoId}
+                branches={selectedSession.nodes
+                  .map((n) => n.branchName)
+                  .filter((b): b is string => !!b)}
+                planningSessionId={selectedSession.id}
+              />
             </div>
           )}
 

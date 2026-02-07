@@ -1,0 +1,187 @@
+.planning-todo-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.planning-todo-overview--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60px;
+}
+
+.planning-todo-overview__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #333;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.planning-todo-overview--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  font-size: 12px;
+  padding: 16px;
+}
+
+.planning-todo-overview__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.planning-todo-overview__header h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.planning-todo-overview__progress {
+  font-size: 11px;
+  color: #666;
+  font-weight: 500;
+}
+
+.planning-todo-overview__branches {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.planning-todo-overview__branch {
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #1a1a1a;
+  overflow: hidden;
+}
+
+.planning-todo-overview__branch--complete {
+  border-color: #22c55e44;
+}
+
+.planning-todo-overview__branch-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.planning-todo-overview__branch-header:hover {
+  background: #222;
+}
+
+.planning-todo-overview__branch-toggle {
+  font-size: 8px;
+  color: #666;
+  width: 12px;
+}
+
+.planning-todo-overview__branch-name {
+  flex: 1;
+  font-size: 12px;
+  color: #ccc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.planning-todo-overview__branch-count {
+  font-size: 10px;
+  color: #666;
+  padding: 1px 4px;
+  background: #222;
+  border-radius: 2px;
+}
+
+.planning-todo-overview__branch-done {
+  color: #22c55e;
+  font-size: 11px;
+}
+
+.planning-todo-overview__branch-todos {
+  border-top: 1px solid #333;
+  padding: 4px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.planning-todo-overview__no-todos {
+  font-size: 11px;
+  color: #555;
+  font-style: italic;
+  padding: 4px;
+}
+
+.planning-todo-overview__todo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 2px;
+}
+
+.planning-todo-overview__todo:hover {
+  background: #252525;
+}
+
+.planning-todo-overview__todo--completed {
+  opacity: 0.6;
+}
+
+.planning-todo-overview__todo--completed .planning-todo-overview__todo-title {
+  text-decoration: line-through;
+  color: #666;
+}
+
+.planning-todo-overview__todo-status {
+  font-size: 10px;
+  width: 14px;
+  text-align: center;
+}
+
+.planning-todo-overview__todo--completed .planning-todo-overview__todo-status {
+  color: #22c55e;
+}
+
+.planning-todo-overview__todo--in_progress .planning-todo-overview__todo-status {
+  color: #3b82f6;
+}
+
+.planning-todo-overview__todo--pending .planning-todo-overview__todo-status {
+  color: #555;
+}
+
+.planning-todo-overview__todo-title {
+  flex: 1;
+  font-size: 11px;
+  color: #aaa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.planning-todo-overview__todo-ai {
+  font-size: 9px;
+  padding: 1px 3px;
+  background: #7c3aed33;
+  color: #a78bfa;
+  border-radius: 2px;
+}

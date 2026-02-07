@@ -655,8 +655,16 @@ export function PlanningPanel({
         `Planning: ${pendingPlanning.branchName}`,
         "planning"
       );
-      // Replace optimistic session with real one
-      setSessions((prev) => prev.map((s) => s.id === tempId ? realSession : s));
+      // Replace optimistic session with real one (or remove if WebSocket already added it)
+      setSessions((prev) => {
+        const hasReal = prev.some((s) => s.id === realSession.id);
+        if (hasReal) {
+          // WebSocket already added, just remove temp
+          return prev.filter((s) => s.id !== tempId);
+        }
+        // Replace temp with real
+        return prev.map((s) => s.id === tempId ? realSession : s);
+      });
       // Update selected session if it's the optimistic one
       if (selectedSession?.id === tempId) {
         onSessionSelect?.(realSession);

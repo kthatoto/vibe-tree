@@ -1,13 +1,14 @@
 // Parse instruction edit suggestions from AI messages
 
-const INSTRUCTION_EDIT_REGEX = /<<INSTRUCTION_EDIT>>([\s\S]*?)<<\/INSTRUCTION_EDIT>>/g;
+const INSTRUCTION_EDIT_REGEX = /<<INSTRUCTION_EDIT>>([\s\S]*?)<<\/INSTRUCTION_EDIT>>/;
+const INSTRUCTION_EDIT_REGEX_GLOBAL = /<<INSTRUCTION_EDIT>>([\s\S]*?)<<\/INSTRUCTION_EDIT>>/g;
 
 export interface InstructionEdit {
   newContent: string;
 }
 
 export function extractInstructionEdit(content: string): InstructionEdit | null {
-  const match = INSTRUCTION_EDIT_REGEX.exec(content);
+  const match = content.match(INSTRUCTION_EDIT_REGEX);
   if (!match) return null;
 
   return {
@@ -16,7 +17,7 @@ export function extractInstructionEdit(content: string): InstructionEdit | null 
 }
 
 export function removeInstructionEditTags(content: string): string {
-  return content.replace(INSTRUCTION_EDIT_REGEX, "").trim();
+  return content.replace(INSTRUCTION_EDIT_REGEX_GLOBAL, "").trim();
 }
 
 // Simple diff: split by lines and compare

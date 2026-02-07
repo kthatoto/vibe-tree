@@ -494,15 +494,14 @@ export function PlanningPanel({
     if (!selectedSession?.chatSessionId) return;
 
     const unsubStreamingEnd = wsClient.on("chat.streaming.end", async (msg) => {
-      const data = msg.data as { sessionId: string };
+      const data = msg.data as { sessionId: string; message?: { content: string } };
       if (data.sessionId !== selectedSession.chatSessionId) return;
 
       // Track message count per session
       const currentCount = (messageCountRef.current.get(selectedSession.id) || 0) + 1;
       messageCountRef.current.set(selectedSession.id, currentCount);
 
-      // Always update title in first 3 turns (6 messages)
-      // After that, only update if title looks like a default
+      // Title generation
       const isDefaultTitle =
         selectedSession.title === "Untitled Session" ||
         selectedSession.title.startsWith("New ") ||
@@ -510,25 +509,48 @@ export function PlanningPanel({
         selectedSession.title.startsWith("Refinement:") ||
         selectedSession.title.startsWith("Execute:");
 
-      const shouldUpdate = currentCount <= 6 || isDefaultTitle;
-      if (!shouldUpdate) return;
-
-      try {
-        const result = await api.generateSessionTitle(selectedSession.id, currentCount);
-        if (result.updated) {
-          setSessions((prev) =>
-            prev.map((s) => s.id === selectedSession.id ? { ...s, title: result.title } : s)
-          );
+      const shouldUpdateTitle = currentCount <= 6 || isDefaultTitle;
+      if (shouldUpdateTitle) {
+        try {
+          const result = await api.generateSessionTitle(selectedSession.id, currentCount);
+          if (result.updated) {
+            setSessions((prev) =>
+              prev.map((s) => s.id === selectedSession.id ? { ...s, title: result.title } : s)
+            );
+          }
+        } catch (err) {
+          console.error("[PlanningPanel] Title generation failed:", err);
         }
-      } catch (err) {
-        console.error("[PlanningPanel] Title generation failed:", err);
+      }
+
+      // Auto-advance for Planning Session
+      if (selectedSession.type === "planning" && selectedSession.executeBranches && data.message) {
+        const content = data.message.content;
+        // Check if AI provided instruction edit or todo updates
+        const hasInstructionEdit = content.includes("<<INSTRUCTION_EDIT>>") || content.includes("<</INSTRUCTION_EDIT>>");
+        const hasTodoUpdate = content.includes("<<TODO_UPDATE>>") || content.includes("<</TODO_UPDATE>>");
+
+        if (hasInstructionEdit || hasTodoUpdate) {
+          // Auto-advance to next branch after a short delay
+          const currentIdx = planningCurrentBranchIndex;
+          const maxIdx = selectedSession.executeBranches.length - 1;
+
+          if (currentIdx < maxIdx) {
+            setTimeout(() => {
+              const nextIdx = currentIdx + 1;
+              setPlanningCurrentBranchIndex(nextIdx);
+              // Update backend
+              api.updateExecuteBranches(selectedSession.id, selectedSession.executeBranches!, nextIdx).catch(console.error);
+            }, 1000);
+          }
+        }
       }
     });
 
     return () => {
       unsubStreamingEnd();
     };
-  }, [selectedSession?.id, selectedSession?.chatSessionId, selectedSession?.title]);
+  }, [selectedSession?.id, selectedSession?.chatSessionId, selectedSession?.title, selectedSession?.type, selectedSession?.executeBranches, planningCurrentBranchIndex]);
 
   // Load external links when session changes
   useEffect(() => {
@@ -1762,6 +1784,7 @@ export function PlanningPanel({
                         setError("Failed to save instruction");
                       }
                     }}
+                    planningBranchName={currentPlanningBranch}
                     onTodoUpdate={(update, branchName) => handleTodoUpdate(update, branchName)}
                   />
                 )}

@@ -37,6 +37,8 @@ interface ChatPanelProps {
   executeMode?: boolean;
   executeContext?: ExecuteContext;
   onTodoUpdate?: (update: TodoUpdate, branchName: string) => void;
+  /** For planning mode: current branch name for ToDo updates */
+  planningBranchName?: string;
 }
 
 interface StreamingChunk {
@@ -56,6 +58,7 @@ export function ChatPanel({
   executeMode = false,
   executeContext,
   onTodoUpdate,
+  planningBranchName,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -200,15 +203,16 @@ export function ChatPanel({
       if (data.sessionId === sessionId) {
         console.log(`[ChatPanel] streaming.end: Setting loading=false, message=${!!data.message}`);
 
-        // Extract todo updates from streaming chunks before clearing (execute mode only)
-        if (executeMode && executeContext && onTodoUpdate) {
+        // Extract todo updates from streaming chunks (execute mode or planning mode)
+        const targetBranchName = executeContext?.branchName || planningBranchName;
+        if (onTodoUpdate && targetBranchName) {
           const textContent = streamingChunksRef.current
             .filter(c => c.type === "text" || c.type === "text_delta")
             .map(c => c.content || "")
             .join("");
           const todoUpdate = extractTodoUpdates(textContent);
           if (todoUpdate) {
-            onTodoUpdate(todoUpdate, executeContext.branchName);
+            onTodoUpdate(todoUpdate, targetBranchName);
           }
         }
 

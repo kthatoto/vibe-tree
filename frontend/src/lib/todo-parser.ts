@@ -2,12 +2,12 @@
  * Parser for AI-suggested ToDo updates
  *
  * Format:
- * <todo-update>
- *   <item action="complete" id="1" />
- *   <item action="add" status="pending">新しいタスク</item>
- *   <item action="update" id="2" status="in_progress" />
- *   <item action="delete" id="3" />
- * </todo-update>
+ * <<TODO_UPDATE>>
+ * <item action="complete" id="1" />
+ * <item action="add" status="pending">新しいタスク</item>
+ * <item action="update" id="2" status="in_progress" />
+ * <item action="delete" id="3" />
+ * <</TODO_UPDATE>>
  */
 
 export interface TodoUpdateItem {
@@ -26,9 +26,9 @@ export interface TodoUpdate {
  * Extract todo update suggestions from AI response content
  */
 export function extractTodoUpdates(content: string): TodoUpdate | null {
-  // Match <todo-update>...</todo-update>
+  // Match <<TODO_UPDATE>>...<</TODO_UPDATE>>
   const todoUpdateMatch = content.match(
-    /<todo-update>([\s\S]*?)<\/todo-update>/
+    /<<TODO_UPDATE>>([\s\S]*?)<<\/TODO_UPDATE>>/
   );
   if (!todoUpdateMatch) return null;
 
@@ -90,5 +90,5 @@ export function extractTodoUpdates(content: string): TodoUpdate | null {
  * Remove todo-update tags from content for display
  */
 export function removeTodoUpdateTags(content: string): string {
-  return content.replace(/<todo-update>[\s\S]*?<\/todo-update>/g, "").trim();
+  return content.replace(/<<TODO_UPDATE>>[\s\S]*?<<\/TODO_UPDATE>>/g, "").trim();
 }

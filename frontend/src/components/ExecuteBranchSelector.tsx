@@ -359,7 +359,7 @@ export default function ExecuteBranchSelector({
               fill="#fff"
               fontWeight="500"
             >
-              ↓ 以下も
+  + children
             </text>
           </g>
         )}

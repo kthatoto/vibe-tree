@@ -655,6 +655,12 @@ export function PlanningPanel({
         `Planning: ${pendingPlanning.branchName}`,
         "planning"
       );
+      // Update tab IDs first (before sessions, to avoid orphaned tab IDs)
+      setOpenTabIds((prev) => prev.map((id) => id === tempId ? realSession.id : id));
+      // Update active tab if needed
+      if (activeTabId === tempId) {
+        setActiveTabId(realSession.id);
+      }
       // Replace optimistic session with real one (or remove if WebSocket already added it)
       setSessions((prev) => {
         const hasReal = prev.some((s) => s.id === realSession.id);
@@ -668,12 +674,6 @@ export function PlanningPanel({
       // Update selected session if it's the optimistic one
       if (selectedSession?.id === tempId) {
         onSessionSelect?.(realSession);
-      }
-      // Update open tab IDs
-      setOpenTabIds((prev) => prev.map((id) => id === tempId ? realSession.id : id));
-      // Update active tab if needed
-      if (activeTabId === tempId) {
-        setActiveTabId(realSession.id);
       }
     } catch (err) {
       // Remove optimistic session on error

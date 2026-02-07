@@ -87,8 +87,17 @@ export function AskUserQuestionUI({ data, onSubmit, disabled }: AskUserQuestionU
   };
 
   const handleSubmit = () => {
+    if (disabled || !hasAnyAnswer()) return;
     const answer = formatAnswers(data.questions, selections, otherInputs);
     onSubmit(answer);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // ⌘+Enter or Ctrl+Enter to submit
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      handleSubmit();
+    }
   };
 
   // Check if at least one answer is provided
@@ -104,12 +113,15 @@ export function AskUserQuestionUI({ data, onSubmit, disabled }: AskUserQuestionU
   };
 
   return (
-    <div style={{
-      background: "#1e293b",
-      border: "1px solid #3b82f6",
-      borderRadius: 8,
-      margin: "8px 4px",
-    }}>
+    <div
+      style={{
+        background: "#1e293b",
+        border: "1px solid #3b82f6",
+        borderRadius: 8,
+        margin: "8px 4px",
+      }}
+      onKeyDown={handleKeyDown}
+    >
       {/* Header */}
       <div style={{
         padding: "10px 14px",
@@ -164,7 +176,7 @@ export function AskUserQuestionUI({ data, onSubmit, disabled }: AskUserQuestionU
             cursor: disabled || !hasAnyAnswer() ? "not-allowed" : "pointer",
           }}
         >
-          回答を送信
+          回答を送信 (⌘↵)
         </button>
       </div>
     </div>

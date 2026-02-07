@@ -232,6 +232,20 @@ export const taskTodos = sqliteTable("task_todos", {
   updatedAt: text("updated_at").notNull(),
 });
 
+// Planning questions (questions accumulated during planning)
+export const planningQuestions = sqliteTable("planning_questions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  planningSessionId: text("planning_session_id").notNull(),
+  branchName: text("branch_name"), // which branch this question relates to (can be null for general questions)
+  question: text("question").notNull(),
+  assumption: text("assumption"), // "assuming X..." context
+  status: text("status").notNull().default("pending"), // pending | answered | skipped
+  answer: text("answer"),
+  orderIndex: integer("order_index").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 // Branch links (issues and PRs linked to branches)
 export const branchLinks = sqliteTable("branch_links", {
   id: integer("id").primaryKey({ autoIncrement: true }),

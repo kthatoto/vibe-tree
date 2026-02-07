@@ -351,6 +351,22 @@ export interface TaskTodo {
   updatedAt: string;
 }
 
+// Planning Question types
+export type PlanningQuestionStatus = "pending" | "answered" | "skipped";
+
+export interface PlanningQuestion {
+  id: number;
+  planningSessionId: string;
+  branchName: string | null;
+  question: string;
+  assumption: string | null;
+  status: PlanningQuestionStatus;
+  answer: string | null;
+  orderIndex: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Branch Link types
 export type BranchLinkType = "issue" | "pr";
 
@@ -1019,5 +1035,40 @@ export const api = {
     fetchJson<TaskTodo[]>(`${API_BASE}/todos/reorder`, {
       method: "POST",
       body: JSON.stringify({ repoId, branchName, todoIds }),
+    }),
+
+  // Questions
+  getQuestions: (planningSessionId: string) =>
+    fetchJson<PlanningQuestion[]>(
+      `${API_BASE}/questions?planningSessionId=${encodeURIComponent(planningSessionId)}`
+    ),
+  createQuestion: (data: {
+    planningSessionId: string;
+    branchName?: string;
+    question: string;
+    assumption?: string;
+  }) =>
+    fetchJson<PlanningQuestion>(`${API_BASE}/questions`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateQuestion: (id: number, data: {
+    question?: string;
+    assumption?: string;
+    status?: PlanningQuestionStatus;
+    answer?: string;
+  }) =>
+    fetchJson<PlanningQuestion>(`${API_BASE}/questions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteQuestion: (id: number) =>
+    fetchJson<{ success: boolean }>(`${API_BASE}/questions/${id}`, {
+      method: "DELETE",
+    }),
+  answerQuestion: (id: number, answer: string) =>
+    fetchJson<PlanningQuestion>(`${API_BASE}/questions/${id}/answer`, {
+      method: "POST",
+      body: JSON.stringify({ answer }),
     }),
 };

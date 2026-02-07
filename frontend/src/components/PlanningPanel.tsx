@@ -28,8 +28,10 @@ import ExecuteBranchSelector from "./ExecuteBranchSelector";
 import ExecuteSidebar from "./ExecuteSidebar";
 import ExecuteBranchTree from "./ExecuteBranchTree";
 import ExecuteTodoList from "./ExecuteTodoList";
+import PlanningQuestionsPanel from "./PlanningQuestionsPanel";
 import type { TaskSuggestion } from "../lib/task-parser";
 import type { TodoUpdate } from "../lib/todo-parser";
+import type { QuestionUpdate } from "../lib/question-parser";
 import githubIcon from "../assets/github.svg";
 import notionIcon from "../assets/notion.svg";
 import figmaIcon from "../assets/figma.svg";
@@ -1044,6 +1046,23 @@ export function PlanningPanel({
     }
   }, [repoId, selectedSession?.id]);
 
+  // Handle question updates from AI
+  const handleQuestionUpdate = useCallback(async (update: QuestionUpdate) => {
+    if (!selectedSession) return;
+    for (const item of update.items) {
+      try {
+        await api.createQuestion({
+          planningSessionId: selectedSession.id,
+          branchName: item.branchName,
+          question: item.question,
+          assumption: item.assumption,
+        });
+      } catch (err) {
+        console.error("Failed to create question:", err);
+      }
+    }
+  }, [selectedSession?.id]);
+
   // Handle branch completion (all todos done)
   const handleBranchCompleted = useCallback(async (branchName: string) => {
     if (!selectedSession || selectedSession.type !== "execute") return;
@@ -1786,6 +1805,7 @@ export function PlanningPanel({
                     }}
                     planningBranchName={currentPlanningBranch}
                     onTodoUpdate={(update, branchName) => handleTodoUpdate(update, branchName)}
+                    onQuestionUpdate={handleQuestionUpdate}
                   />
                 )}
               </div>
@@ -1867,6 +1887,13 @@ export function PlanningPanel({
                     />
                   </div>
                 )}
+
+                {/* Questions */}
+                <div className="planning-panel__questions-section">
+                  <PlanningQuestionsPanel
+                    planningSessionId={selectedSession.id}
+                  />
+                </div>
               </div>
             </div>
           )}

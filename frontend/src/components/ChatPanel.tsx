@@ -10,6 +10,7 @@ import {
 } from "../lib/instruction-parser";
 import { extractAskUserQuestion } from "../lib/ask-user-question";
 import { extractTodoUpdates, removeTodoUpdateTags, type TodoUpdate } from "../lib/todo-parser";
+import { extractQuestions, removeQuestionTags, type QuestionUpdate } from "../lib/question-parser";
 import { AskUserQuestionUI } from "./AskUserQuestionUI";
 import { wsClient } from "../lib/ws";
 import githubIcon from "../assets/github.svg";
@@ -39,6 +40,8 @@ interface ChatPanelProps {
   onTodoUpdate?: (update: TodoUpdate, branchName: string) => void;
   /** For planning mode: current branch name for ToDo updates */
   planningBranchName?: string;
+  /** For planning mode: question updates */
+  onQuestionUpdate?: (update: QuestionUpdate) => void;
 }
 
 interface StreamingChunk {
@@ -59,6 +62,7 @@ export function ChatPanel({
   executeContext,
   onTodoUpdate,
   planningBranchName,
+  onQuestionUpdate,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -203,16 +207,26 @@ export function ChatPanel({
       if (data.sessionId === sessionId) {
         console.log(`[ChatPanel] streaming.end: Setting loading=false, message=${!!data.message}`);
 
-        // Extract todo updates from streaming chunks (execute mode or planning mode)
+        // Extract text content from streaming chunks
+        const textContent = streamingChunksRef.current
+          .filter(c => c.type === "text" || c.type === "text_delta")
+          .map(c => c.content || "")
+          .join("");
+
+        // Extract todo updates (execute mode or planning mode)
         const targetBranchName = executeContext?.branchName || planningBranchName;
         if (onTodoUpdate && targetBranchName) {
-          const textContent = streamingChunksRef.current
-            .filter(c => c.type === "text" || c.type === "text_delta")
-            .map(c => c.content || "")
-            .join("");
           const todoUpdate = extractTodoUpdates(textContent);
           if (todoUpdate) {
             onTodoUpdate(todoUpdate, targetBranchName);
+          }
+        }
+
+        // Extract questions (planning mode)
+        if (onQuestionUpdate) {
+          const questionUpdate = extractQuestions(textContent);
+          if (questionUpdate) {
+            onQuestionUpdate(questionUpdate);
           }
         }
 

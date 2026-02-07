@@ -20,7 +20,7 @@ import { todosRouter } from "./routes/todos";
 import { questionsRouter } from "./routes/questions";
 import { errorHandler } from "./middleware/error-handler";
 import { ptyManager } from "./pty-manager";
-import { handleWsMessage, addClient, removeClient, type WSClient } from "./ws";
+import { handleWsMessage, addClient, removeClient, broadcast, type WSClient } from "./ws";
 
 const app = new Hono();
 
@@ -66,6 +66,30 @@ app.route("/api/planning-sessions", planningSessionsRouter);
 app.route("/api/branch-links", branchLinksRouter);
 app.route("/api/todos", todosRouter);
 app.route("/api/questions", questionsRouter);
+
+// Internal broadcast endpoint for MCP server
+app.post("/api/internal/broadcast", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { type, repoId, planningSessionId, data } = body;
+
+    if (!type) {
+      return c.json({ error: "type is required" }, 400);
+    }
+
+    broadcast({
+      type,
+      repoId,
+      planningSessionId,
+      data,
+    });
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("[Internal broadcast] Error:", error);
+    return c.json({ error: "Failed to broadcast" }, 500);
+  }
+});
 
 // 404 handler for API routes
 app.notFound((c) => {

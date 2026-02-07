@@ -30,8 +30,6 @@ import ExecuteBranchTree from "./ExecuteBranchTree";
 import ExecuteTodoList from "./ExecuteTodoList";
 import PlanningQuestionsPanel from "./PlanningQuestionsPanel";
 import type { TaskSuggestion } from "../lib/task-parser";
-import type { TodoUpdate } from "../lib/todo-parser";
-import type { QuestionUpdate } from "../lib/question-parser";
 import githubIcon from "../assets/github.svg";
 import notionIcon from "../assets/notion.svg";
 import figmaIcon from "../assets/figma.svg";
@@ -684,8 +682,8 @@ export function PlanningPanel({
           // Immediately advance to next branch
           const nextIdx = currentIdx + 1;
           setPlanningCurrentBranchIndex(nextIdx);
-          // Update backend
-          api.updateExecuteBranches(selectedSession.id, selectedSession.executeBranches!, nextIdx).catch(console.error);
+          // Update backend - use advanceExecuteTask instead
+          api.advanceExecuteTask(selectedSession.id).catch(console.error);
         }
       }
     });
@@ -1142,67 +1140,8 @@ export function PlanningPanel({
     // Full implementation would require an API to update currentExecuteIndex
   }, [selectedSession]);
 
-  // Handle ToDo updates from AI
-  const handleTodoUpdate = useCallback(async (update: TodoUpdate, branchName: string) => {
-    for (const item of update.items) {
-      try {
-        switch (item.action) {
-          case "add":
-            if (item.title) {
-              await api.createTodo({
-                repoId,
-                branchName,
-                planningSessionId: selectedSession?.id,
-                title: item.title,
-                description: item.description,
-                status: item.status || "pending",
-                source: "ai",
-              });
-            }
-            break;
-          case "complete":
-            if (item.id !== undefined) {
-              await api.updateTodo(item.id, { status: "completed" });
-            }
-            break;
-          case "update":
-            if (item.id !== undefined) {
-              const updates: { status?: "pending" | "in_progress" | "completed"; title?: string } = {};
-              if (item.status) updates.status = item.status;
-              if (item.title) updates.title = item.title;
-              if (Object.keys(updates).length > 0) {
-                await api.updateTodo(item.id, updates);
-              }
-            }
-            break;
-          case "delete":
-            if (item.id !== undefined) {
-              await api.deleteTodo(item.id);
-            }
-            break;
-        }
-      } catch (err) {
-        console.error("Failed to process todo update:", err);
-      }
-    }
-  }, [repoId, selectedSession?.id]);
-
-  // Handle question updates from AI
-  const handleQuestionUpdate = useCallback(async (update: QuestionUpdate) => {
-    if (!selectedSession) return;
-    for (const item of update.items) {
-      try {
-        await api.createQuestion({
-          planningSessionId: selectedSession.id,
-          branchName: item.branchName,
-          question: item.question,
-          assumption: item.assumption,
-        });
-      } catch (err) {
-        console.error("Failed to create question:", err);
-      }
-    }
-  }, [selectedSession?.id]);
+  // Note: ToDo and Question updates are now handled via MCP tools
+  // The MCP server directly updates the database and sends WebSocket notifications
 
   // Handle branch completion (all todos done)
   const handleBranchCompleted = useCallback(async (branchName: string) => {
@@ -1847,7 +1786,6 @@ export function PlanningPanel({
                         ? executeAllTasksInstructions
                         : selectedSession.executeBranches.map(b => ({ branchName: b, instruction: null })),
                     }}
-                    onTodoUpdate={handleTodoUpdate}
                   />
                 )}
               </div>
@@ -1931,22 +1869,6 @@ export function PlanningPanel({
                     onTaskSuggested={handleTaskSuggested}
                     existingTaskLabels={selectedSession.nodes.map((n) => n.title)}
                     disabled={false}
-                    currentInstruction={currentInstruction}
-                    onInstructionUpdated={async (newContent) => {
-                      if (!currentPlanningBranch) return;
-                      setCurrentInstruction(newContent);
-                      setInstructionDirty(false);
-                      try {
-                        await api.updateTaskInstruction(repoId, currentPlanningBranch, newContent);
-                        setBranchInstructions((prev) => new Map(prev).set(currentPlanningBranch, newContent));
-                      } catch (err) {
-                        console.error("Failed to save instruction:", err);
-                        setError("Failed to save instruction");
-                      }
-                    }}
-                    planningBranchName={currentPlanningBranch}
-                    onTodoUpdate={(update, branchName) => handleTodoUpdate(update, branchName)}
-                    onQuestionUpdate={handleQuestionUpdate}
                   />
                 )}
               </div>
@@ -2062,7 +1984,7 @@ export function PlanningPanel({
                     <div className="planning-panel__questions-section">
                       <PlanningQuestionsPanel
                         planningSessionId={selectedSession.id}
-                        branchName={currentPlanningBranch}
+                        branchName={currentPlanningBranch ?? undefined}
                       />
                     </div>
                   )}

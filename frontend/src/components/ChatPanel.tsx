@@ -3,14 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, type ChatMessage } from "../lib/api";
 import { extractTaskSuggestions, removeTaskTags, type TaskSuggestion } from "../lib/task-parser";
-import {
-  extractInstructionEdit,
-  removeInstructionEditTags,
-  computeSimpleDiff,
-} from "../lib/instruction-parser";
 import { extractAskUserQuestion } from "../lib/ask-user-question";
-import { extractTodoUpdates, removeTodoUpdateTags, type TodoUpdate } from "../lib/todo-parser";
-import { extractQuestions, removeQuestionTags, type QuestionUpdate } from "../lib/question-parser";
 import { AskUserQuestionUI } from "./AskUserQuestionUI";
 import { wsClient } from "../lib/ws";
 import githubIcon from "../assets/github.svg";
@@ -33,15 +26,8 @@ interface ChatPanelProps {
   onTaskSuggested?: (task: TaskSuggestion) => void;
   existingTaskLabels?: string[];
   disabled?: boolean;
-  currentInstruction?: string;
-  onInstructionUpdated?: (newContent: string) => void;
   executeMode?: boolean;
   executeContext?: ExecuteContext;
-  onTodoUpdate?: (update: TodoUpdate, branchName: string) => void;
-  /** For planning mode: current branch name for ToDo updates */
-  planningBranchName?: string;
-  /** For planning mode: question updates */
-  onQuestionUpdate?: (update: QuestionUpdate) => void;
 }
 
 interface StreamingChunk {
@@ -56,21 +42,14 @@ export function ChatPanel({
   onTaskSuggested,
   existingTaskLabels = [],
   disabled = false,
-  currentInstruction = "",
-  onInstructionUpdated,
   executeMode = false,
   executeContext,
-  onTodoUpdate,
-  planningBranchName,
-  onQuestionUpdate,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addedTasks, setAddedTasks] = useState<Set<string>>(new Set());
-  // Track accepted instruction edits by message ID
-  const [acceptedInstructions, setAcceptedInstructions] = useState<Set<number>>(new Set());
   // Streaming state
   const [streamingChunks, setStreamingChunks] = useState<StreamingChunk[]>([]);
   const streamingChunksRef = useRef<StreamingChunk[]>([]);
@@ -81,20 +60,12 @@ export function ChatPanel({
   const [quickMode, setQuickMode] = useState(false);
 
   // Refs for callbacks to avoid stale closures in WebSocket handlers
-  const onInstructionUpdatedRef = useRef(onInstructionUpdated);
-  const onTodoUpdateRef = useRef(onTodoUpdate);
-  const onQuestionUpdateRef = useRef(onQuestionUpdate);
   const executeContextRef = useRef(executeContext);
-  const planningBranchNameRef = useRef(planningBranchName);
 
   // Keep refs up to date
   useEffect(() => {
-    onInstructionUpdatedRef.current = onInstructionUpdated;
-    onTodoUpdateRef.current = onTodoUpdate;
-    onQuestionUpdateRef.current = onQuestionUpdate;
     executeContextRef.current = executeContext;
-    planningBranchNameRef.current = planningBranchName;
-  }, [onInstructionUpdated, onTodoUpdate, onQuestionUpdate, executeContext, planningBranchName]);
+  }, [executeContext]);
 
   // Load messages and restore streaming state if active
   const loadMessages = useCallback(async () => {
@@ -223,38 +194,8 @@ export function ChatPanel({
       if (data.sessionId === sessionId) {
         console.log(`[ChatPanel] streaming.end: Setting loading=false, message=${!!data.message}`);
 
-        // Extract text content from streaming chunks
-        const textContent = streamingChunksRef.current
-          .filter(c => c.type === "text" || c.type === "text_delta")
-          .map(c => c.content || "")
-          .join("");
-
-        // Extract todo updates (execute mode or planning mode)
-        const targetBranchName = executeContextRef.current?.branchName || planningBranchNameRef.current;
-        if (onTodoUpdateRef.current && targetBranchName) {
-          const todoUpdate = extractTodoUpdates(textContent);
-          if (todoUpdate) {
-            onTodoUpdateRef.current(todoUpdate, targetBranchName);
-          }
-        }
-
-        // Extract questions (planning mode)
-        if (onQuestionUpdateRef.current) {
-          const questionUpdate = extractQuestions(textContent);
-          if (questionUpdate) {
-            onQuestionUpdateRef.current(questionUpdate);
-          }
-        }
-
-        // Auto-apply instruction edits without confirmation
-        if (onInstructionUpdatedRef.current) {
-          const instructionEdit = extractInstructionEdit(textContent);
-          if (instructionEdit) {
-            onInstructionUpdatedRef.current(instructionEdit.newContent);
-          }
-        }
-
         // Add the message to messages list and clear streaming chunks
+        // Note: Instruction/ToDo/Question updates are now handled via MCP tools and WebSocket broadcasts
         if (data.message) {
           setMessages((prev) => {
             if (prev.some((m) => m.id === data.message!.id)) {
@@ -457,12 +398,6 @@ export function ChatPanel({
     onTaskSuggested?.(task);
   };
 
-  const handleAcceptInstruction = (msgId: number, newContent: string) => {
-    if (acceptedInstructions.has(msgId)) return;
-    setAcceptedInstructions((prev) => new Set(prev).add(msgId));
-    onInstructionUpdated?.(newContent);
-  };
-
   // Parse chunks from saved message content
   const parseChunks = (content: string): StreamingChunk[] | null => {
     try {
@@ -550,8 +485,9 @@ export function ChatPanel({
               </div>
             )}
             {(chunk.type === "text" || chunk.type === "text_delta") && (() => {
-              // Remove task tags, instruction edit tags, todo update tags, and clean up leftover separators
-              const cleaned = removeTodoUpdateTags(removeInstructionEditTags(removeTaskTags(chunk.content || "")))
+              // Remove task tags and clean up leftover separators
+              // Note: Instruction/ToDo/Question tags are no longer used (handled via MCP tools)
+              const cleaned = removeTaskTags(chunk.content || "")
                 .replace(/\n---\n*$/g, "") // Remove trailing ---
                 .replace(/^\n*---\n/g, "") // Remove leading ---
                 .trim();
@@ -580,93 +516,13 @@ export function ChatPanel({
       return null;
     }
 
+    // Note: Instruction edits are now handled via MCP tools, not tag parsing
     const suggestions = extractTaskSuggestions(msg.content);
-    const instructionEdit = extractInstructionEdit(msg.content);
-    let cleanContent = removeTaskTags(msg.content);
-    if (instructionEdit) {
-      cleanContent = removeInstructionEditTags(cleanContent);
-    }
-
-    // Auto-applied if onInstructionUpdated is provided
-    const isInstructionAutoApplied = !!onInstructionUpdated;
-    const isInstructionAccepted = isInstructionAutoApplied || acceptedInstructions.has(msg.id);
+    const cleanContent = removeTaskTags(msg.content);
 
     return (
       <>
         <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{cleanContent}</p>
-
-        {/* Instruction Edit Proposal */}
-        {instructionEdit && (
-          <div style={{
-            marginTop: 12,
-            border: "1px solid #374151",
-            background: "#1f2937",
-            borderRadius: 6,
-            overflow: "hidden",
-          }}>
-            <div style={{
-              padding: "8px 12px",
-              background: "#0f172a",
-              borderBottom: "1px solid #374151",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}>
-              <span style={{ fontSize: 12, fontWeight: 500, color: "#9ca3af" }}>
-                Task Instruction の変更提案
-              </span>
-              {isInstructionAccepted && (
-                <span style={{ fontSize: 11, padding: "2px 8px", background: "#14532d", color: "#4ade80", borderRadius: 3 }}>
-                  Accepted
-                </span>
-              )}
-            </div>
-            <div style={{ padding: 12, fontSize: 12, fontFamily: "monospace" }}>
-              {computeSimpleDiff(currentInstruction, instructionEdit.newContent).map((line, i) => (
-                <div
-                  key={i}
-                  style={{
-                    padding: "1px 4px",
-                    background: line.type === "added" ? "rgba(34, 197, 94, 0.15)" :
-                               line.type === "removed" ? "rgba(239, 68, 68, 0.15)" : "transparent",
-                    color: line.type === "added" ? "#4ade80" :
-                           line.type === "removed" ? "#f87171" : "#9ca3af",
-                  }}
-                >
-                  <span style={{ display: "inline-block", width: 16, opacity: 0.6 }}>
-                    {line.type === "added" ? "+" : line.type === "removed" ? "-" : " "}
-                  </span>
-                  {line.content || " "}
-                </div>
-              ))}
-            </div>
-            {!isInstructionAccepted && (
-              <div style={{
-                padding: "8px 12px",
-                borderTop: "1px solid #374151",
-                display: "flex",
-                gap: 8,
-                justifyContent: "flex-end",
-              }}>
-                <button
-                  onClick={() => handleAcceptInstruction(msg.id, instructionEdit.newContent)}
-                  style={{
-                    padding: "4px 12px",
-                    background: "#22c55e",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 4,
-                    fontSize: 12,
-                    fontWeight: 500,
-                    cursor: "pointer",
-                  }}
-                >
-                  Accept
-                </button>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Task Suggestions */}
         {suggestions.length > 0 && (
@@ -765,93 +621,18 @@ export function ChatPanel({
           if (msg.role === "assistant") {
             const chunks = parseChunks(msg.content);
             if (chunks) {
-              // Extract text content from chunks for task suggestions and instruction edits
+              // Extract text content from chunks for task suggestions
+              // Note: Instruction edits are now handled via MCP tools, not tag parsing
               const textContent = chunks
                 .filter(c => c.type === "text" || c.type === "text_delta")
                 .map(c => c.content || "")
                 .join("");
               const suggestions = extractTaskSuggestions(textContent);
-              const instructionEdit = extractInstructionEdit(textContent);
-              // Auto-applied if onInstructionUpdated is provided
-              const isInstructionAutoApplied = !!onInstructionUpdated;
-              const isInstructionAccepted = isInstructionAutoApplied || acceptedInstructions.has(msg.id);
 
-              // Render chunks separately with task suggestions and instruction edits at the end
+              // Render chunks separately with task suggestions at the end
               return (
                 <div key={msg.id} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {chunks.map((chunk, i) => renderChunk(chunk, i, i === 0))}
-
-                  {/* Instruction Edit Proposal from chunks */}
-                  {instructionEdit && (
-                    <div style={{
-                      border: "1px solid #374151",
-                      background: "#1f2937",
-                      borderRadius: 6,
-                      overflow: "hidden",
-                    }}>
-                      <div style={{
-                        padding: "8px 12px",
-                        background: "#0f172a",
-                        borderBottom: "1px solid #374151",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                      }}>
-                        <span style={{ fontSize: 12, fontWeight: 500, color: "#9ca3af" }}>
-                          Task Instruction の変更提案
-                        </span>
-                        {isInstructionAccepted && (
-                          <span style={{ fontSize: 11, padding: "2px 8px", background: "#14532d", color: "#4ade80", borderRadius: 3 }}>
-                            Accepted
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ padding: 12, fontSize: 12, fontFamily: "monospace" }}>
-                        {computeSimpleDiff(currentInstruction, instructionEdit.newContent).map((line, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              padding: "1px 4px",
-                              background: line.type === "added" ? "rgba(34, 197, 94, 0.15)" :
-                                         line.type === "removed" ? "rgba(239, 68, 68, 0.15)" : "transparent",
-                              color: line.type === "added" ? "#4ade80" :
-                                     line.type === "removed" ? "#f87171" : "#9ca3af",
-                            }}
-                          >
-                            <span style={{ display: "inline-block", width: 16, opacity: 0.6 }}>
-                              {line.type === "added" ? "+" : line.type === "removed" ? "-" : " "}
-                            </span>
-                            {line.content || " "}
-                          </div>
-                        ))}
-                      </div>
-                      {!isInstructionAccepted && (
-                        <div style={{
-                          padding: "8px 12px",
-                          borderTop: "1px solid #374151",
-                          display: "flex",
-                          gap: 8,
-                          justifyContent: "flex-end",
-                        }}>
-                          <button
-                            onClick={() => handleAcceptInstruction(msg.id, instructionEdit.newContent)}
-                            style={{
-                              padding: "4px 12px",
-                              background: "#22c55e",
-                              color: "#fff",
-                              border: "none",
-                              borderRadius: 4,
-                              fontSize: 12,
-                              fontWeight: 500,
-                              cursor: "pointer",
-                            }}
-                          >
-                            Accept
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
 
                   {/* Task Suggestions from chunks */}
                   {suggestions.length > 0 && (
@@ -961,58 +742,7 @@ export function ChatPanel({
         {/* Streaming chunks - each chunk as separate block */}
         {streamingChunks.map((chunk, i) => renderChunk(chunk, i, i === 0))}
 
-        {/* Instruction Edit from streaming chunks */}
-        {streamingChunks.length > 0 && (() => {
-          const streamingTextContent = streamingChunks
-            .filter(c => c.type === "text" || c.type === "text_delta")
-            .map(c => c.content || "")
-            .join("");
-          const streamingInstructionEdit = extractInstructionEdit(streamingTextContent);
-          if (!streamingInstructionEdit) return null;
-          return (
-            <div style={{
-              border: "1px solid #374151",
-              background: "#1f2937",
-              borderRadius: 6,
-              overflow: "hidden",
-            }}>
-              <div style={{
-                padding: "8px 12px",
-                background: "#0f172a",
-                borderBottom: "1px solid #374151",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}>
-                <span style={{ fontSize: 12, fontWeight: 500, color: "#9ca3af" }}>
-                  Task Instruction の変更提案
-                </span>
-              </div>
-              <div style={{ padding: 12, fontSize: 12, fontFamily: "monospace" }}>
-                {computeSimpleDiff(currentInstruction, streamingInstructionEdit.newContent).map((line, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      padding: "1px 4px",
-                      background: line.type === "added" ? "rgba(34, 197, 94, 0.15)" :
-                                 line.type === "removed" ? "rgba(239, 68, 68, 0.15)" : "transparent",
-                      color: line.type === "added" ? "#4ade80" :
-                             line.type === "removed" ? "#f87171" : "#9ca3af",
-                    }}
-                  >
-                    <span style={{ display: "inline-block", width: 16, opacity: 0.6 }}>
-                      {line.type === "added" ? "+" : line.type === "removed" ? "-" : " "}
-                    </span>
-                    {line.content || " "}
-                  </div>
-                ))}
-              </div>
-              <div style={{ padding: "8px 12px", borderTop: "1px solid #374151", fontSize: 11, color: "#6b7280" }}>
-                ストリーミング完了後にAcceptできます
-              </div>
-            </div>
-          );
-        })()}
+        {/* Note: Instruction edits are now handled via MCP tools, not tag parsing */}
 
         {/* AskUserQuestion UI - only show for unanswered questions */}
         {(() => {

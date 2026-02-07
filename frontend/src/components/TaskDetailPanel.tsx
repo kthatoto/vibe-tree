@@ -1,16 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { api, type TaskInstruction, type ChatMessage, type TreeNode, type InstructionEditStatus, type BranchLink, type GitHubCheck, type GitHubLabel } from "../lib/api";
+import { api, type TaskInstruction, type ChatMessage, type TreeNode, type BranchLink, type GitHubCheck, type GitHubLabel } from "../lib/api";
 import { wsClient } from "../lib/ws";
-import {
-  extractInstructionEdit,
-  removeInstructionEditTags,
-  computeSimpleDiff,
-  type DiffLine,
-} from "../lib/instruction-parser";
-import {
-  extractPermissionRequests,
-  removePermissionTags,
-} from "../lib/permission-parser";
+import { computeSimpleDiff, type DiffLine } from "../lib/diff";
 import { linkifyPreContent } from "../lib/linkify";
 import "./TaskDetailPanel.css";
 
@@ -208,10 +199,7 @@ export function TaskDetailPanel({
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatMode, setChatMode] = useState<"execution" | "planning">("planning");
-  // Track instruction edit statuses (loaded from DB + local updates)
-  const [editStatuses, setEditStatuses] = useState<Map<number, InstructionEditStatus>>(new Map());
-  // Track granted permission requests (message ID -> granted)
-  const [grantedPermissions, setGrantedPermissions] = useState<Set<number>>(new Set());
+  // Note: Instruction edit statuses and permission grants are now handled via MCP tools
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // Streaming state
   interface StreamingChunk {
@@ -408,14 +396,7 @@ export function TaskDetailPanel({
           setChatSessionId(existing.id);
           const msgs = await api.getChatMessages(existing.id);
           setMessages(msgs);
-          // Load edit statuses from messages
-          const statuses = new Map<number, InstructionEditStatus>();
-          for (const msg of msgs) {
-            if (msg.instructionEditStatus) {
-              statuses.set(msg.id, msg.instructionEditStatus);
-            }
-          }
-          setEditStatuses(statuses);
+          // Note: Instruction edit statuses are now handled via MCP tools
           // Check if there's a running chat to restore Thinking state
           try {
             const { isRunning } = await api.checkChatRunning(existing.id);
@@ -430,7 +411,6 @@ export function TaskDetailPanel({
           const newSession = await api.createChatSession(repoId, effectivePath, branchName);
           setChatSessionId(newSession.id);
           setMessages([]);
-          setEditStatuses(new Map());
         }
       } catch (err) {
         console.error("Failed to init chat:", err);
@@ -677,28 +657,7 @@ export function TaskDetailPanel({
     }
   };
 
-  const handleCommitInstructionEdit = async (messageId: number, newContent: string) => {
-    try {
-      // Update the task instruction
-      const updated = await api.updateTaskInstruction(repoId, branchName, newContent);
-      onInstructionUpdate?.(updated);
-      // Save the commit status to DB
-      await api.updateInstructionEditStatus(messageId, "committed");
-      setEditStatuses((prev) => new Map(prev).set(messageId, "committed"));
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  };
-
-  const handleRejectInstructionEdit = async (messageId: number) => {
-    try {
-      // Save the reject status to DB
-      await api.updateInstructionEditStatus(messageId, "rejected");
-      setEditStatuses((prev) => new Map(prev).set(messageId, "rejected"));
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  };
+  // Note: Instruction edit handlers removed - now handled via MCP tools
 
   const handleAddBranchLink = async (linkType: "issue" | "pr") => {
     if (!newLinkUrl.trim() || addingLink) return;
@@ -805,10 +764,8 @@ export function TaskDetailPanel({
       const newSession = await api.createChatSession(repoId, effectivePath, branchName);
       setChatSessionId(newSession.id);
       setMessages([]);
-      setEditStatuses(new Map());
       setStreamingChunks([]);
       setStreamingContent(null);
-      setGrantedPermissions(new Set());
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -1355,15 +1312,9 @@ export function TaskDetailPanel({
               // Check if content is saved chunks (JSON format)
               const savedChunks = msg.role === "assistant" ? parseChunkedContent(msg.content) : null;
 
-              const instructionEdit = msg.role === "assistant" && !savedChunks ? extractInstructionEdit(msg.content) : null;
-              const permissionRequests = msg.role === "assistant" && !savedChunks ? extractPermissionRequests(msg.content) : [];
-              let displayContent = savedChunks ? null : msg.content;
-              if (instructionEdit && displayContent) displayContent = removeInstructionEditTags(displayContent);
-              if (permissionRequests.length > 0 && displayContent) displayContent = removePermissionTags(displayContent);
-              const editStatus = editStatuses.get(msg.id);
+              // Note: Instruction edits and permission requests are now handled via MCP tools
+              const displayContent = savedChunks ? null : msg.content;
               const msgMode = msg.chatMode || "planning"; // Fallback to planning for old messages
-              const hasExecutionRequest = permissionRequests.some(p => p.action === "switch_to_execution");
-              const isPermissionGranted = grantedPermissions.has(msg.id);
 
               // Render saved chunks
               if (savedChunks && savedChunks.length > 0) {
@@ -1414,101 +1365,7 @@ export function TaskDetailPanel({
                   </div>
                   <div className="task-detail-panel__message-content">
                     {displayContent && <pre>{linkifyPreContent(displayContent)}</pre>}
-                    {hasExecutionRequest && !isPermissionGranted && workingPath && !isMerged && (
-                      <div className="task-detail-panel__permission-request">
-                        <span className="task-detail-panel__permission-text">
-                          Execution権限が必要です
-                        </span>
-                        <button
-                          className="task-detail-panel__permission-grant-btn"
-                          onClick={async () => {
-                            setGrantedPermissions(prev => new Set(prev).add(msg.id));
-                            setChatMode("execution");
-                            // Send continuation message in execution mode
-                            if (chatSessionId && !chatLoading) {
-                              setChatLoading(true);
-                              const continueMessage = "Execution権限を許可しました。実装を進めてください。";
-                              const tempId = Date.now();
-                              const tempUserMsg: ChatMessage = {
-                                id: tempId,
-                                sessionId: chatSessionId,
-                                role: "user",
-                                content: continueMessage,
-                                chatMode: "execution",
-                                createdAt: new Date().toISOString(),
-                              };
-                              setMessages((prev) => [...prev, tempUserMsg]);
-                              try {
-                                const context = instruction?.instructionMd
-                                  ? `[Task Instruction]\n${instruction.instructionMd}\n\n[Mode: execution]`
-                                  : `[Mode: execution]`;
-                                const result = await api.sendChatMessage(chatSessionId, continueMessage, context, "execution");
-                                setMessages((prev) =>
-                                  prev.map((m) => (m.id === tempId ? result.userMessage : m))
-                                );
-                              } catch (err) {
-                                setError((err as Error).message);
-                                setMessages((prev) => prev.filter((m) => m.id !== tempId));
-                                setChatLoading(false);
-                              }
-                            }
-                          }}
-                          disabled={chatLoading}
-                        >
-                          {chatLoading ? "処理中..." : "許可してExecutionモードに切り替え"}
-                        </button>
-                      </div>
-                    )}
-                    {hasExecutionRequest && isPermissionGranted && (
-                      <div className="task-detail-panel__permission-granted">
-                        ✓ Execution権限を許可しました
-                      </div>
-                    )}
-                    {instructionEdit && (
-                      <div className={`task-detail-panel__instruction-edit-proposal ${editStatus === "rejected" ? "task-detail-panel__instruction-edit-proposal--rejected" : ""}`}>
-                        <div className="task-detail-panel__diff-header">
-                          <span>Task Instruction の変更提案</span>
-                          {editStatus === "committed" && (
-                            <span className="task-detail-panel__committed-badge">Accepted</span>
-                          )}
-                          {editStatus === "rejected" && (
-                            <span className="task-detail-panel__rejected-badge">Rejected</span>
-                          )}
-                        </div>
-                        <div className="task-detail-panel__diff-content">
-                          {computeSimpleDiff(
-                            instruction?.instructionMd || "",
-                            instructionEdit.newContent
-                          ).map((line, i) => (
-                            <div
-                              key={i}
-                              className={`task-detail-panel__diff-line task-detail-panel__diff-line--${line.type}`}
-                            >
-                              <span className="task-detail-panel__diff-prefix">
-                                {line.type === "added" ? "+" : line.type === "removed" ? "-" : " "}
-                              </span>
-                              <span>{line.content || " "}</span>
-                            </div>
-                          ))}
-                        </div>
-                        {!editStatus && (
-                          <div className="task-detail-panel__diff-actions">
-                            <button
-                              className="task-detail-panel__accept-btn"
-                              onClick={() => handleCommitInstructionEdit(msg.id, instructionEdit.newContent)}
-                            >
-                              Accept
-                            </button>
-                            <button
-                              className="task-detail-panel__reject-btn"
-                              onClick={() => handleRejectInstructionEdit(msg.id)}
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    {/* Note: Permission requests and instruction edits are now handled via MCP tools */}
                   </div>
                 </div>
               );

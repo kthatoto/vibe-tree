@@ -223,6 +223,7 @@ scanRouter.post("/", async (c) => {
     );
 
   for (const session of confirmedSessions) {
+    console.log(`[Scan] Processing confirmed session: ${session.id}, title: ${session.title}`);
     const sessionNodes = JSON.parse(session.nodesJson) as Array<{
       id: string;
       title: string;
@@ -233,20 +234,25 @@ scanRouter.post("/", async (c) => {
       parent: string;
       child: string;
     }>;
+    console.log(`[Scan] Session has ${sessionNodes.length} nodes, ${sessionEdges.length} edges`);
+    console.log(`[Scan] Session edges raw:`, JSON.stringify(sessionEdges));
 
     // Build taskId -> branchName map
     const taskToBranch = new Map<string, string>();
     for (const node of sessionNodes) {
       if (node.branchName) {
         taskToBranch.set(node.id, node.branchName);
+        console.log(`[Scan] Task mapping: ${node.id} -> ${node.branchName}`);
       }
     }
 
     // Convert task edges to branch edges
     for (const edge of sessionEdges) {
+      console.log(`[Scan] Processing edge: parent=${edge.parent}, child=${edge.child}`);
       // First try to resolve as task IDs, then as branch names directly
       const parentBranch = taskToBranch.get(edge.parent) ?? edge.parent;
       const childBranch = taskToBranch.get(edge.child) ?? edge.child;
+      console.log(`[Scan] Resolved to: parentBranch=${parentBranch}, childBranch=${childBranch}`);
 
       if (parentBranch && childBranch) {
         // Skip edges that contradict git ancestry (child is ancestor of parent in git)

@@ -230,6 +230,14 @@ export function ChatPanel({
           }
         }
 
+        // Auto-apply instruction edits without confirmation
+        if (onInstructionUpdated) {
+          const instructionEdit = extractInstructionEdit(textContent);
+          if (instructionEdit) {
+            onInstructionUpdated(instructionEdit.newContent);
+          }
+        }
+
         // Add the message to messages list and clear streaming chunks
         if (data.message) {
           setMessages((prev) => {

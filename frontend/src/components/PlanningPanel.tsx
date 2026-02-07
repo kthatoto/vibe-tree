@@ -27,6 +27,7 @@ import { ChatPanel } from "./ChatPanel";
 import ExecuteBranchSelector from "./ExecuteBranchSelector";
 import ExecuteSidebar from "./ExecuteSidebar";
 import type { TaskSuggestion } from "../lib/task-parser";
+import type { TodoUpdate } from "../lib/todo-parser";
 import githubIcon from "../assets/github.svg";
 import notionIcon from "../assets/notion.svg";
 import figmaIcon from "../assets/figma.svg";
@@ -888,6 +889,51 @@ export function PlanningPanel({
     // Full implementation would require an API to update currentExecuteIndex
   }, [selectedSession]);
 
+  // Handle ToDo updates from AI
+  const handleTodoUpdate = useCallback(async (update: TodoUpdate, branchName: string) => {
+    for (const item of update.items) {
+      try {
+        switch (item.action) {
+          case "add":
+            if (item.title) {
+              await api.createTodo({
+                repoId,
+                branchName,
+                planningSessionId: selectedSession?.id,
+                title: item.title,
+                description: item.description,
+                status: item.status || "pending",
+                source: "ai",
+              });
+            }
+            break;
+          case "complete":
+            if (item.id !== undefined) {
+              await api.updateTodo(item.id, { status: "completed" });
+            }
+            break;
+          case "update":
+            if (item.id !== undefined) {
+              const updates: { status?: "pending" | "in_progress" | "completed"; title?: string } = {};
+              if (item.status) updates.status = item.status;
+              if (item.title) updates.title = item.title;
+              if (Object.keys(updates).length > 0) {
+                await api.updateTodo(item.id, updates);
+              }
+            }
+            break;
+          case "delete":
+            if (item.id !== undefined) {
+              await api.deleteTodo(item.id);
+            }
+            break;
+        }
+      } catch (err) {
+        console.error("Failed to process todo update:", err);
+      }
+    }
+  }, [repoId, selectedSession?.id]);
+
   // External link handlers
   const handleAddLink = async () => {
     if (!newLinkUrl.trim() || !selectedSession || addingLink) return;
@@ -1528,6 +1574,7 @@ export function PlanningPanel({
                         ? executeAllTasksInstructions
                         : selectedSession.executeBranches.map(b => ({ branchName: b, instruction: null })),
                     }}
+                    onTodoUpdate={handleTodoUpdate}
                   />
                 )}
               </div>

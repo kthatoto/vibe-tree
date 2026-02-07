@@ -9,6 +9,7 @@ import {
   computeSimpleDiff,
 } from "../lib/instruction-parser";
 import { extractAskUserQuestion } from "../lib/ask-user-question";
+import { extractTodoUpdates, removeTodoUpdateTags, type TodoUpdate } from "../lib/todo-parser";
 import { AskUserQuestionUI } from "./AskUserQuestionUI";
 import { wsClient } from "../lib/ws";
 import githubIcon from "../assets/github.svg";
@@ -35,6 +36,7 @@ interface ChatPanelProps {
   onInstructionUpdated?: (newContent: string) => void;
   executeMode?: boolean;
   executeContext?: ExecuteContext;
+  onTodoUpdate?: (update: TodoUpdate, branchName: string) => void;
 }
 
 interface StreamingChunk {
@@ -53,6 +55,7 @@ export function ChatPanel({
   onInstructionUpdated,
   executeMode = false,
   executeContext,
+  onTodoUpdate,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -63,6 +66,7 @@ export function ChatPanel({
   const [acceptedInstructions, setAcceptedInstructions] = useState<Set<number>>(new Set());
   // Streaming state
   const [streamingChunks, setStreamingChunks] = useState<StreamingChunk[]>([]);
+  const streamingChunksRef = useRef<StreamingChunk[]>([]);
   const hasStreamingChunksRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -155,12 +159,18 @@ export function ChatPanel({
     return () => document.removeEventListener("keydown", handleEscapeKey);
   }, [sessionId, loading]);
 
+  // Sync streamingChunksRef with streamingChunks state
+  useEffect(() => {
+    streamingChunksRef.current = streamingChunks;
+  }, [streamingChunks]);
+
   // Listen for WebSocket streaming events
   useEffect(() => {
     const unsubStart = wsClient.on("chat.streaming.start", (msg) => {
       const data = msg.data as { sessionId: string };
       if (data.sessionId === sessionId) {
         setStreamingChunks([]);
+        streamingChunksRef.current = [];
         hasStreamingChunksRef.current = false;
       }
     });
@@ -189,6 +199,19 @@ export function ChatPanel({
       console.log(`[ChatPanel] streaming.end received, msgSessionId=${data.sessionId}, currentSessionId=${sessionId}, match=${data.sessionId === sessionId}`);
       if (data.sessionId === sessionId) {
         console.log(`[ChatPanel] streaming.end: Setting loading=false, message=${!!data.message}`);
+
+        // Extract todo updates from streaming chunks before clearing (execute mode only)
+        if (executeMode && executeContext && onTodoUpdate) {
+          const textContent = streamingChunksRef.current
+            .filter(c => c.type === "text" || c.type === "text_delta")
+            .map(c => c.content || "")
+            .join("");
+          const todoUpdate = extractTodoUpdates(textContent);
+          if (todoUpdate) {
+            onTodoUpdate(todoUpdate, executeContext.branchName);
+          }
+        }
+
         // Add the message to messages list and clear streaming chunks
         if (data.message) {
           setMessages((prev) => {
@@ -199,6 +222,7 @@ export function ChatPanel({
           });
         }
         setStreamingChunks([]);
+        streamingChunksRef.current = [];
         hasStreamingChunksRef.current = false;
         setLoading(false);
       }
@@ -484,8 +508,8 @@ export function ChatPanel({
               </div>
             )}
             {(chunk.type === "text" || chunk.type === "text_delta") && (() => {
-              // Remove task tags, instruction edit tags, and clean up leftover separators
-              const cleaned = removeInstructionEditTags(removeTaskTags(chunk.content || ""))
+              // Remove task tags, instruction edit tags, todo update tags, and clean up leftover separators
+              const cleaned = removeTodoUpdateTags(removeInstructionEditTags(removeTaskTags(chunk.content || "")))
                 .replace(/\n---\n*$/g, "") // Remove trailing ---
                 .replace(/^\n*---\n/g, "") // Remove leading ---
                 .trim();

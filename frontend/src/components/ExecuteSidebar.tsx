@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { api, type TaskTodo } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import ExecuteBranchTree from "./ExecuteBranchTree";
@@ -12,6 +12,7 @@ interface ExecuteSidebarProps {
   currentExecuteIndex: number;
   planningSessionId?: string;
   onManualBranchSwitch?: (branchIndex: number) => void;
+  onBranchCompleted?: (branchName: string) => void;
 }
 
 export function ExecuteSidebar({
@@ -20,6 +21,7 @@ export function ExecuteSidebar({
   currentExecuteIndex,
   planningSessionId,
   onManualBranchSwitch,
+  onBranchCompleted,
 }: ExecuteSidebarProps) {
   // Preview branch (clicked but not switched to)
   const [previewBranch, setPreviewBranch] = useState<string | null>(null);
@@ -127,6 +129,26 @@ export function ExecuteSidebar({
     });
     return completed;
   }, [allTodos]);
+
+  // Track previously completed branches to avoid duplicate callbacks
+  const prevCompletedRef = useRef<Set<string>>(new Set());
+
+  // Notify when current branch is completed
+  useEffect(() => {
+    if (!currentBranch || !onBranchCompleted) return;
+
+    // Check if current branch just became completed
+    const isNowCompleted = completedBranches.has(currentBranch);
+    const wasCompleted = prevCompletedRef.current.has(currentBranch);
+
+    if (isNowCompleted && !wasCompleted) {
+      // Branch just completed - notify parent
+      onBranchCompleted(currentBranch);
+    }
+
+    // Update prev ref
+    prevCompletedRef.current = new Set(completedBranches);
+  }, [completedBranches, currentBranch, onBranchCompleted]);
 
   // Compute todo counts per branch
   const branchTodoCounts = useMemo(() => {

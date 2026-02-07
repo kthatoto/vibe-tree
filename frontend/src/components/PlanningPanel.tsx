@@ -935,6 +935,30 @@ export function PlanningPanel({
     }
   }, [repoId, selectedSession?.id]);
 
+  // Handle branch completion (all todos done)
+  const handleBranchCompleted = useCallback(async (branchName: string) => {
+    if (!selectedSession || selectedSession.type !== "execute") return;
+
+    // Check if there are more branches to execute
+    const currentIndex = selectedSession.currentExecuteIndex;
+    const totalBranches = selectedSession.executeBranches?.length || 0;
+
+    console.log(`Branch ${branchName} completed. Current: ${currentIndex + 1}/${totalBranches}`);
+
+    if (currentIndex < totalBranches - 1) {
+      // Auto-advance to next branch
+      try {
+        const result = await api.advanceExecuteTask(selectedSession.id);
+        setSessions((prev) => prev.map((s) => (s.id === result.id ? result : s)));
+        onSessionSelect?.(result);
+      } catch (err) {
+        console.error("Failed to advance to next branch:", err);
+      }
+    } else {
+      console.log("All branches completed!");
+    }
+  }, [selectedSession, onSessionSelect]);
+
   // External link handlers
   const handleAddLink = async () => {
     if (!newLinkUrl.trim() || !selectedSession || addingLink) return;
@@ -1594,6 +1618,7 @@ export function PlanningPanel({
                   currentExecuteIndex={selectedSession.currentExecuteIndex}
                   planningSessionId={selectedSession.id}
                   onManualBranchSwitch={handleManualBranchSwitch}
+                  onBranchCompleted={handleBranchCompleted}
                 />
               </div>
             </div>

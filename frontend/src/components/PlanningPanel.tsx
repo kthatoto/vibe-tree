@@ -270,7 +270,7 @@ export function PlanningPanel({
   const {
     getNotification,
     markAsSeen,
-  } = useSessionNotifications(chatSessionIds);
+  } = useSessionNotifications(chatSessionIds, selectedSession?.chatSessionId);
 
   // Drag and drop for task parent-child relationships
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -582,6 +582,13 @@ export function PlanningPanel({
   useEffect(() => {
     onSessionSelect?.(selectedSession);
   }, [selectedSession, onSessionSelect]);
+
+  // Mark active session as seen when messages arrive
+  useEffect(() => {
+    if (selectedSession?.chatSessionId) {
+      markAsSeen(selectedSession.chatSessionId);
+    }
+  }, [selectedSession?.chatSessionId, markAsSeen]);
 
   const switchTab = useCallback((sessionId: string) => {
     setActiveTabId(sessionId);

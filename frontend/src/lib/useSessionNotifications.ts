@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { wsClient } from "./ws";
 import { api, type ChatMessage } from "./api";
 
@@ -30,9 +30,11 @@ function setLastSeen(sessionId: string, timestamp: string) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.fromEntries(map)));
 }
 
-export function useSessionNotifications(sessionIds: string[]) {
+export function useSessionNotifications(sessionIds: string[], activeSessionId?: string | null) {
   const [notifications, setNotifications] = useState<NotificationsMap>(new Map());
   const [initialized, setInitialized] = useState(false);
+  const activeSessionIdRef = useRef(activeSessionId);
+  activeSessionIdRef.current = activeSessionId;
 
   // Initialize notification state for each session
   useEffect(() => {
@@ -121,8 +123,10 @@ export function useSessionNotifications(sessionIds: string[]) {
         } else if (data.role === "assistant") {
           // AI responded
           newNotification.isThinking = false;
-          // Increment unread count for assistant messages
-          newNotification.unreadCount = current.unreadCount + 1;
+          // Increment unread count only if not the active session
+          if (data.sessionId !== activeSessionIdRef.current) {
+            newNotification.unreadCount = current.unreadCount + 1;
+          }
         }
 
         return new Map(prev).set(data.sessionId, newNotification);

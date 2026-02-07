@@ -638,6 +638,13 @@ export function PlanningPanel({
     }
   };
 
+  // Auto-start planning session when pendingPlanning is set
+  useEffect(() => {
+    if (pendingPlanning && !creating) {
+      handleStartPlanningSession();
+    }
+  }, [pendingPlanning]);
+
   const handleUpdateTitle = async (title: string) => {
     if (!selectedSession) return;
     try {

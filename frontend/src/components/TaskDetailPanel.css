@@ -68,6 +68,12 @@
   }
 }
 
+.task-detail-panel__instruction-loading {
+  padding: 16px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
 .task-detail-panel__close {
   padding: 4px 8px;
   background: transparent;

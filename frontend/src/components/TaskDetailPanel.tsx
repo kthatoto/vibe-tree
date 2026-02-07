@@ -1243,6 +1243,16 @@ export function TaskDetailPanel({
           <span className="task-detail-panel__instruction-hidden-icon">📝</span>
           <span>Editing in Planning Session below</span>
         </div>
+      ) : loading ? (
+        <div className="task-detail-panel__instruction-section task-detail-panel__instruction-section--loading">
+          <div className="task-detail-panel__instruction-header">
+            <h4>Task Instruction</h4>
+            <span className="task-detail-panel__spinner" />
+          </div>
+          <div className="task-detail-panel__instruction-loading">
+            Loading...
+          </div>
+        </div>
       ) : (
         <div className="task-detail-panel__instruction-section">
           <div className="task-detail-panel__instruction-header">

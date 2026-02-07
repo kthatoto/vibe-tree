@@ -375,6 +375,14 @@ export function PlanningPanel({
           if (prev.some((s) => s.id === newSession.id)) {
             return prev;
           }
+          // Check for optimistic temp session with same baseBranch
+          const tempSession = prev.find(s => s.id.startsWith("temp-") && s.baseBranch === newSession.baseBranch);
+          if (tempSession) {
+            // Replace temp with real session and update tab IDs
+            setOpenTabIds((ids) => ids.map((id) => id === tempSession.id ? newSession.id : id));
+            setActiveTabId((current) => current === tempSession.id ? newSession.id : current);
+            return prev.map((s) => s.id === tempSession.id ? newSession : s);
+          }
           return [newSession, ...prev];
         });
       }
@@ -655,22 +663,27 @@ export function PlanningPanel({
         `Planning: ${pendingPlanning.branchName}`,
         "planning"
       );
-      // Update tab IDs first (before sessions, to avoid orphaned tab IDs)
-      setOpenTabIds((prev) => prev.map((id) => id === tempId ? realSession.id : id));
-      // Update active tab if needed
-      if (activeTabId === tempId) {
-        setActiveTabId(realSession.id);
-      }
-      // Replace optimistic session with real one (or remove if WebSocket already added it)
+      // WebSocket handler may have already replaced temp session
+      // Check current state and only update if temp still exists
       setSessions((prev) => {
+        const hasTempSession = prev.some((s) => s.id === tempId);
+        if (!hasTempSession) {
+          // Already handled by WebSocket, nothing to do
+          return prev;
+        }
+        // Replace temp with real (or remove if WebSocket added real)
         const hasReal = prev.some((s) => s.id === realSession.id);
         if (hasReal) {
-          // WebSocket already added, just remove temp
           return prev.filter((s) => s.id !== tempId);
         }
-        // Replace temp with real
         return prev.map((s) => s.id === tempId ? realSession : s);
       });
+      // Update tab IDs if temp still exists
+      setOpenTabIds((prev) => {
+        if (!prev.includes(tempId)) return prev;
+        return prev.map((id) => id === tempId ? realSession.id : id);
+      });
+      setActiveTabId((current) => current === tempId ? realSession.id : current);
       // Update selected session if it's the optimistic one
       if (selectedSession?.id === tempId) {
         onSessionSelect?.(realSession);

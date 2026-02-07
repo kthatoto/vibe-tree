@@ -488,6 +488,44 @@ export function PlanningPanel({
     };
   }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, selectedSession?.chatSessionId, selectedSession?.currentExecuteIndex, onSessionSelect]);
 
+  // Auto-generate session title when streaming ends
+  const messageCountRef = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!selectedSession?.chatSessionId) return;
+
+    const unsubStreamingEnd = wsClient.on("chat.streaming.end", async (msg) => {
+      const data = msg.data as { sessionId: string };
+      if (data.sessionId !== selectedSession.chatSessionId) return;
+
+      // Track message count per session
+      const currentCount = (messageCountRef.current.get(selectedSession.id) || 0) + 1;
+      messageCountRef.current.set(selectedSession.id, currentCount);
+
+      // Generate title for first 3 turns (6 messages = 3 user + 3 assistant)
+      // After that, only update occasionally or if title is still default
+      const shouldUpdate = currentCount <= 6 ||
+        selectedSession.title === "Untitled Session" ||
+        selectedSession.title.startsWith("New ");
+
+      if (!shouldUpdate) return;
+
+      try {
+        const result = await api.generateSessionTitle(selectedSession.id, currentCount);
+        if (result.updated) {
+          setSessions((prev) =>
+            prev.map((s) => s.id === selectedSession.id ? { ...s, title: result.title } : s)
+          );
+        }
+      } catch (err) {
+        console.error("[PlanningPanel] Title generation failed:", err);
+      }
+    });
+
+    return () => {
+      unsubStreamingEnd();
+    };
+  }, [selectedSession?.id, selectedSession?.chatSessionId, selectedSession?.title]);
+
   // Load external links when session changes
   useEffect(() => {
     if (!selectedSession) {

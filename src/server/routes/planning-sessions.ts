@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, asc } from "drizzle-orm";
 import { db, schema } from "../../db";
 import { randomUUID } from "crypto";
 import { z } from "zod";
@@ -8,6 +8,7 @@ import { BadRequestError, NotFoundError } from "../middleware/error-handler";
 import { broadcast } from "../ws";
 import { execSync } from "child_process";
 import { existsSync } from "fs";
+import Anthropic from "@anthropic-ai/sdk";
 
 export const planningSessionsRouter = new Hono();
 
@@ -726,4 +727,143 @@ planningSessionsRouter.post("/:id/advance-task", async (c) => {
     completed: newIndex >= executeBranches.length - 1,
     currentBranch: executeBranches[newIndex],
   });
+});
+
+// Schema for generate-title
+const generateTitleSchema = z.object({
+  messageCount: z.number().int().min(0),
+});
+
+// POST /api/planning-sessions/:id/generate-title - Auto-generate session title
+planningSessionsRouter.post("/:id/generate-title", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+  const { messageCount } = validateOrThrow(generateTitleSchema, body);
+
+  const [session] = await db
+    .select()
+    .from(schema.planningSessions)
+    .where(eq(schema.planningSessions.id, id));
+
+  if (!session) {
+    throw new NotFoundError("Planning session not found");
+  }
+
+  // Get chat messages for this session
+  if (!session.chatSessionId) {
+    throw new BadRequestError("Session has no chat session");
+  }
+
+  const messages = await db
+    .select()
+    .from(schema.chatMessages)
+    .where(eq(schema.chatMessages.sessionId, session.chatSessionId))
+    .orderBy(asc(schema.chatMessages.createdAt))
+    .limit(10); // Get first 10 messages max for title generation
+
+  if (messages.length === 0) {
+    return c.json({ title: session.title, updated: false });
+  }
+
+  // Build conversation summary for title generation
+  const conversationSnippet = messages
+    .map((m) => {
+      // Parse content if it's JSON (assistant message with chunks)
+      let content = m.content;
+      try {
+        const parsed = JSON.parse(m.content);
+        if (parsed.chunks) {
+          content = parsed.chunks
+            .filter((c: { type: string }) => c.type === "text")
+            .map((c: { content: string }) => c.content)
+            .join("");
+        }
+      } catch {
+        // Plain text content
+      }
+      return `${m.role}: ${content.slice(0, 200)}`;
+    })
+    .join("\n");
+
+  // Determine if we should be conservative about changes
+  const isConservative = messageCount > 6;
+  const currentTitle = session.title;
+
+  // Build prompt
+  let prompt: string;
+  if (isConservative) {
+    prompt = `この会話のタイトルを考えてください。現在のタイトルは「${currentTitle}」です。
+
+会話の最初の部分:
+${conversationSnippet}
+
+ルール:
+- 現在のタイトルが適切であれば、そのまま返してください
+- 大きく内容が変わった場合のみ、新しいタイトルを提案してください
+- タイトルのみを出力してください（説明なし）
+- 20文字以内で簡潔に
+- 日本語で`;
+  } else {
+    prompt = `この会話にふさわしい短いタイトルを考えてください。
+
+会話:
+${conversationSnippet}
+
+ルール:
+- タイトルのみを出力してください（説明なし）
+- 20文字以内で簡潔に
+- 日本語で
+- 会話の主要なトピックを反映`;
+  }
+
+  try {
+    const client = new Anthropic();
+    const response = await client.messages.create({
+      model: "claude-3-5-haiku-20241022",
+      max_tokens: 50,
+      messages: [
+        { role: "user", content: prompt }
+      ],
+    });
+
+    const textBlock = response.content.find((block) => block.type === "text");
+    let newTitle = textBlock?.text?.trim() || currentTitle;
+
+    // Clean up the title (remove quotes if present)
+    newTitle = newTitle.replace(/^["「『]|["」』]$/g, "").trim();
+
+    // Limit length
+    if (newTitle.length > 50) {
+      newTitle = newTitle.slice(0, 47) + "...";
+    }
+
+    // Check if title actually changed
+    if (newTitle === currentTitle) {
+      return c.json({ title: currentTitle, updated: false });
+    }
+
+    // Update session title
+    const now = new Date().toISOString();
+    await db
+      .update(schema.planningSessions)
+      .set({ title: newTitle, updatedAt: now })
+      .where(eq(schema.planningSessions.id, id));
+
+    const [updated] = await db
+      .select()
+      .from(schema.planningSessions)
+      .where(eq(schema.planningSessions.id, id));
+
+    broadcast({
+      type: "planning.updated",
+      repoId: updated!.repoId,
+      data: toSession(updated!),
+    });
+
+    return c.json({ title: newTitle, updated: true });
+  } catch (err) {
+    console.error("[PlanningSession] Title generation failed:", err);
+    // Return current title on error
+    return c.json({ title: currentTitle, updated: false });
+  }
 });

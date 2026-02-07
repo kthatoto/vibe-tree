@@ -807,6 +807,14 @@ export const api = {
         method: "POST",
       }
     ),
+  generateSessionTitle: (id: string, messageCount: number) =>
+    fetchJson<{ title: string; updated: boolean }>(
+      `${API_BASE}/planning-sessions/${id}/generate-title`,
+      {
+        method: "POST",
+        body: JSON.stringify({ messageCount }),
+      }
+    ),
 
   // Task Instructions
   getTaskInstruction: (repoId: string, branchName: string) =>

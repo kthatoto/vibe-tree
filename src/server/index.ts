@@ -16,6 +16,7 @@ import { requirementsRouter } from "./routes/requirements";
 import { externalLinksRouter } from "./routes/external-links";
 import { planningSessionsRouter } from "./routes/planning-sessions";
 import { branchLinksRouter } from "./routes/branch-links";
+import { todosRouter } from "./routes/todos";
 import { errorHandler } from "./middleware/error-handler";
 import { ptyManager } from "./pty-manager";
 import { handleWsMessage, addClient, removeClient, type WSClient } from "./ws";
@@ -62,6 +63,7 @@ app.route("/api/requirements", requirementsRouter);
 app.route("/api/external-links", externalLinksRouter);
 app.route("/api/planning-sessions", planningSessionsRouter);
 app.route("/api/branch-links", branchLinksRouter);
+app.route("/api/todos", todosRouter);
 
 // 404 handler for API routes
 app.notFound((c) => {

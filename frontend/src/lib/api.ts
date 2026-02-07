@@ -333,6 +333,24 @@ export interface TaskInstruction {
   updatedAt?: string;
 }
 
+// Task Todo types
+export type TaskTodoStatus = "pending" | "in_progress" | "completed";
+export type TaskTodoSource = "user" | "ai";
+
+export interface TaskTodo {
+  id: number;
+  repoId: string;
+  branchName: string;
+  planningSessionId: string | null;
+  title: string;
+  description: string | null;
+  status: TaskTodoStatus;
+  orderIndex: number;
+  source: TaskTodoSource;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Branch Link types
 export type BranchLinkType = "issue" | "pr";
 
@@ -954,5 +972,44 @@ export const api = {
   refreshBranchLink: (id: number) =>
     fetchJson<BranchLink>(`${API_BASE}/branch-links/${id}/refresh`, {
       method: "POST",
+    }),
+
+  // Todos
+  getTodos: (repoId: string, branchName: string) =>
+    fetchJson<TaskTodo[]>(
+      `${API_BASE}/todos?repoId=${encodeURIComponent(repoId)}&branchName=${encodeURIComponent(branchName)}`
+    ),
+  createTodo: (data: {
+    repoId: string;
+    branchName: string;
+    planningSessionId?: string;
+    title: string;
+    description?: string;
+    status?: TaskTodoStatus;
+    orderIndex?: number;
+    source?: TaskTodoSource;
+  }) =>
+    fetchJson<TaskTodo>(`${API_BASE}/todos`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateTodo: (id: number, data: {
+    title?: string;
+    description?: string;
+    status?: TaskTodoStatus;
+    orderIndex?: number;
+  }) =>
+    fetchJson<TaskTodo>(`${API_BASE}/todos/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteTodo: (id: number) =>
+    fetchJson<{ success: boolean }>(`${API_BASE}/todos/${id}`, {
+      method: "DELETE",
+    }),
+  reorderTodos: (repoId: string, branchName: string, todoIds: number[]) =>
+    fetchJson<TaskTodo[]>(`${API_BASE}/todos/reorder`, {
+      method: "POST",
+      body: JSON.stringify({ repoId, branchName, todoIds }),
     }),
 };

@@ -217,6 +217,21 @@ export const agentRuns = sqliteTable("agent_runs", {
   createdAt: text("created_at").notNull(),
 });
 
+// Task todos (per-branch todo items)
+export const taskTodos = sqliteTable("task_todos", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  repoId: text("repo_id").notNull(),
+  branchName: text("branch_name").notNull(),
+  planningSessionId: text("planning_session_id"),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("pending"), // pending | in_progress | completed
+  orderIndex: integer("order_index").notNull().default(0),
+  source: text("source").notNull().default("user"), // user | ai
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 // Branch links (issues and PRs linked to branches)
 export const branchLinks = sqliteTable("branch_links", {
   id: integer("id").primaryKey({ autoIncrement: true }),

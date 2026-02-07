@@ -617,24 +617,61 @@ export function PlanningPanel({
     openTab(session, replaceEmpty);
   };
 
-  // Start planning session from pending planning
+  // Start planning session from pending planning (optimistic update)
   const handleStartPlanningSession = async () => {
     if (!pendingPlanning) return;
-    setCreating(true);
-    setError(null);
+
+    // Generate temporary ID for optimistic update
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+
+    // Create optimistic session object
+    const optimisticSession: PlanningSession = {
+      id: tempId,
+      repoId,
+      title: `Planning: ${pendingPlanning.branchName}`,
+      type: "planning",
+      baseBranch: pendingPlanning.branchName,
+      status: "draft",
+      nodes: [],
+      edges: [],
+      chatSessionId: null,
+      executeBranches: null,
+      currentExecuteIndex: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // Immediately show the session (optimistic)
+    setSessions((prev) => [optimisticSession, ...prev]);
+    openTab(optimisticSession);
+    onPlanningStarted?.();
+
+    // Create on server in background
     try {
-      const session = await api.createPlanningSession(
+      const realSession = await api.createPlanningSession(
         repoId,
         pendingPlanning.branchName,
         `Planning: ${pendingPlanning.branchName}`,
         "planning"
       );
-      openTab(session);
-      onPlanningStarted?.();
+      // Replace optimistic session with real one
+      setSessions((prev) => prev.map((s) => s.id === tempId ? realSession : s));
+      // Update selected session if it's the optimistic one
+      if (selectedSession?.id === tempId) {
+        onSessionSelect?.(realSession);
+      }
+      // Update open tab IDs
+      setOpenTabIds((prev) => prev.map((id) => id === tempId ? realSession.id : id));
+      // Update active tab if needed
+      if (activeTabId === tempId) {
+        setActiveTabId(realSession.id);
+      }
     } catch (err) {
+      // Remove optimistic session on error
+      setSessions((prev) => prev.filter((s) => s.id !== tempId));
+      setOpenTabIds((prev) => prev.filter((id) => id !== tempId));
       setError((err as Error).message);
-    } finally {
-      setCreating(false);
     }
   };
 

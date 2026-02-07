@@ -26,7 +26,8 @@ import { useSessionNotifications } from "../lib/useSessionNotifications";
 import { ChatPanel } from "./ChatPanel";
 import ExecuteBranchSelector from "./ExecuteBranchSelector";
 import ExecuteSidebar from "./ExecuteSidebar";
-import PlanningTodoOverview from "./PlanningTodoOverview";
+import ExecuteBranchTree from "./ExecuteBranchTree";
+import ExecuteTodoList from "./ExecuteTodoList";
 import type { TaskSuggestion } from "../lib/task-parser";
 import type { TodoUpdate } from "../lib/todo-parser";
 import githubIcon from "../assets/github.svg";
@@ -236,7 +237,6 @@ export function PlanningPanel({
 
   // New session form
   const [showNewForm, setShowNewForm] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
   const [newBaseBranch, setNewBaseBranch] = useState(defaultBranch);
 
   // External links for selected session
@@ -297,6 +297,11 @@ export function PlanningPanel({
   const [executeEditTitle, setExecuteEditTitle] = useState("");
   const [executeEditBranches, setExecuteEditBranches] = useState<string[]>([]);
 
+  // Planning Session state (similar to Execute but for planning multiple branches)
+  const [planningSelectedBranches, setPlanningSelectedBranches] = useState<string[]>([]);
+  const [planningCurrentBranchIndex, setPlanningCurrentBranchIndex] = useState(0);
+  const [planningLoading, setPlanningLoading] = useState(false);
+
   // Load execute branches from session when selected
   useEffect(() => {
     if (selectedSession?.type === "execute" && selectedSession.executeBranches) {
@@ -305,6 +310,17 @@ export function PlanningPanel({
       setExecuteSelectedBranches([]);
     }
   }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches]);
+
+  // Load planning branches from session when selected
+  useEffect(() => {
+    if (selectedSession?.type === "planning" && selectedSession.executeBranches) {
+      setPlanningSelectedBranches(selectedSession.executeBranches);
+      setPlanningCurrentBranchIndex(selectedSession.currentExecuteIndex || 0);
+    } else {
+      setPlanningSelectedBranches([]);
+      setPlanningCurrentBranchIndex(0);
+    }
+  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, selectedSession?.currentExecuteIndex]);
 
   // Load current task instruction for Execute Session
   useEffect(() => {
@@ -516,15 +532,20 @@ export function PlanningPanel({
       setInstructionDirty(false);
       return;
     }
+    // For planning sessions with branches, use the current branch; otherwise use baseBranch
+    const branchToLoad = selectedSession.executeBranches && selectedSession.executeBranches.length > 0
+      ? selectedSession.executeBranches[planningCurrentBranchIndex] || selectedSession.baseBranch
+      : selectedSession.baseBranch;
+
     setInstructionLoading(true);
-    api.getTaskInstruction(repoId, selectedSession.baseBranch)
+    api.getTaskInstruction(repoId, branchToLoad)
       .then((instruction) => {
         setCurrentInstruction(instruction?.instructionMd || "");
         setInstructionDirty(false);
       })
       .catch(console.error)
       .finally(() => setInstructionLoading(false));
-  }, [selectedSession?.id, repoId]);
+  }, [selectedSession?.id, selectedSession?.executeBranches, planningCurrentBranchIndex, repoId]);
 
   // Clear pending nodes when session changes
   useEffect(() => {
@@ -537,14 +558,16 @@ export function PlanningPanel({
   }, [selectedSession?.id, selectedSession?.title]);
 
   const handleCreateSession = async () => {
-    if (!newBaseBranch.trim()) return;
+    // For refinement, require branch; for planning/execute, use default (branches selected later)
+    const baseBranch = newSessionType === "refinement" ? newBaseBranch.trim() : defaultBranch;
+    if (!baseBranch) return;
     setCreating(true);
     setError(null);
     try {
       const session = await api.createPlanningSession(
         repoId,
-        newBaseBranch.trim(),
-        newTitle.trim() || undefined,
+        baseBranch,
+        undefined, // Title is auto-generated
         newSessionType
       );
       // State will be updated via WebSocket planning.created event
@@ -552,7 +575,6 @@ export function PlanningPanel({
       const replaceEmpty = activeTabId !== null && isEmptyTab(activeTabId);
       openTab(session, replaceEmpty);
       setShowNewForm(false);
-      setNewTitle("");
       setNewBaseBranch(defaultBranch);
       setNewSessionType("refinement");
     } catch (err) {
@@ -847,6 +869,29 @@ export function PlanningPanel({
     }
   };
 
+  // Planning Session handlers
+  const handlePlanningBranchesChange = (branches: string[]) => {
+    setPlanningSelectedBranches(branches);
+  };
+
+  const handleStartPlanning = async () => {
+    if (!selectedSession || planningSelectedBranches.length === 0) return;
+    setPlanningLoading(true);
+    try {
+      const updated = await api.updateExecuteBranches(selectedSession.id, planningSelectedBranches);
+      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      onSessionSelect?.(updated);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setPlanningLoading(false);
+    }
+  };
+
+  const handlePlanningBranchSwitch = (branchIndex: number) => {
+    setPlanningCurrentBranchIndex(branchIndex);
+  };
+
   // Execute Session edit mode handlers
   const handleStartExecuteEdit = () => {
     if (!selectedSession) return;
@@ -980,23 +1025,6 @@ export function PlanningPanel({
       setExternalLinks((prev) => prev.filter((l) => l.id !== id));
     } catch (err) {
       console.error("Failed to remove link:", err);
-    }
-  };
-
-  // Save task instruction
-  const handleSaveInstruction = async () => {
-    if (!selectedSession || !repoId || instructionSaving) return;
-    setInstructionSaving(true);
-    try {
-      await api.updateTaskInstruction(repoId, selectedSession.baseBranch, currentInstruction);
-      setInstructionDirty(false);
-      // Update the cached instruction for the list view
-      setBranchInstructions((prev) => new Map(prev).set(selectedSession.baseBranch, currentInstruction));
-    } catch (err) {
-      console.error("Failed to save instruction:", err);
-      setError("Failed to save instruction");
-    } finally {
-      setInstructionSaving(false);
     }
   };
 
@@ -1338,22 +1366,18 @@ export function PlanningPanel({
                 <span>Execute</span>
               </button>
             </div>
-            <input
-              type="text"
-              placeholder="Title (optional)"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              className="planning-panel__input"
-            />
-            <select
-              value={newBaseBranch}
-              onChange={(e) => setNewBaseBranch(e.target.value)}
-              className="planning-panel__select"
-            >
-              {branches.map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
+            {/* Branch selection only for Refinement (Planning/Execute select branches later) */}
+            {newSessionType === "refinement" && (
+              <select
+                value={newBaseBranch}
+                onChange={(e) => setNewBaseBranch(e.target.value)}
+                className="planning-panel__select"
+              >
+                {branches.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            )}
             <div className="planning-panel__form-actions">
               <button onClick={handleCreateSession} disabled={creating}>
                 {creating ? "Creating..." : "Create (⌘↵)"}
@@ -1627,7 +1651,165 @@ export function PlanningPanel({
       );
     }
 
-    // Non-Execute Session header (editable)
+    // Planning Session
+    if (sessionTypeValue === "planning") {
+      const planningBranches = selectedSession.executeBranches || [];
+      const hasBranches = planningBranches.length > 0;
+      const planningStatus = hasBranches ? "in_progress" : "draft";
+      const planningStatusLabel = hasBranches ? "In Progress" : "Draft";
+      const currentPlanningBranch = hasBranches
+        ? planningBranches[planningCurrentBranchIndex]
+        : null;
+
+      return (
+        <div className="planning-panel__detail-content">
+          <div className="planning-panel__header">
+            <span className={`planning-panel__session-type planning-panel__session-type--${sessionTypeValue}`}>
+              <span className="planning-panel__session-type-icon">{sessionTypeIcon}</span>
+              {sessionTypeLabel}
+            </span>
+            <span className={`planning-panel__execute-status planning-panel__execute-status--${planningStatus}`}>
+              {planningStatusLabel}
+            </span>
+            <span className="planning-panel__header-title">{selectedSession.title}</span>
+            <button
+              className="planning-panel__delete-btn"
+              onClick={handleDelete}
+              title="Delete this session"
+            >
+              Delete
+            </button>
+          </div>
+
+          {/* Branch Selection Mode (initial setup) */}
+          {!hasBranches && (
+            <div className="planning-panel__execute-selection">
+              <ExecuteBranchSelector
+                nodes={graphNodes}
+                edges={graphEdges}
+                defaultBranch={defaultBranch}
+                selectedBranches={planningSelectedBranches}
+                onSelectionChange={handlePlanningBranchesChange}
+                onStartExecution={handleStartPlanning}
+                executeLoading={planningLoading}
+              />
+            </div>
+          )}
+
+          {/* Planning Mode */}
+          {hasBranches && (
+            <div className="planning-panel__detail-main">
+              {/* Chat */}
+              <div className="planning-panel__chat">
+                {selectedSession.chatSessionId && (
+                  <ChatPanel
+                    sessionId={selectedSession.chatSessionId}
+                    onTaskSuggested={handleTaskSuggested}
+                    existingTaskLabels={selectedSession.nodes.map((n) => n.title)}
+                    disabled={false}
+                    currentInstruction={currentInstruction}
+                    onInstructionUpdated={async (newContent) => {
+                      if (!currentPlanningBranch) return;
+                      setCurrentInstruction(newContent);
+                      setInstructionDirty(false);
+                      try {
+                        await api.updateTaskInstruction(repoId, currentPlanningBranch, newContent);
+                        setBranchInstructions((prev) => new Map(prev).set(currentPlanningBranch, newContent));
+                      } catch (err) {
+                        console.error("Failed to save instruction:", err);
+                        setError("Failed to save instruction");
+                      }
+                    }}
+                    onTodoUpdate={(update, branchName) => handleTodoUpdate(update, branchName)}
+                  />
+                )}
+              </div>
+
+              {/* Resizer */}
+              <div
+                className="planning-panel__resizer"
+                onMouseDown={handleResizeStart}
+              />
+
+              {/* Sidebar: Branch switcher + Instruction + ToDo */}
+              <div className="planning-panel__sidebar" style={{ width: sidebarWidth }}>
+                {/* Branch Tree */}
+                <ExecuteBranchTree
+                  branches={planningBranches}
+                  currentBranchIndex={planningCurrentBranchIndex}
+                  previewBranch={null}
+                  onPreviewBranch={(branch) => {
+                    const index = planningBranches.indexOf(branch);
+                    if (index !== -1) handlePlanningBranchSwitch(index);
+                  }}
+                  completedBranches={new Set()}
+                />
+
+                {/* Current Branch Instruction */}
+                {currentPlanningBranch && (
+                  <div className="planning-panel__instruction">
+                    <div className="planning-panel__instruction-header">
+                      <h4>Instruction: {currentPlanningBranch}</h4>
+                      {instructionDirty && (
+                        <span className="planning-panel__instruction-dirty">unsaved</span>
+                      )}
+                    </div>
+                    {instructionLoading ? (
+                      <div className="planning-panel__instruction-loading">Loading...</div>
+                    ) : (
+                      <>
+                        <textarea
+                          className="planning-panel__instruction-textarea"
+                          value={currentInstruction}
+                          onChange={(e) => {
+                            setCurrentInstruction(e.target.value);
+                            setInstructionDirty(true);
+                          }}
+                          placeholder="Enter detailed task instructions..."
+                        />
+                        <button
+                          className="planning-panel__instruction-save"
+                          onClick={async () => {
+                            if (!currentPlanningBranch) return;
+                            setInstructionSaving(true);
+                            try {
+                              await api.updateTaskInstruction(repoId, currentPlanningBranch, currentInstruction);
+                              setBranchInstructions((prev) => new Map(prev).set(currentPlanningBranch, currentInstruction));
+                              setInstructionDirty(false);
+                            } catch (err) {
+                              console.error("Failed to save instruction:", err);
+                              setError("Failed to save instruction");
+                            } finally {
+                              setInstructionSaving(false);
+                            }
+                          }}
+                          disabled={!instructionDirty || instructionSaving}
+                        >
+                          {instructionSaving ? "Saving..." : "Save"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Current Branch ToDo */}
+                {currentPlanningBranch && (
+                  <div className="planning-panel__todo-section">
+                    <ExecuteTodoList
+                      repoId={repoId}
+                      branchName={currentPlanningBranch}
+                      planningSessionId={selectedSession.id}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Non-Execute, Non-Planning Session (Refinement)
     return (
       <div className="planning-panel__detail-content">
         <div className="planning-panel__header">
@@ -1639,7 +1821,7 @@ export function PlanningPanel({
           value={selectedSession.baseBranch}
           onChange={(e) => handleUpdateBaseBranch(e.target.value)}
           className="planning-panel__branch-select"
-          disabled={selectedSession.status !== "draft" || sessionTypeValue === "planning"}
+          disabled={selectedSession.status !== "draft"}
         >
           {branches.map((b) => (
             <option key={b} value={b}>{b}</option>
@@ -1670,21 +1852,6 @@ export function PlanningPanel({
               onTaskSuggested={handleTaskSuggested}
               existingTaskLabels={selectedSession.nodes.map((n) => n.title)}
               disabled={selectedSession.status !== "draft"}
-              currentInstruction={sessionTypeValue === "planning" ? currentInstruction : undefined}
-              onInstructionUpdated={sessionTypeValue === "planning" ? async (newContent) => {
-                // Update local state
-                setCurrentInstruction(newContent);
-                setInstructionDirty(false);
-                // Save to API
-                try {
-                  await api.updateTaskInstruction(repoId, selectedSession.baseBranch, newContent);
-                  // Update cached instruction for list view
-                  setBranchInstructions((prev) => new Map(prev).set(selectedSession.baseBranch, newContent));
-                } catch (err) {
-                  console.error("Failed to save instruction:", err);
-                  setError("Failed to save instruction");
-                }
-              } : undefined}
             />
           )}
         </div>
@@ -1764,9 +1931,8 @@ export function PlanningPanel({
             )}
           </div>
 
-          {/* Task list - only for Refinement/Execute sessions */}
-          {sessionTypeValue !== "planning" && (
-            <div className="planning-panel__tasks">
+          {/* Task list - for Refinement sessions */}
+          <div className="planning-panel__tasks">
               <h4>Tasks ({selectedSession.nodes.length})</h4>
               <DndContext
                 sensors={sensors}
@@ -1800,57 +1966,6 @@ export function PlanningPanel({
                 </div>
               )}
             </div>
-          )}
-
-          {/* Task Instruction - only for Planning sessions */}
-          {sessionTypeValue === "planning" && (
-            <div className="planning-panel__instruction">
-              <div className="planning-panel__instruction-header">
-                <h4>Task Instruction</h4>
-                {instructionDirty && (
-                  <span className="planning-panel__instruction-dirty">unsaved</span>
-                )}
-              </div>
-              {instructionLoading ? (
-                <div className="planning-panel__instruction-loading">Loading...</div>
-              ) : (
-                <>
-                  <textarea
-                    className="planning-panel__instruction-textarea"
-                    value={currentInstruction}
-                    onChange={(e) => {
-                      setCurrentInstruction(e.target.value);
-                      setInstructionDirty(true);
-                    }}
-                    placeholder="Enter detailed task instructions..."
-                    disabled={selectedSession.status !== "draft"}
-                  />
-                  {selectedSession.status === "draft" && (
-                    <button
-                      className="planning-panel__instruction-save"
-                      onClick={handleSaveInstruction}
-                      disabled={!instructionDirty || instructionSaving}
-                    >
-                      {instructionSaving ? "Saving..." : "Save"}
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* ToDo Overview - for sessions with tasks */}
-          {selectedSession.nodes.length > 0 && (
-            <div className="planning-panel__todo-overview">
-              <PlanningTodoOverview
-                repoId={repoId}
-                branches={selectedSession.nodes
-                  .map((n) => n.branchName)
-                  .filter((b): b is string => !!b)}
-                planningSessionId={selectedSession.id}
-              />
-            </div>
-          )}
 
           {/* Actions in sidebar */}
           {selectedSession.status === "draft" && (
@@ -1865,7 +1980,7 @@ export function PlanningPanel({
               <button
                 className="planning-panel__confirm-btn"
                 onClick={handleConfirm}
-                disabled={loading || (sessionTypeValue !== "planning" && selectedSession.nodes.length === 0)}
+                disabled={loading || selectedSession.nodes.length === 0}
               >
                 Confirm
               </button>

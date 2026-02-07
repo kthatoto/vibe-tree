@@ -270,10 +270,6 @@ export function PlanningPanel({
   const selectedSessionRef = useRef(selectedSession);
   selectedSessionRef.current = selectedSession;
 
-  // Ref to track the latest planning branch index for async operations
-  const planningCurrentBranchIndexRef = useRef(planningCurrentBranchIndex);
-  planningCurrentBranchIndexRef.current = planningCurrentBranchIndex;
-
   // Ref to track pending nodes (added but not yet saved to API) for parent lookup
   const pendingNodesRef = useRef<TaskNode[]>([]);
 
@@ -310,6 +306,10 @@ export function PlanningPanel({
 
   // Planning sidebar tabs (without branches - branches are always shown at top)
   const [planningSidebarTab, setPlanningSidebarTab] = useState<"instruction" | "todo" | "questions">("instruction");
+
+  // Ref to track the latest planning branch index for async operations
+  const planningCurrentBranchIndexRef = useRef(planningCurrentBranchIndex);
+  planningCurrentBranchIndexRef.current = planningCurrentBranchIndex;
 
   // Load execute branches from session when selected
   useEffect(() => {

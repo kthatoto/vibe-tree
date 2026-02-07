@@ -312,7 +312,8 @@ export default function TreeDashboard() {
   // Planning session handlers
   const handlePlanningSessionSelect = useCallback((session: PlanningSession | null) => {
     setSelectedPlanningSession(session);
-    if (session) {
+    // Only show tentative nodes for draft sessions (not confirmed/discarded)
+    if (session && session.status === "draft") {
       setTentativeNodes(session.nodes);
       setTentativeEdges(session.edges);
     } else {

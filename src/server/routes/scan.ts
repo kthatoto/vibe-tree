@@ -228,10 +228,10 @@ scanRouter.post("/", async (c) => {
       title: string;
       branchName?: string;
     }>;
-    // Planning session edges use { from, to } format (from = parent branch, to = child branch)
+    // Planning session edges use { parent, child } format (task IDs)
     const sessionEdges = JSON.parse(session.edgesJson) as Array<{
-      from: string;
-      to: string;
+      parent: string;
+      child: string;
     }>;
 
     // Build taskId -> branchName map
@@ -245,8 +245,8 @@ scanRouter.post("/", async (c) => {
     // Convert task edges to branch edges
     for (const edge of sessionEdges) {
       // First try to resolve as task IDs, then as branch names directly
-      const parentBranch = taskToBranch.get(edge.from) ?? edge.from;
-      const childBranch = taskToBranch.get(edge.to) ?? edge.to;
+      const parentBranch = taskToBranch.get(edge.parent) ?? edge.parent;
+      const childBranch = taskToBranch.get(edge.child) ?? edge.child;
 
       if (parentBranch && childBranch) {
         // Skip edges that contradict git ancestry (child is ancestor of parent in git)
@@ -301,7 +301,7 @@ scanRouter.post("/", async (c) => {
     }
 
     // Also add edges for root tasks (tasks without parent edge) to base branch
-    const childTaskIds = new Set(sessionEdges.map((e) => e.to));
+    const childTaskIds = new Set(sessionEdges.map((e) => e.child));
     for (const node of sessionNodes) {
       if (node.branchName && !childTaskIds.has(node.id)) {
         // This is a root task - connect to base branch

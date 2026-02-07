@@ -1,0 +1,44 @@
+.execute-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.execute-sidebar--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  font-size: 13px;
+}
+
+.execute-sidebar__section {
+  display: flex;
+  flex-direction: column;
+}
+
+.execute-sidebar__section--todos {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Scrollbar styling */
+.execute-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.execute-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.execute-sidebar::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+
+.execute-sidebar::-webkit-scrollbar-thumb:hover {
+  background: #444;
+}

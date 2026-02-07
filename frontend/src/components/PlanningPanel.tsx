@@ -1,6 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   DndContext,
   DragOverlay,
@@ -27,6 +25,7 @@ import { wsClient } from "../lib/ws";
 import { useSessionNotifications } from "../lib/useSessionNotifications";
 import { ChatPanel } from "./ChatPanel";
 import ExecuteBranchSelector from "./ExecuteBranchSelector";
+import ExecuteSidebar from "./ExecuteSidebar";
 import type { TaskSuggestion } from "../lib/task-parser";
 import githubIcon from "../assets/github.svg";
 import notionIcon from "../assets/notion.svg";
@@ -881,6 +880,14 @@ export function PlanningPanel({
     }
   };
 
+  // Manual branch switch for Execute Session
+  // TODO: Add API endpoint for setting currentExecuteIndex
+  const handleManualBranchSwitch = useCallback((_branchIndex: number) => {
+    if (!selectedSession || selectedSession.type !== "execute") return;
+    // For now, manual branch switching is view-only (via preview)
+    // Full implementation would require an API to update currentExecuteIndex
+  }, [selectedSession]);
+
   // External link handlers
   const handleAddLink = async () => {
     if (!newLinkUrl.trim() || !selectedSession || addingLink) return;
@@ -1533,34 +1540,13 @@ export function PlanningPanel({
 
               {/* Sidebar */}
               <div className="planning-panel__sidebar" style={{ width: sidebarWidth }}>
-                {/* Progress */}
-                <div className="planning-panel__execute-progress">
-                  <div className="planning-panel__execute-progress-header">
-                    <span>Task {selectedSession.currentExecuteIndex + 1} of {selectedSession.executeBranches.length}</span>
-                    <div className="planning-panel__execute-progress-bar">
-                      <div
-                        className="planning-panel__execute-progress-fill"
-                        style={{ width: `${(selectedSession.currentExecuteIndex / selectedSession.executeBranches.length) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="planning-panel__execute-current">
-                    {selectedSession.executeBranches[selectedSession.currentExecuteIndex]}
-                  </div>
-                </div>
-
-                {/* Task Instruction */}
-                <div className="planning-panel__execute-instruction">
-                  <div className="planning-panel__execute-instruction-content">
-                    {executeCurrentTaskInstruction?.instructionMd ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {executeCurrentTaskInstruction.instructionMd}
-                      </ReactMarkdown>
-                    ) : (
-                      <span className="planning-panel__no-instruction">No instruction</span>
-                    )}
-                  </div>
-                </div>
+                <ExecuteSidebar
+                  repoId={repoId}
+                  executeBranches={selectedSession.executeBranches}
+                  currentExecuteIndex={selectedSession.currentExecuteIndex}
+                  planningSessionId={selectedSession.id}
+                  onManualBranchSwitch={handleManualBranchSwitch}
+                />
               </div>
             </div>
           )}

@@ -178,3 +178,4 @@ dist
 # Finder (MacOS) folder config
 .DS_Store
 data/local.db
+data/data.db

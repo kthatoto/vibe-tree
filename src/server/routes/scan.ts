@@ -247,6 +247,8 @@ scanRouter.post("/", async (c) => {
     }
 
     // Convert task edges to branch edges
+    // NOTE: Planning session edges are user-designed, so we trust them completely
+    // and do NOT validate against git ancestry (which can fail for newly created branches)
     for (const edge of sessionEdges) {
       console.log(`[Scan] Processing edge: parent=${edge.parent}, child=${edge.child}`);
       // First try to resolve as task IDs, then as branch names directly
@@ -255,24 +257,6 @@ scanRouter.post("/", async (c) => {
       console.log(`[Scan] Resolved to: parentBranch=${parentBranch}, childBranch=${childBranch}`);
 
       if (parentBranch && childBranch) {
-        // Skip edges that contradict git ancestry (child is ancestor of parent in git)
-        try {
-          const mergeBase = execSync(
-            `cd "${localPath}" && git merge-base "${childBranch}" "${parentBranch}" 2>/dev/null`,
-            { encoding: "utf-8" }
-          ).trim();
-          const childTip = execSync(
-            `cd "${localPath}" && git rev-parse "${childBranch}" 2>/dev/null`,
-            { encoding: "utf-8" }
-          ).trim();
-          if (mergeBase === childTip) {
-            // Child is ancestor of parent - skip this backwards edge
-            continue;
-          }
-        } catch {
-          // If git commands fail, allow the edge
-        }
-
         // Check if this child already has an edge
         const existingIndex = edges.findIndex((e) => e.child === childBranch);
         if (existingIndex >= 0) {

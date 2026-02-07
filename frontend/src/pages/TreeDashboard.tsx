@@ -18,6 +18,7 @@ import {
   type TaskStatus,
   type TreeSpecStatus,
   type BranchNamingRule,
+  type TaskInstruction,
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import BranchGraph from "../components/BranchGraph";
@@ -47,6 +48,11 @@ export default function TreeDashboard() {
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Instruction cache: branchName -> TaskInstruction
+  const [instructionCache, setInstructionCache] = useState<Map<string, TaskInstruction>>(new Map());
+  const [currentInstruction, setCurrentInstruction] = useState<TaskInstruction | null>(null);
+  const [instructionLoading, setInstructionLoading] = useState(false);
 
 
   // Multi-session planning state
@@ -184,6 +190,49 @@ export default function TreeDashboard() {
       }
     }
   }, [snapshot, selectedNode]);
+
+  // Load instruction when selectedNode changes (with caching)
+  useEffect(() => {
+    if (!snapshot?.repoId || !selectedNode) {
+      setCurrentInstruction(null);
+      return;
+    }
+
+    const branchName = selectedNode.branchName;
+
+    // Check cache first
+    const cached = instructionCache.get(branchName);
+    if (cached) {
+      setCurrentInstruction(cached);
+      setInstructionLoading(false);
+      return;
+    }
+
+    // Not in cache, fetch from API
+    setInstructionLoading(true);
+    api.getTaskInstruction(snapshot.repoId, branchName)
+      .then((instr) => {
+        setInstructionCache((prev) => new Map(prev).set(branchName, instr));
+        setCurrentInstruction(instr);
+      })
+      .catch((err) => {
+        console.error("Failed to load instruction:", err);
+        // Set empty instruction on error
+        const emptyInstr: TaskInstruction = {
+          id: null,
+          repoId: snapshot.repoId,
+          taskId: null,
+          branchName,
+          instructionMd: "",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        setCurrentInstruction(emptyInstr);
+      })
+      .finally(() => {
+        setInstructionLoading(false);
+      });
+  }, [snapshot?.repoId, selectedNode?.branchName, instructionCache]);
 
   // Load plan and connect WS when snapshot is available
   useEffect(() => {
@@ -1309,6 +1358,15 @@ export default function TreeDashboard() {
                         ? selectedPlanningSession.baseBranch
                         : null
                     }
+                    instruction={currentInstruction}
+                    instructionLoading={instructionLoading}
+                    onInstructionUpdate={(updated) => {
+                      const key = updated.branchName;
+                      if (key) {
+                        setInstructionCache((prev) => new Map(prev).set(key, updated));
+                      }
+                      setCurrentInstruction(updated);
+                    }}
                   />
                 ) : (
                   <div className="panel">

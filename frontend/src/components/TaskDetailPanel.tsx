@@ -172,6 +172,10 @@ interface TaskDetailPanelProps {
   onWorktreeCreated?: () => void | Promise<void>;
   onStartPlanning?: (branchName: string, instruction: string | null) => void;
   activePlanningBranch?: string | null; // Hide instruction section when this matches branchName
+  // Instruction from parent (cached)
+  instruction?: TaskInstruction | null;
+  instructionLoading?: boolean;
+  onInstructionUpdate?: (instruction: TaskInstruction) => void;
 }
 
 export function TaskDetailPanel({
@@ -185,16 +189,17 @@ export function TaskDetailPanel({
   onWorktreeCreated,
   onStartPlanning,
   activePlanningBranch,
+  instruction,
+  instructionLoading = false,
+  onInstructionUpdate,
 }: TaskDetailPanelProps) {
   const isDefaultBranch = branchName === defaultBranch;
 
   // Flag to disable chat section (code kept for reuse in Claude Code Sessions later)
   const CHAT_ENABLED = false;
 
-  const [instruction, setInstruction] = useState<TaskInstruction | null>(null);
   const [editingInstruction, setEditingInstruction] = useState(false);
   const [instructionDraft, setInstructionDraft] = useState("");
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Chat state
@@ -271,23 +276,12 @@ export function TaskDetailPanel({
   // Planning mode can work without workingPath (uses localPath), Execution requires workingPath
   const effectivePath = workingPath || localPath; // For Planning mode, use localPath as fallback
 
-  // Load task instruction
+  // Update instruction draft when instruction changes (from parent cache)
   useEffect(() => {
-    const loadInstruction = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const instr = await api.getTaskInstruction(repoId, branchName);
-        setInstruction(instr);
-        setInstructionDraft(instr.instructionMd);
-      } catch (err) {
-        setError((err as Error).message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadInstruction();
-  }, [repoId, branchName]);
+    if (instruction) {
+      setInstructionDraft(instruction.instructionMd);
+    }
+  }, [instruction]);
 
   // Load branch links and refresh from GitHub
   useEffect(() => {
@@ -573,7 +567,7 @@ export function TaskDetailPanel({
     if (!instructionDraft.trim()) return;
     try {
       const updated = await api.updateTaskInstruction(repoId, branchName, instructionDraft);
-      setInstruction(updated);
+      onInstructionUpdate?.(updated);
       setEditingInstruction(false);
     } catch (err) {
       setError((err as Error).message);
@@ -687,7 +681,7 @@ export function TaskDetailPanel({
     try {
       // Update the task instruction
       const updated = await api.updateTaskInstruction(repoId, branchName, newContent);
-      setInstruction(updated);
+      onInstructionUpdate?.(updated);
       // Save the commit status to DB
       await api.updateInstructionEditStatus(messageId, "committed");
       setEditStatuses((prev) => new Map(prev).set(messageId, "committed"));
@@ -823,7 +817,7 @@ export function TaskDetailPanel({
   }, [chatSessionId, clearingChat, repoId, effectivePath, branchName]);
 
   // Check if any loading is happening
-  const isRefetching = loading || checkingPR;
+  const isRefetching = instructionLoading || checkingPR;
 
   // Default branch: show simplified view without Planning/Execution
   if (isDefaultBranch) {
@@ -1243,7 +1237,7 @@ export function TaskDetailPanel({
           <span className="task-detail-panel__instruction-hidden-icon">📝</span>
           <span>Editing in Planning Session below</span>
         </div>
-      ) : loading ? (
+      ) : instructionLoading ? (
         <div className="task-detail-panel__instruction-section task-detail-panel__instruction-section--loading">
           <div className="task-detail-panel__instruction-header">
             <h4>Task Instruction</h4>

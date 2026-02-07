@@ -765,6 +765,10 @@ export const api = {
     fetchJson<PlanningSession>(`${API_BASE}/planning-sessions/${id}/confirm`, {
       method: "POST",
     }),
+  unconfirmPlanningSession: (id: string) =>
+    fetchJson<PlanningSession>(`${API_BASE}/planning-sessions/${id}/unconfirm`, {
+      method: "POST",
+    }),
   discardPlanningSession: (id: string) =>
     fetchJson<PlanningSession>(`${API_BASE}/planning-sessions/${id}/discard`, {
       method: "POST",

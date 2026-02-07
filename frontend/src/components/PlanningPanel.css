@@ -906,6 +906,21 @@
   color: #fff;
 }
 
+.planning-panel__unconfirm-btn {
+  padding: 4px 10px;
+  background: transparent;
+  color: #fbbf24;
+  border: 1px solid #fbbf24;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.planning-panel__unconfirm-btn:hover {
+  background: #fbbf24;
+  color: #1a1a1a;
+}
+
 /* Drag and drop styles */
 .planning-panel__task-item {
   cursor: grab;

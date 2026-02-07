@@ -695,6 +695,20 @@ export function PlanningPanel({
     }
   };
 
+  const handleUnconfirm = async () => {
+    if (!selectedSession) return;
+    setLoading(true);
+    try {
+      const updated = await api.unconfirmPlanningSession(selectedSession.id);
+      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      onSessionSelect?.(updated);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDiscard = async () => {
     if (!selectedSession) return;
     if (!confirm("このプランニングセッションを破棄しますか？")) return;
@@ -1699,6 +1713,9 @@ export function PlanningPanel({
           {selectedSession.status === "confirmed" && (
             <div className="planning-panel__status-banner planning-panel__status-banner--confirmed">
               Confirmed
+              <button onClick={handleUnconfirm} className="planning-panel__unconfirm-btn">
+                Unconfirm
+              </button>
               <button onClick={handleDelete} className="planning-panel__delete-btn">
                 Delete
               </button>

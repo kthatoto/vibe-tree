@@ -491,6 +491,51 @@ planningSessionsRouter.post("/:id/confirm", async (c) => {
   });
 });
 
+// POST /api/planning-sessions/:id/unconfirm - Revert confirmed session back to draft
+planningSessionsRouter.post("/:id/unconfirm", async (c) => {
+  const id = c.req.param("id");
+
+  const [session] = await db
+    .select()
+    .from(schema.planningSessions)
+    .where(eq(schema.planningSessions.id, id));
+
+  if (!session) {
+    throw new NotFoundError("Planning session not found");
+  }
+
+  if (session.status !== "confirmed") {
+    throw new BadRequestError("Session is not in confirmed status");
+  }
+
+  const now = new Date().toISOString();
+  await db
+    .update(schema.planningSessions)
+    .set({ status: "draft", updatedAt: now })
+    .where(eq(schema.planningSessions.id, id));
+
+  // Reactivate the chat session if it was archived
+  if (session.chatSessionId) {
+    await db
+      .update(schema.chatSessions)
+      .set({ status: "active", updatedAt: now })
+      .where(eq(schema.chatSessions.id, session.chatSessionId));
+  }
+
+  const [updated] = await db
+    .select()
+    .from(schema.planningSessions)
+    .where(eq(schema.planningSessions.id, id));
+
+  broadcast({
+    type: "planning.updated",
+    repoId: updated!.repoId,
+    data: toSession(updated!),
+  });
+
+  return c.json(toSession(updated!));
+});
+
 // POST /api/planning-sessions/:id/discard - Discard planning session
 planningSessionsRouter.post("/:id/discard", async (c) => {
   const id = c.req.param("id");

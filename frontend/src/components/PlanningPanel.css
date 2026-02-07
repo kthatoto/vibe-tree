@@ -1766,6 +1766,15 @@
   border-color: #6b7280;
 }
 
+/* Planning Sidebar - Branches section at top */
+.planning-panel__sidebar-branches {
+  padding: 8px;
+  border-bottom: 1px solid #374151;
+  flex-shrink: 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
 /* Planning Sidebar Tabs */
 .planning-panel__sidebar-tabs {
   display: flex;
@@ -1825,11 +1834,11 @@
 }
 
 .planning-panel__todo-section {
-  padding: 8px;
+  padding: 12px;
   overflow-y: auto;
 }
 
 .planning-panel__questions-section {
-  padding: 8px;
+  padding: 12px;
   overflow-y: auto;
 }

@@ -304,8 +304,8 @@ export function PlanningPanel({
   const [planningCurrentBranchIndex, setPlanningCurrentBranchIndex] = useState(0);
   const [planningLoading, setPlanningLoading] = useState(false);
 
-  // Planning sidebar tabs
-  const [planningSidebarTab, setPlanningSidebarTab] = useState<"branches" | "instruction" | "todo" | "questions">("branches");
+  // Planning sidebar tabs (without branches - branches are always shown at top)
+  const [planningSidebarTab, setPlanningSidebarTab] = useState<"instruction" | "todo" | "questions">("instruction");
 
   // Load execute branches from session when selected
   useEffect(() => {
@@ -1810,16 +1810,24 @@ export function PlanningPanel({
                 onMouseDown={handleResizeStart}
               />
 
-              {/* Sidebar: Tabbed view */}
+              {/* Sidebar: Branches at top, then tabbed content */}
               <div className="planning-panel__sidebar" style={{ width: sidebarWidth }}>
+                {/* Branch Tree (always visible at top) */}
+                <div className="planning-panel__sidebar-branches">
+                  <ExecuteBranchTree
+                    branches={planningBranches}
+                    currentBranchIndex={planningCurrentBranchIndex}
+                    previewBranch={null}
+                    onPreviewBranch={(branch) => {
+                      const index = planningBranches.indexOf(branch);
+                      if (index !== -1) handlePlanningBranchSwitch(index);
+                    }}
+                    completedBranches={new Set()}
+                  />
+                </div>
+
                 {/* Tab Header */}
                 <div className="planning-panel__sidebar-tabs">
-                  <button
-                    className={`planning-panel__sidebar-tab ${planningSidebarTab === "branches" ? "planning-panel__sidebar-tab--active" : ""}`}
-                    onClick={() => setPlanningSidebarTab("branches")}
-                  >
-                    Branches
-                  </button>
                   <button
                     className={`planning-panel__sidebar-tab ${planningSidebarTab === "instruction" ? "planning-panel__sidebar-tab--active" : ""}`}
                     onClick={() => setPlanningSidebarTab("instruction")}
@@ -1842,20 +1850,6 @@ export function PlanningPanel({
 
                 {/* Tab Content */}
                 <div className="planning-panel__sidebar-content">
-                  {/* Branches Tab */}
-                  {planningSidebarTab === "branches" && (
-                    <ExecuteBranchTree
-                      branches={planningBranches}
-                      currentBranchIndex={planningCurrentBranchIndex}
-                      previewBranch={null}
-                      onPreviewBranch={(branch) => {
-                        const index = planningBranches.indexOf(branch);
-                        if (index !== -1) handlePlanningBranchSwitch(index);
-                      }}
-                      completedBranches={new Set()}
-                    />
-                  )}
-
                   {/* Instruction Tab */}
                   {planningSidebarTab === "instruction" && currentPlanningBranch && (
                     <div className="planning-panel__instruction">

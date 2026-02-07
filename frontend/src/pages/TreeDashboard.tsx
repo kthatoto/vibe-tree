@@ -1289,7 +1289,6 @@ export default function TreeDashboard() {
               </div>
 
               {/* Right: Details */}
-              {!graphFullscreen && (
               <div className="tree-view__details">
                 {selectedNode && selectedPin ? (
                   <TaskDetailPanel
@@ -1322,7 +1321,6 @@ export default function TreeDashboard() {
                   </div>
                 )}
               </div>
-              )}
             </div>
             )}
 

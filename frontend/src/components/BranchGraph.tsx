@@ -357,9 +357,11 @@ export default function BranchGraph({
         return Math.max(col, currentCol);
       };
 
-      // Layout each root tentative node tree
+      // Layout each root tentative node tree - start from base branch's column
+      const baseCol = baseBranchNode?.row ?? 0;
+      let tentativeCol = baseCol;
       rootTentativeNodes.forEach((task) => {
-        nextCol = layoutTentativeSubtree(task.id, nextCol) + 1;
+        tentativeCol = layoutTentativeSubtree(task.id, tentativeCol) + 1;
       });
 
       // Create edges for tentative nodes

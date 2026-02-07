@@ -263,6 +263,13 @@ export function PlanningPanel({
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const isResizing = useRef(false);
 
+  // Ref to track the latest selected session for async operations
+  const selectedSessionRef = useRef(selectedSession);
+  selectedSessionRef.current = selectedSession;
+
+  // Ref to track pending nodes (added but not yet saved to API) for parent lookup
+  const pendingNodesRef = useRef<TaskNode[]>([]);
+
   // Session notifications (unread counts, thinking state)
   const chatSessionIds = sessions
     .filter((s) => s.chatSessionId)
@@ -509,6 +516,11 @@ export function PlanningPanel({
       .catch(console.error)
       .finally(() => setInstructionLoading(false));
   }, [selectedSession?.id, repoId]);
+
+  // Clear pending nodes when session changes
+  useEffect(() => {
+    pendingNodesRef.current = [];
+  }, [selectedSession?.id]);
 
   // Sync editing title with selected session
   useEffect(() => {
@@ -847,7 +859,10 @@ export function PlanningPanel({
 
   // Task suggestion from chat
   const handleTaskSuggested = useCallback(async (suggestion: TaskSuggestion) => {
-    if (!selectedSession) return;
+    // Use the ref to get the latest session (may have been updated by previous async calls)
+    const currentSession = selectedSessionRef.current;
+    if (!currentSession) return;
+
     const newNode: TaskNode = {
       id: crypto.randomUUID(),
       title: suggestion.label,
@@ -855,12 +870,18 @@ export function PlanningPanel({
       branchName: suggestion.branchName,
       issueUrl: suggestion.issueUrl,
     };
-    const updatedNodes = [...selectedSession.nodes, newNode];
 
-    // Find parent by label if specified
-    let updatedEdges = [...selectedSession.edges];
+    // Add to pending nodes so subsequent calls can find this node
+    pendingNodesRef.current = [...pendingNodesRef.current, newNode];
+
+    // Combine session nodes with pending nodes for parent lookup
+    const allKnownNodes = [...currentSession.nodes, ...pendingNodesRef.current];
+    const updatedNodes = [...currentSession.nodes, newNode];
+
+    // Find parent by label if specified (look in both session nodes and pending nodes)
+    let updatedEdges = [...currentSession.edges];
     if (suggestion.parentLabel) {
-      const parentNode = selectedSession.nodes.find(
+      const parentNode = allKnownNodes.find(
         (n) => n.title.toLowerCase() === suggestion.parentLabel?.toLowerCase()
       );
       if (parentNode) {
@@ -869,16 +890,20 @@ export function PlanningPanel({
     }
 
     try {
-      const updated = await api.updatePlanningSession(selectedSession.id, {
+      const updated = await api.updatePlanningSession(currentSession.id, {
         nodes: updatedNodes,
         edges: updatedEdges,
       });
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       onTasksChange?.(updated.nodes, updated.edges);
+      // Remove from pending nodes after successful save
+      pendingNodesRef.current = pendingNodesRef.current.filter((n) => n.id !== newNode.id);
     } catch (err) {
       console.error("Failed to add task:", err);
+      // Remove from pending nodes on error too
+      pendingNodesRef.current = pendingNodesRef.current.filter((n) => n.id !== newNode.id);
     }
-  }, [selectedSession]);
+  }, [onTasksChange]);
 
   // Task removal
   const handleRemoveTask = async (taskId: string) => {

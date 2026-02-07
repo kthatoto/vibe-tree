@@ -44,6 +44,39 @@ export default function ExecuteBranchSelector({
 }: ExecuteBranchSelectorProps) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; branchName: string } | null>(null);
+
+  // Build children map for subtree selection
+  const childrenMap = useMemo(() => {
+    const map = new Map<string, string[]>();
+    edges.forEach((edge) => {
+      const children = map.get(edge.parent) || [];
+      children.push(edge.child);
+      map.set(edge.parent, children);
+    });
+    return map;
+  }, [edges]);
+
+  // Get all descendants of a branch (depth-first order)
+  const getDescendants = useCallback((branchName: string): string[] => {
+    const result: string[] = [];
+    const stack = [branchName];
+    const visited = new Set<string>();
+
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      if (visited.has(current)) continue;
+      visited.add(current);
+      result.push(current);
+
+      const children = childrenMap.get(current) || [];
+      // Add children in reverse order so they come out in order
+      for (let i = children.length - 1; i >= 0; i--) {
+        stack.push(children[i]);
+      }
+    }
+    return result;
+  }, [childrenMap]);
 
   const handleToggleBranch = useCallback((branchName: string) => {
     const index = selectedBranches.indexOf(branchName);
@@ -55,6 +88,24 @@ export default function ExecuteBranchSelector({
       onSelectionChange([...selectedBranches, branchName]);
     }
   }, [selectedBranches, onSelectionChange]);
+
+  // Select branch and all its descendants
+  const handleSelectSubtree = useCallback((branchName: string) => {
+    const descendants = getDescendants(branchName);
+    // Add only branches that are not already selected, maintaining order
+    const newBranches = descendants.filter(b => !selectedBranches.includes(b) && b !== defaultBranch);
+    if (newBranches.length > 0) {
+      onSelectionChange([...selectedBranches, ...newBranches]);
+    }
+  }, [getDescendants, selectedBranches, onSelectionChange, defaultBranch]);
+
+  // Select all branches (excluding default)
+  const handleSelectAll = useCallback(() => {
+    const allBranches = nodes
+      .map(n => n.branchName)
+      .filter(b => b !== defaultBranch);
+    onSelectionChange(allBranches);
+  }, [nodes, defaultBranch, onSelectionChange]);
 
   const getSelectionOrder = useCallback((branchName: string): number | null => {
     const index = selectedBranches.indexOf(branchName);
@@ -203,12 +254,23 @@ export default function ExecuteBranchSelector({
     );
   };
 
+  const handleContextMenu = useCallback((e: React.MouseEvent, branchName: string) => {
+    e.preventDefault();
+    if (branchName === defaultBranch) return;
+    setContextMenu({ x: e.clientX, y: e.clientY, branchName });
+  }, [defaultBranch]);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
   const renderNode = (layoutNode: LayoutNode) => {
     const { id, x, y, node } = layoutNode;
     const isDefault = id === defaultBranch;
     const selectionOrder = getSelectionOrder(id);
     const isSelected = selectionOrder !== null;
     const isMerged = node.pr?.state === "MERGED";
+    const hasChildren = (childrenMap.get(id) || []).length > 0;
 
     let fillColor = "#1f2937";
     let strokeColor = isSelected ? "#f59e0b" : "#4b5563";
@@ -224,6 +286,8 @@ export default function ExecuteBranchSelector({
         style={{ cursor: isDefault ? "not-allowed" : "pointer" }}
         opacity={isMerged ? 0.5 : 1}
         onClick={() => !isDefault && handleToggleBranch(id)}
+        onContextMenu={(e) => handleContextMenu(e, id)}
+        onDoubleClick={() => !isDefault && hasChildren && handleSelectSubtree(id)}
       >
         <rect
           x={x}
@@ -291,7 +355,11 @@ export default function ExecuteBranchSelector({
   }
 
   return (
-    <div className="execute-branch-selector" style={{ display: "flex", height: "100%" }}>
+    <div
+      className="execute-branch-selector"
+      style={{ display: "flex", height: "100%" }}
+      onClick={closeContextMenu}
+    >
       {/* Graph */}
       <div style={{ flex: 1, overflow: "auto", minWidth: 0 }}>
         <svg width={width} height={height} style={{ display: "block" }}>
@@ -299,6 +367,69 @@ export default function ExecuteBranchSelector({
           <g className="nodes">{layoutNodes.map((node) => renderNode(node))}</g>
         </svg>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          style={{
+            position: "fixed",
+            left: contextMenu.x,
+            top: contextMenu.y,
+            background: "#1f2937",
+            border: "1px solid #374151",
+            borderRadius: 4,
+            padding: "4px 0",
+            zIndex: 1000,
+            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => {
+              handleToggleBranch(contextMenu.branchName);
+              closeContextMenu();
+            }}
+            style={{
+              display: "block",
+              width: "100%",
+              padding: "6px 12px",
+              background: "none",
+              border: "none",
+              color: "#d1d5db",
+              fontSize: 12,
+              textAlign: "left",
+              cursor: "pointer",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#374151")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+          >
+            {selectedBranches.includes(contextMenu.branchName) ? "Remove" : "Select"}
+          </button>
+          {(childrenMap.get(contextMenu.branchName) || []).length > 0 && (
+            <button
+              onClick={() => {
+                handleSelectSubtree(contextMenu.branchName);
+                closeContextMenu();
+              }}
+              style={{
+                display: "block",
+                width: "100%",
+                padding: "6px 12px",
+                background: "none",
+                border: "none",
+                color: "#3b82f6",
+                fontSize: 12,
+                textAlign: "left",
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#374151")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+            >
+              Select with descendants ↓
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Selection Panel */}
       <div style={{
@@ -318,21 +449,36 @@ export default function ExecuteBranchSelector({
           <span style={{ fontSize: 11, color: "#9ca3af" }}>
             Queue ({selectedBranches.length})
           </span>
-          {selectedBranches.length > 0 && (
+          <div style={{ display: "flex", gap: 8 }}>
             <button
-              onClick={() => onSelectionChange([])}
+              onClick={handleSelectAll}
               style={{
                 background: "none",
                 border: "none",
-                color: "#6b7280",
+                color: "#3b82f6",
                 cursor: "pointer",
                 fontSize: 10,
                 padding: "2px 4px",
               }}
             >
-              Clear
+              All
             </button>
-          )}
+            {selectedBranches.length > 0 && (
+              <button
+                onClick={() => onSelectionChange([])}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#6b7280",
+                  cursor: "pointer",
+                  fontSize: 10,
+                  padding: "2px 4px",
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </div>
 
         <div style={{ flex: 1, overflow: "auto", padding: "6px" }}>

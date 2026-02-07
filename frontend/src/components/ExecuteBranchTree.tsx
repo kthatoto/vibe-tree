@@ -7,6 +7,7 @@ interface ExecuteBranchTreeProps {
   onPreviewBranch: (branch: string) => void;
   completedBranches: Set<string>;
   branchTodoCounts?: Map<string, { total: number; completed: number }>;
+  branchQuestionCounts?: Map<string, { total: number; pending: number }>;
 }
 
 export function ExecuteBranchTree({
@@ -16,6 +17,7 @@ export function ExecuteBranchTree({
   onPreviewBranch,
   completedBranches,
   branchTodoCounts = new Map(),
+  branchQuestionCounts = new Map(),
 }: ExecuteBranchTreeProps) {
   // Determine branch status
   const getBranchStatus = (branch: string, index: number): "completed" | "current" | "pending" => {
@@ -48,7 +50,9 @@ export function ExecuteBranchTree({
           const status = getBranchStatus(branch, index);
           const isPreview = branch === previewBranch;
           const todoCount = branchTodoCounts.get(branch);
-          const hasProgress = todoCount && todoCount.total > 0;
+          const questionCount = branchQuestionCounts.get(branch);
+          const hasTodos = todoCount && todoCount.total > 0;
+          const hasQuestions = questionCount && questionCount.total > 0;
 
           return (
             <div
@@ -62,11 +66,18 @@ export function ExecuteBranchTree({
               <span className="execute-branch-tree__name" title={branch}>
                 {branch}
               </span>
-              {hasProgress && (
-                <span className="execute-branch-tree__todo-count">
-                  {todoCount.completed}/{todoCount.total}
-                </span>
-              )}
+              <span className="execute-branch-tree__badges">
+                {hasTodos && (
+                  <span className="execute-branch-tree__badge execute-branch-tree__badge--todo" title="ToDo">
+                    📋 {todoCount.completed}/{todoCount.total}
+                  </span>
+                )}
+                {hasQuestions && (
+                  <span className={`execute-branch-tree__badge execute-branch-tree__badge--question ${questionCount.pending > 0 ? "execute-branch-tree__badge--pending" : ""}`} title="Questions">
+                    ❓ {questionCount.pending > 0 ? questionCount.pending : "✓"}
+                  </span>
+                )}
+              </span>
             </div>
           );
         })}

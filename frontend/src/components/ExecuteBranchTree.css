@@ -102,11 +102,30 @@
   color: #888;
 }
 
-.execute-branch-tree__todo-count {
+.execute-branch-tree__badges {
+  display: flex;
+  gap: 4px;
   flex-shrink: 0;
+}
+
+.execute-branch-tree__badge {
   font-size: 10px;
-  color: #666;
   padding: 1px 4px;
-  background: #222;
-  border-radius: 2px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.execute-branch-tree__badge--todo {
+  color: #60a5fa;
+  background: #1e3a5f;
+}
+
+.execute-branch-tree__badge--question {
+  color: #22c55e;
+  background: #14532d;
+}
+
+.execute-branch-tree__badge--pending {
+  color: #f59e0b;
+  background: #78350f;
 }

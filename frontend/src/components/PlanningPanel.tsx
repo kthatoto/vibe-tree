@@ -307,6 +307,10 @@ export function PlanningPanel({
   // Planning sidebar tabs (without branches - branches are always shown at top)
   const [planningSidebarTab, setPlanningSidebarTab] = useState<"instruction" | "todo" | "questions">("instruction");
 
+  // Planning branch counts (ToDo and Question counts per branch)
+  const [branchTodoCounts, setBranchTodoCounts] = useState<Map<string, { total: number; completed: number }>>(new Map());
+  const [branchQuestionCounts, setBranchQuestionCounts] = useState<Map<string, { total: number; pending: number }>>(new Map());
+
   // Ref to track the latest planning branch index for async operations
   const planningCurrentBranchIndexRef = useRef(planningCurrentBranchIndex);
   planningCurrentBranchIndexRef.current = planningCurrentBranchIndex;
@@ -330,6 +334,145 @@ export function PlanningPanel({
       setPlanningCurrentBranchIndex(0);
     }
   }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, selectedSession?.currentExecuteIndex]);
+
+  // Load ToDo and Question counts for Planning Session branches
+  useEffect(() => {
+    if (!selectedSession || selectedSession.type !== "planning" || !selectedSession.executeBranches) {
+      setBranchTodoCounts(new Map());
+      setBranchQuestionCounts(new Map());
+      return;
+    }
+
+    // Load ToDos for all branches
+    const loadTodoCounts = async () => {
+      const counts = new Map<string, { total: number; completed: number }>();
+      for (const branch of selectedSession.executeBranches!) {
+        try {
+          const todos = await api.getTodos(repoId, branch);
+          counts.set(branch, {
+            total: todos.length,
+            completed: todos.filter(t => t.status === "completed").length,
+          });
+        } catch {
+          counts.set(branch, { total: 0, completed: 0 });
+        }
+      }
+      setBranchTodoCounts(counts);
+    };
+
+    // Load Questions and count by branch
+    const loadQuestionCounts = async () => {
+      try {
+        const questions = await api.getQuestions(selectedSession.id);
+        const counts = new Map<string, { total: number; pending: number }>();
+        // Initialize counts for all branches
+        for (const branch of selectedSession.executeBranches!) {
+          counts.set(branch, { total: 0, pending: 0 });
+        }
+        // Count questions per branch
+        for (const q of questions) {
+          const branch = q.branchName || "";
+          if (counts.has(branch)) {
+            const current = counts.get(branch)!;
+            counts.set(branch, {
+              total: current.total + 1,
+              pending: current.pending + (q.status === "pending" ? 1 : 0),
+            });
+          }
+        }
+        setBranchQuestionCounts(counts);
+      } catch {
+        setBranchQuestionCounts(new Map());
+      }
+    };
+
+    loadTodoCounts();
+    loadQuestionCounts();
+  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, repoId]);
+
+  // Update counts on WebSocket events
+  useEffect(() => {
+    if (!selectedSession || selectedSession.type !== "planning" || !selectedSession.executeBranches) return;
+
+    const updateTodoCounts = (branchName: string) => {
+      api.getTodos(repoId, branchName).then(todos => {
+        setBranchTodoCounts(prev => {
+          const next = new Map(prev);
+          next.set(branchName, {
+            total: todos.length,
+            completed: todos.filter(t => t.status === "completed").length,
+          });
+          return next;
+        });
+      }).catch(console.error);
+    };
+
+    const updateQuestionCounts = () => {
+      api.getQuestions(selectedSession.id).then(questions => {
+        const counts = new Map<string, { total: number; pending: number }>();
+        for (const branch of selectedSession.executeBranches!) {
+          counts.set(branch, { total: 0, pending: 0 });
+        }
+        for (const q of questions) {
+          const branch = q.branchName || "";
+          if (counts.has(branch)) {
+            const current = counts.get(branch)!;
+            counts.set(branch, {
+              total: current.total + 1,
+              pending: current.pending + (q.status === "pending" ? 1 : 0),
+            });
+          }
+        }
+        setBranchQuestionCounts(counts);
+      }).catch(console.error);
+    };
+
+    const unsubTodoCreated = wsClient.on("todo.created", (msg) => {
+      const data = msg.data as { branchName?: string };
+      if (data.branchName && selectedSession.executeBranches!.includes(data.branchName)) {
+        updateTodoCounts(data.branchName);
+      }
+    });
+    const unsubTodoUpdated = wsClient.on("todo.updated", (msg) => {
+      const data = msg.data as { branchName?: string };
+      if (data.branchName && selectedSession.executeBranches!.includes(data.branchName)) {
+        updateTodoCounts(data.branchName);
+      }
+    });
+    const unsubTodoDeleted = wsClient.on("todo.deleted", (msg) => {
+      const data = msg.data as { branchName?: string };
+      if (data.branchName && selectedSession.executeBranches!.includes(data.branchName)) {
+        updateTodoCounts(data.branchName);
+      }
+    });
+    const unsubQuestionCreated = wsClient.on("question.created", (msg) => {
+      const data = msg.data as { planningSessionId?: string };
+      if (data.planningSessionId === selectedSession.id) {
+        updateQuestionCounts();
+      }
+    });
+    const unsubQuestionUpdated = wsClient.on("question.updated", (msg) => {
+      const data = msg.data as { planningSessionId?: string };
+      if (data.planningSessionId === selectedSession.id) {
+        updateQuestionCounts();
+      }
+    });
+    const unsubQuestionAnswered = wsClient.on("question.answered", (msg) => {
+      const data = msg.data as { planningSessionId?: string };
+      if (data.planningSessionId === selectedSession.id) {
+        updateQuestionCounts();
+      }
+    });
+
+    return () => {
+      unsubTodoCreated();
+      unsubTodoUpdated();
+      unsubTodoDeleted();
+      unsubQuestionCreated();
+      unsubQuestionUpdated();
+      unsubQuestionAnswered();
+    };
+  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, repoId]);
 
   // Load current task instruction for Execute Session
   useEffect(() => {
@@ -1827,6 +1970,8 @@ export function PlanningPanel({
                       if (index !== -1) handlePlanningBranchSwitch(index);
                     }}
                     completedBranches={new Set()}
+                    branchTodoCounts={branchTodoCounts}
+                    branchQuestionCounts={branchQuestionCounts}
                   />
                 </div>
 
@@ -1917,6 +2062,7 @@ export function PlanningPanel({
                     <div className="planning-panel__questions-section">
                       <PlanningQuestionsPanel
                         planningSessionId={selectedSession.id}
+                        branchName={currentPlanningBranch}
                       />
                     </div>
                   )}

@@ -6,11 +6,14 @@ import "./PlanningQuestionsPanel.css";
 interface PlanningQuestionsPanelProps {
   planningSessionId: string;
   disabled?: boolean;
+  /** If provided, only show questions for this branch */
+  branchName?: string;
 }
 
 export function PlanningQuestionsPanel({
   planningSessionId,
   disabled = false,
+  branchName,
 }: PlanningQuestionsPanelProps) {
   const [questions, setQuestions] = useState<PlanningQuestion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,9 +108,14 @@ export function PlanningQuestionsPanel({
     }
   }, [disabled]);
 
-  const pendingQuestions = questions.filter((q) => q.status === "pending");
-  const answeredQuestions = questions.filter((q) => q.status === "answered");
-  const skippedQuestions = questions.filter((q) => q.status === "skipped");
+  // Filter by branch if specified
+  const filteredQuestions = branchName
+    ? questions.filter((q) => q.branchName === branchName)
+    : questions;
+
+  const pendingQuestions = filteredQuestions.filter((q) => q.status === "pending");
+  const answeredQuestions = filteredQuestions.filter((q) => q.status === "answered");
+  const skippedQuestions = filteredQuestions.filter((q) => q.status === "skipped");
 
   if (loading) {
     return (

@@ -291,12 +291,33 @@ export default function BranchGraph({
         tasksByDepth.get(depth)!.push(task);
       });
 
-      // Layout tentative nodes
-      tentativeNodes.forEach((task) => {
+      // Build children map for tentative nodes
+      const tentativeChildrenMap = new Map<string, string[]>(); // parentId -> childIds
+      tentativeEdges.forEach((edge) => {
+        if (!tentativeChildrenMap.has(edge.parent)) {
+          tentativeChildrenMap.set(edge.parent, []);
+        }
+        tentativeChildrenMap.get(edge.parent)!.push(edge.child);
+      });
+
+      // Find root tentative nodes (no parent in tentativeEdges)
+      const rootTentativeNodes = tentativeNodes.filter(
+        (task) => !tentativeParentMap.has(task.id)
+      );
+
+      // Track column assignments for tentative nodes
+      const taskIdToCol = new Map<string, number>();
+
+      // Layout tentative tree recursively - children are placed below parent in same column
+      const layoutTentativeSubtree = (taskId: string, col: number): number => {
+        const task = tentativeNodes.find((t) => t.id === taskId);
+        if (!task) return col;
+
         const branchName = taskIdToBranchMap.get(task.id)!;
-        if (nodeMap.has(branchName)) return; // Already exists as real branch
+        if (nodeMap.has(branchName)) return col; // Already exists as real branch
 
         const tentDepth = tentativeDepths.get(task.id)!;
+        taskIdToCol.set(taskId, col);
 
         const tentDummyNode: TreeNode = {
           branchName,
@@ -306,19 +327,39 @@ export default function BranchGraph({
 
         const layoutNode: LayoutNode = {
           id: branchName,
-          x: LEFT_PADDING + nextCol * (NODE_WIDTH + HORIZONTAL_GAP),
+          x: LEFT_PADDING + col * (NODE_WIDTH + HORIZONTAL_GAP),
           y: TOP_PADDING + tentDepth * (NODE_HEIGHT + VERTICAL_GAP),
           node: tentDummyNode,
           depth: tentDepth,
-          row: nextCol,
+          row: col,
           isTentative: true,
           tentativeTitle: task.title,
-          taskId: task.id, // Store task ID for edge creation
+          taskId: task.id,
         };
 
         layoutNodes.push(layoutNode);
         nodeMap.set(branchName, layoutNode);
-        nextCol++;
+
+        // Layout children - first child uses same column, additional children get new columns
+        const children = tentativeChildrenMap.get(taskId) || [];
+        let currentCol = col;
+        children.forEach((childId, index) => {
+          if (index === 0) {
+            // First child stays in same column (vertical line)
+            layoutTentativeSubtree(childId, col);
+          } else {
+            // Additional children get new columns
+            currentCol++;
+            layoutTentativeSubtree(childId, currentCol);
+          }
+        });
+
+        return Math.max(col, currentCol);
+      };
+
+      // Layout each root tentative node tree
+      rootTentativeNodes.forEach((task) => {
+        nextCol = layoutTentativeSubtree(task.id, nextCol) + 1;
       });
 
       // Create edges for tentative nodes

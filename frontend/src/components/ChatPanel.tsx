@@ -968,7 +968,7 @@ export function ChatPanel({
           );
         })()}
 
-        {/* AskUserQuestion UI - check last assistant message for tool_use */}
+        {/* AskUserQuestion UI - only show for unanswered questions */}
         {(() => {
           // First, check streaming chunks for AskUserQuestion tool_use (only when not loading)
           if (!loading) {
@@ -997,13 +997,16 @@ export function ChatPanel({
                   if (hasNewerAssistant) {
                     return null; // Don't show old questions
                   }
-                  // Check if user has already answered
+                  // Check if user has already answered (any message after this one)
                   const hasAnswered = i < messages.length - 1;
+                  if (hasAnswered) {
+                    return null; // Don't show answered questions
+                  }
                   return (
                     <AskUserQuestionUI
                       data={askFromMessage}
                       onSubmit={sendQuestionAnswer}
-                      disabled={hasAnswered || loading}
+                      disabled={loading}
                     />
                   );
                 }

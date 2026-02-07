@@ -565,11 +565,11 @@ export function ChatPanel({
     }
 
     const suggestions = extractTaskSuggestions(msg.content);
-    const instructionEdit = extractInstructionEdit(msg.content);
+    // Only show instruction edit UI if auto-apply is not enabled
+    const instructionEdit = onInstructionUpdated ? null : extractInstructionEdit(msg.content);
     let cleanContent = removeTaskTags(msg.content);
-    if (instructionEdit) {
-      cleanContent = removeInstructionEditTags(cleanContent);
-    }
+    // Always remove instruction edit tags from display
+    cleanContent = removeInstructionEditTags(cleanContent);
 
     const isInstructionAccepted = acceptedInstructions.has(msg.id);
 
@@ -577,7 +577,7 @@ export function ChatPanel({
       <>
         <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{cleanContent}</p>
 
-        {/* Instruction Edit Proposal */}
+        {/* Instruction Edit Proposal - only shown when auto-apply is disabled */}
         {instructionEdit && (
           <div style={{
             marginTop: 12,
@@ -753,7 +753,8 @@ export function ChatPanel({
                 .map(c => c.content || "")
                 .join("");
               const suggestions = extractTaskSuggestions(textContent);
-              const instructionEdit = extractInstructionEdit(textContent);
+              // Only show instruction edit UI if auto-apply is not enabled
+              const instructionEdit = onInstructionUpdated ? null : extractInstructionEdit(textContent);
               const isInstructionAccepted = acceptedInstructions.has(msg.id);
 
               // Render chunks separately with task suggestions and instruction edits at the end
@@ -761,7 +762,7 @@ export function ChatPanel({
                 <div key={msg.id} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {chunks.map((chunk, i) => renderChunk(chunk, i, i === 0))}
 
-                  {/* Instruction Edit Proposal from chunks */}
+                  {/* Instruction Edit Proposal from chunks - only shown when auto-apply is disabled */}
                   {instructionEdit && (
                     <div style={{
                       border: "1px solid #374151",

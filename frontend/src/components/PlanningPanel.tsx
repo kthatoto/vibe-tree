@@ -1931,7 +1931,7 @@ export function PlanningPanel({
               {planningStatusLabel}
             </span>
             <span className="planning-panel__header-title">{selectedSession.title}</span>
-            {hasBranches && (
+            {hasBranches && selectedSession.status !== "confirmed" && (
               <button
                 className="planning-panel__finalize-btn"
                 onClick={() => handleFinalizePlanning()}
@@ -1939,6 +1939,9 @@ export function PlanningPanel({
               >
                 Finalize
               </button>
+            )}
+            {selectedSession.status === "confirmed" && (
+              <span className="planning-panel__finalized-badge">Finalized</span>
             )}
             <button
               className="planning-panel__delete-btn"

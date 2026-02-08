@@ -906,6 +906,15 @@
   color: #fff;
 }
 
+.planning-panel__finalized-badge {
+  padding: 4px 10px;
+  background: #14532d;
+  color: #34d399;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .planning-panel__delete-btn {
   padding: 4px 10px;
   background: transparent;

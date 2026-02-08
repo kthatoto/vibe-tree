@@ -578,9 +578,8 @@ chatRouter.post("/send", async (c) => {
     claudeArgs.push("--dangerously-skip-permissions");
   }
 
-  // MCP server config is registered in user scope (~/.claude.json)
-  // via: claude mcp add-json vibe-tree '...' --scope user
-  // The --mcp-config flag appears to cause hangs, so we rely on user scope registration
+  // Allow MCP tools without permission prompts
+  claudeArgs.push("--allowedTools", "mcp__vibe-tree__*")
 
   console.log(`[Chat] Send: Spawning claude process in ${worktreePath}`);
   // Spawn claude process in background

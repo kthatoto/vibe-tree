@@ -14,13 +14,14 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "mcp": "bun run src/mcp/index.ts"
+    "mcp": "tsx src/mcp/index.ts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "bun-types": "latest",
     "concurrently": "^9.2.1",
     "drizzle-kit": "^0.31.8",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
   "peerDependencies": {

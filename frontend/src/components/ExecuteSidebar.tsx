@@ -70,7 +70,18 @@ export function ExecuteSidebar({
       api.getBranchLinks(repoId, displayBranch).catch(() => []),
       api.getTaskInstruction(repoId, displayBranch).catch(() => null),
     ])
-      .then(([links, inst]) => {
+      .then(async ([links, inst]) => {
+        // If no PR link found, try to detect one
+        if (!links.some((l) => l.linkType === "pr")) {
+          try {
+            const result = await api.detectPr(repoId, displayBranch);
+            if (result.found && result.link) {
+              links = [result.link, ...links];
+            }
+          } catch {
+            // Ignore detection errors
+          }
+        }
         setBranchLinks(links);
         setInstruction(inst);
       })
@@ -99,7 +110,7 @@ export function ExecuteSidebar({
     loadAllTodos();
   }, [repoId, executeBranches]);
 
-  // Load all branch links for all branches
+  // Load all branch links for all branches (with PR auto-detection)
   useEffect(() => {
     if (!repoId || executeBranches.length === 0) return;
 
@@ -108,7 +119,18 @@ export function ExecuteSidebar({
       await Promise.all(
         executeBranches.map(async (branch) => {
           try {
-            const links = await api.getBranchLinks(repoId, branch);
+            let links = await api.getBranchLinks(repoId, branch);
+            // If no PR link found, try to detect one
+            if (!links.some((l) => l.linkType === "pr")) {
+              try {
+                const result = await api.detectPr(repoId, branch);
+                if (result.found && result.link) {
+                  links = [result.link, ...links];
+                }
+              } catch {
+                // Ignore detection errors
+              }
+            }
             linksMap.set(branch, links);
           } catch {
             linksMap.set(branch, []);

@@ -457,3 +457,148 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
 
   return c.json(updated);
 });
+
+// POST /api/branch-links/detect - Auto-detect PR for a branch
+const detectPrSchema = z.object({
+  repoId: z.string().min(1),
+  branchName: z.string().min(1),
+});
+
+branchLinksRouter.post("/detect", async (c) => {
+  const body = await c.req.json();
+  const input = validateOrThrow(detectPrSchema, body);
+  const now = new Date().toISOString();
+
+  // Try to find PR for this branch
+  try {
+    const result = execSync(
+      `gh pr view --head "${input.branchName}" --repo "${input.repoId}" --json number,title,state,url,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems`,
+      { encoding: "utf-8", timeout: 10000 }
+    ).trim();
+
+    if (!result) {
+      return c.json({ found: false });
+    }
+
+    const data = JSON.parse(result);
+
+    // Check if link already exists
+    const [existing] = await db
+      .select()
+      .from(schema.branchLinks)
+      .where(
+        and(
+          eq(schema.branchLinks.repoId, input.repoId),
+          eq(schema.branchLinks.branchName, input.branchName),
+          eq(schema.branchLinks.linkType, "pr"),
+          eq(schema.branchLinks.number, data.number)
+        )
+      )
+      .limit(1);
+
+    // Extract check status
+    const checksMap = new Map<string, { name: string; status: string; conclusion: string | null; detailsUrl: string | null }>();
+    let checksStatus = "pending";
+    if (data.statusCheckRollup && data.statusCheckRollup.length > 0) {
+      for (const check of data.statusCheckRollup) {
+        const name = check.name || check.context || "Unknown";
+        checksMap.set(name, {
+          name,
+          status: check.status || "COMPLETED",
+          conclusion: check.conclusion || null,
+          detailsUrl: check.detailsUrl || check.targetUrl || null,
+        });
+      }
+      const checks = Array.from(checksMap.values());
+      const hasFailure = checks.some((ch) =>
+        ch.conclusion === "FAILURE" || ch.conclusion === "ERROR"
+      );
+      const allSuccess = checks.every((ch) => ch.conclusion === "SUCCESS" || ch.conclusion === "SKIPPED");
+      if (hasFailure) checksStatus = "failure";
+      else if (allSuccess) checksStatus = "success";
+    }
+    const checks = Array.from(checksMap.values());
+
+    // Extract reviewers (filter out bots)
+    const isBot = (login: string) =>
+      login.toLowerCase().includes("copilot") || login.endsWith("[bot]");
+    const reviewers: string[] = [];
+    if (data.reviewRequests) {
+      for (const r of data.reviewRequests) {
+        if (r.login && !isBot(r.login)) reviewers.push(r.login);
+      }
+    }
+    if (data.reviews) {
+      for (const r of data.reviews) {
+        if (r.author?.login && !isBot(r.author.login) && !reviewers.includes(r.author.login)) {
+          reviewers.push(r.author.login);
+        }
+      }
+    }
+
+    // Extract project status
+    let projectStatus: string | null = null;
+    if (data.projectItems && data.projectItems.length > 0) {
+      const item = data.projectItems[0];
+      if (item.status) {
+        projectStatus = item.status.name || item.status;
+      }
+    }
+
+    const prData = {
+      title: data.title,
+      status: data.state?.toLowerCase() || "open",
+      checksStatus,
+      reviewDecision: data.reviewDecision || null,
+      checks: JSON.stringify(checks),
+      labels: JSON.stringify((data.labels || []).map((l: { name: string; color: string }) => ({ name: l.name, color: l.color }))),
+      reviewers: JSON.stringify(reviewers),
+      projectStatus,
+      updatedAt: now,
+    };
+
+    let link;
+    if (existing) {
+      await db
+        .update(schema.branchLinks)
+        .set(prData)
+        .where(eq(schema.branchLinks.id, existing.id));
+
+      [link] = await db
+        .select()
+        .from(schema.branchLinks)
+        .where(eq(schema.branchLinks.id, existing.id));
+
+      broadcast({
+        type: "branchLink.updated",
+        repoId: input.repoId,
+        data: link,
+      });
+    } else {
+      const insertResult = await db
+        .insert(schema.branchLinks)
+        .values({
+          repoId: input.repoId,
+          branchName: input.branchName,
+          linkType: "pr",
+          url: data.url,
+          number: data.number,
+          ...prData,
+          createdAt: now,
+        })
+        .returning();
+
+      link = insertResult[0];
+      broadcast({
+        type: "branchLink.created",
+        repoId: input.repoId,
+        data: link,
+      });
+    }
+
+    return c.json({ found: true, link });
+  } catch {
+    // No PR found or error
+    return c.json({ found: false });
+  }
+});

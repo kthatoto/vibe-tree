@@ -998,6 +998,11 @@ export const api = {
     fetchJson<BranchLink>(`${API_BASE}/branch-links/${id}/refresh`, {
       method: "POST",
     }),
+  detectPr: (repoId: string, branchName: string) =>
+    fetchJson<{ found: boolean; link?: BranchLink }>(`${API_BASE}/branch-links/detect`, {
+      method: "POST",
+      body: JSON.stringify({ repoId, branchName }),
+    }),
 
   // Todos
   getTodos: (repoId: string, branchName: string) =>

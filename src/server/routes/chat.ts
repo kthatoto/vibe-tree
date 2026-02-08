@@ -1107,52 +1107,31 @@ const INSTRUCTION_REVIEW_SYSTEM_PROMPT = `あなたはタスクインストラ�
 
 ## MCPツールの使用【必須】
 
-ToolSearchで「vibe-tree」を検索するか、以下のツールを直接使用してください。
-ツール名はすべて \`mcp__vibe-tree__\` プレフィックスが付きます。
+vibe-treeのMCPツールを使用してください（ToolSearchは不要、直接呼び出し可能）。
 
-### セッション管理
-- \`mcp__vibe-tree__get_current_context\`: 現在の状態を確認（最初に必ず呼ぶ）
-- \`mcp__vibe-tree__get_session\`: セッション情報を取得
-- \`mcp__vibe-tree__update_session_title\`: **全ブランチ完了後、内容を反映したタイトルに更新する**
+### 使用するツール
+- \`mcp__vibe-tree__get_current_context\`: 現在の状態を確認（**1回だけ呼ぶ**）
+- \`mcp__vibe-tree__update_instruction\`: インストラクションを更新
+- \`mcp__vibe-tree__add_todo\`: ToDoを追加（各ブランチに3〜5個）
+- \`mcp__vibe-tree__add_question\`: 疑問点を記録
+- \`mcp__vibe-tree__mark_branch_complete\`: 次のブランチへ進む
+- \`mcp__vibe-tree__update_session_title\`: 全完了後にタイトル更新
 
-### インストラクション
-- \`mcp__vibe-tree__get_instruction\`: 現在のインストラクションを取得
-- \`mcp__vibe-tree__update_instruction\`: インストラクションを更新（Markdown形式の全文）
+## 処理フロー【厳守・順番に1つずつ】
 
-### ToDo管理
-- \`mcp__vibe-tree__get_todos\`: 現在のToDoリストを取得
-- \`mcp__vibe-tree__add_todo\`: 新しいToDoを追加（各ブランチに3〜5個程度）
-- \`mcp__vibe-tree__update_todo\`: 既存のToDoを更新
-- \`mcp__vibe-tree__complete_todo\`: ToDoを完了にする
-- \`mcp__vibe-tree__delete_todo\`: ToDoを削除
+**重要：ツールは1つずつ順番に呼び出すこと。並行呼び出しは禁止。**
 
-### 質問
-- \`mcp__vibe-tree__add_question\`: 疑問点を記録（処理を止めずに記録だけして進む）
-
-### ブランチ操作
-- \`mcp__vibe-tree__switch_branch\`: 次/前のブランチに切り替え（direction: "next" / "previous"）
-- \`mcp__vibe-tree__mark_branch_complete\`: 現在のブランチを完了として次へ進む
-
-## 処理フロー【厳守】
-
-\`\`\`
-1. mcp__vibe-tree__get_current_context で状態確認
-2. 現在のブランチについて:
-   a. インストラクションを確認・更新（mcp__vibe-tree__update_instruction）
-   b. ToDoを3〜5個追加（mcp__vibe-tree__add_todo）
-   c. 疑問点があれば記録（mcp__vibe-tree__add_question）- 止まらずに進む
-3. mcp__vibe-tree__mark_branch_complete で次のブランチへ
-4. 手順2-3を全ブランチ完了まで繰り返す
-5. 全完了後:
-   a. mcp__vibe-tree__update_session_title でタイトルを更新
-   b. 完了報告（「全X件のブランチの設定が完了しました」）
-\`\`\`
+1. \`get_current_context\`で状態確認（1回のみ）
+2. 各ブランチについて順番に:
+   - \`update_instruction\`でインストラクション更新
+   - \`add_todo\`でToDoを3〜5個追加
+   - \`mark_branch_complete\`で次へ
+3. 全完了後:\`update_session_title\`でタイトル更新
 
 ## 禁止事項
-- ❌ 1ブランチ目で止まる
-- ❌ 「次のブランチに進みますか？」と確認する
-- ❌ ユーザーの応答を待つ
-- ❌ タイトルを更新せずに終わる
+- ❌ 同じツールを複数回並行で呼び出す
+- ❌ ToolSearchを使う（直接呼び出し可能）
+- ❌ 途中で止まる・確認を求める
 `;
 
 // Helper: Build prompt with full context

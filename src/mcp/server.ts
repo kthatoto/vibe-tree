@@ -125,21 +125,21 @@ export function createServer() {
         },
         {
           name: "update_instruction",
-          description: "Update the task instruction for a branch",
+          description: "Update the task instruction for a branch. Parameters: repoId (owner/repo), branchName, instructionMd (Markdown content)",
           inputSchema: {
             type: "object",
             properties: {
               repoId: {
                 type: "string",
-                description: "Repository ID (owner/repo format)",
+                description: "Repository ID in owner/repo format (e.g. 'myorg/myrepo')",
               },
               branchName: {
                 type: "string",
-                description: "Branch name",
+                description: "Git branch name (e.g. 'feat_123_feature_name')",
               },
               instructionMd: {
                 type: "string",
-                description: "New instruction content in Markdown",
+                description: "Full instruction content in Markdown format",
               },
             },
             required: ["repoId", "branchName", "instructionMd"],
@@ -165,34 +165,34 @@ export function createServer() {
         },
         {
           name: "add_todo",
-          description: "Add a new todo item to a branch",
+          description: "Add a new todo item. Required: repoId, branchName, title. Optional: description, planningSessionId",
           inputSchema: {
             type: "object",
             properties: {
               repoId: {
                 type: "string",
-                description: "Repository ID (owner/repo format)",
+                description: "Repository ID in owner/repo format",
               },
               branchName: {
                 type: "string",
-                description: "Branch name",
-              },
-              planningSessionId: {
-                type: "string",
-                description: "Planning session ID",
+                description: "Git branch name",
               },
               title: {
                 type: "string",
-                description: "Todo title",
+                description: "Todo item title (required)",
               },
               description: {
                 type: "string",
-                description: "Todo description",
+                description: "Todo item description (optional)",
+              },
+              planningSessionId: {
+                type: "string",
+                description: "Planning session ID (optional)",
               },
               status: {
                 type: "string",
                 enum: ["pending", "in_progress", "completed"],
-                description: "Initial status",
+                description: "Initial status (default: pending)",
               },
             },
             required: ["repoId", "branchName", "title"],

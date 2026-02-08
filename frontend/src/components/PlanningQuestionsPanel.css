@@ -116,6 +116,12 @@
   line-height: 1.4;
 }
 
+.planning-questions__answer-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .planning-questions__answer {
   margin: 0;
   font-size: 12px;
@@ -124,6 +130,25 @@
   padding: 6px 8px;
   border-radius: 4px;
   line-height: 1.4;
+  flex: 1;
+}
+
+.planning-questions__edit-btn {
+  padding: 4px 8px;
+  font-size: 10px;
+  background: transparent;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.planning-questions__edit-btn:hover {
+  background: #333;
+  color: #ccc;
+  border-color: #555;
 }
 
 .planning-questions__actions {

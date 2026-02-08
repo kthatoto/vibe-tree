@@ -228,7 +228,57 @@ export function PlanningQuestionsPanel({
                 <span className="planning-questions__branch">{q.branchName}</span>
               )}
               <p className="planning-questions__text">{q.question}</p>
-              <p className="planning-questions__answer">{q.answer}</p>
+              {answeringId === q.id ? (
+                <div className="planning-questions__answer-form">
+                  <textarea
+                    className="planning-questions__answer-input"
+                    value={answerText}
+                    onChange={(e) => setAnswerText(e.target.value)}
+                    placeholder="Your answer..."
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                        handleSubmitAnswer();
+                      }
+                      if (e.key === "Escape") {
+                        setAnsweringId(null);
+                        setAnswerText("");
+                      }
+                    }}
+                  />
+                  <div className="planning-questions__answer-actions">
+                    <button
+                      className="planning-questions__btn planning-questions__btn--primary"
+                      onClick={handleSubmitAnswer}
+                      disabled={!answerText.trim()}
+                    >
+                      Update (⌘↵)
+                    </button>
+                    <button
+                      className="planning-questions__btn"
+                      onClick={() => {
+                        setAnsweringId(null);
+                        setAnswerText("");
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="planning-questions__answer-row">
+                  <p className="planning-questions__answer">{q.answer}</p>
+                  {!disabled && (
+                    <button
+                      className="planning-questions__edit-btn"
+                      onClick={() => handleStartAnswer(q)}
+                      title="Edit answer"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

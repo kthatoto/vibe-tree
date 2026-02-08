@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import { db, schema } from "../../db";
 import { eq, and, desc, gt, asc } from "drizzle-orm";
 import { execSync, spawn } from "child_process";
-import { existsSync } from "fs";
+import { existsSync, writeFileSync, mkdirSync } from "fs";
+import { join } from "path";
 import { randomUUID, createHash } from "crypto";
 import { expandTilde } from "../utils";
 import { broadcast } from "../ws";
@@ -576,6 +577,32 @@ chatRouter.post("/send", async (c) => {
     // Execution mode: bypass permissions
     claudeArgs.push("--dangerously-skip-permissions");
   }
+
+  // Add MCP server config for vibe-tree tools
+  const vibeTreeRoot = process.cwd();
+  const vibeTreeDb = join(vibeTreeRoot, ".vibetree", "vibetree.sqlite");
+  const mcpConfigDir = join(vibeTreeRoot, ".vibetree", "mcp");
+  const mcpConfigPath = join(mcpConfigDir, "config.json");
+
+  // Create MCP config directory if it doesn't exist
+  if (!existsSync(mcpConfigDir)) {
+    mkdirSync(mcpConfigDir, { recursive: true });
+  }
+
+  // Write MCP config file
+  const mcpConfig = {
+    "vibe-tree": {
+      command: "bun",
+      args: ["run", "mcp"],
+      cwd: vibeTreeRoot,
+      env: {
+        VIBE_TREE_DB: vibeTreeDb,
+        VIBE_TREE_API: "http://localhost:3000",
+      },
+    },
+  };
+  writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+  claudeArgs.push("--mcp-config", mcpConfigPath);
 
   console.log(`[Chat] Send: Spawning claude process in ${worktreePath}`);
   // Spawn claude process in background

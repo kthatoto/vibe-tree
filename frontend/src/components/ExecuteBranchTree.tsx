@@ -9,6 +9,7 @@ interface ExecuteBranchTreeProps {
   branchTodoCounts?: Map<string, { total: number; completed: number }>;
   branchQuestionCounts?: Map<string, { total: number; pending: number }>;
   workingBranch?: string | null;
+  showCompletionCount?: boolean;
 }
 
 export function ExecuteBranchTree({
@@ -20,6 +21,7 @@ export function ExecuteBranchTree({
   branchTodoCounts = new Map(),
   branchQuestionCounts = new Map(),
   workingBranch = null,
+  showCompletionCount = true,
 }: ExecuteBranchTreeProps) {
   // Determine branch status
   const getBranchStatus = (branch: string, index: number): "completed" | "current" | "pending" => {
@@ -42,10 +44,11 @@ export function ExecuteBranchTree({
   return (
     <div className="execute-branch-tree">
       <div className="execute-branch-tree__header">
-        <h4>Branches</h4>
-        <span className="execute-branch-tree__count">
-          {completedBranches.size}/{branches.length}
-        </span>
+        <h4>
+          {showCompletionCount
+            ? `${completedBranches.size}/${branches.length} Branches`
+            : `${branches.length} Branches`}
+        </h4>
       </div>
       <div className="execute-branch-tree__list">
         {branches.map((branch, index) => {

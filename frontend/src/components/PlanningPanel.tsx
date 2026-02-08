@@ -724,6 +724,56 @@ export function PlanningPanel({
     };
   }, [selectedSession?.chatSessionId, selectedSession?.type]);
 
+  // Handle branch switch events from MCP server (set_focused_branch, switch_branch)
+  useEffect(() => {
+    if (!selectedSession || selectedSession.type !== "planning") {
+      return;
+    }
+
+    const unsubTaskAdvanced = wsClient.on("planning.taskAdvanced", (msg) => {
+      const data = msg.data as { id: string; newIndex?: number; currentExecuteIndex?: number };
+      if (data.id === selectedSession.id) {
+        const newIndex = data.newIndex ?? data.currentExecuteIndex ?? 0;
+        setPlanningCurrentBranchIndex(newIndex);
+        // Also update the session in the list
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === selectedSession.id
+              ? { ...s, currentExecuteIndex: newIndex }
+              : s
+          )
+        );
+      }
+    });
+
+    return () => {
+      unsubTaskAdvanced();
+    };
+  }, [selectedSession?.id, selectedSession?.type]);
+
+  // Handle instruction updates from MCP server
+  useEffect(() => {
+    if (!selectedSession || selectedSession.type !== "planning") {
+      return;
+    }
+
+    const planningBranches = selectedSession.executeBranches || [];
+    const currentBranch = planningBranches[planningCurrentBranchIndex];
+    if (!currentBranch) return;
+
+    const unsubInstructionUpdated = wsClient.on("taskInstruction.updated", (msg) => {
+      const data = msg.data as { branchName: string; instructionMd: string };
+      // Only update if this is the currently displayed branch
+      if (data.branchName === currentBranch && !instructionDirty) {
+        setCurrentInstruction(data.instructionMd || "");
+      }
+    });
+
+    return () => {
+      unsubInstructionUpdated();
+    };
+  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, planningCurrentBranchIndex, instructionDirty]);
+
   // Load external links when session changes
   useEffect(() => {
     if (!selectedSession) {
@@ -1081,6 +1131,18 @@ export function PlanningPanel({
     try {
       await api.deletePlanningSession(sessionId);
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  // Finalize Planning Session
+  const handleFinalizePlanning = async () => {
+    if (!selectedSession) return;
+    try {
+      const updated = await api.confirmPlanningSession(selectedSession.id);
+      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      onSessionSelect?.(updated);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -1865,6 +1927,15 @@ export function PlanningPanel({
               {planningStatusLabel}
             </span>
             <span className="planning-panel__header-title">{selectedSession.title}</span>
+            {hasBranches && (
+              <button
+                className="planning-panel__finalize-btn"
+                onClick={() => handleFinalizePlanning()}
+                title="Finalize planning session"
+              >
+                Finalize
+              </button>
+            )}
             <button
               className="planning-panel__delete-btn"
               onClick={handleDelete}
@@ -1940,6 +2011,7 @@ export function PlanningPanel({
                     branchTodoCounts={branchTodoCounts}
                     branchQuestionCounts={branchQuestionCounts}
                     workingBranch={claudeWorking ? planningBranches[planningCurrentBranchIndex] : null}
+                    showCompletionCount={false}
                   />
                 </div>
 

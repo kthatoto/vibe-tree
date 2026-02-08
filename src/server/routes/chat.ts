@@ -1110,10 +1110,10 @@ vibe-treeのMCPツールを使用してください（ToolSearchは不要、直�
 
 ### 使用するツール
 - \`mcp__vibe-tree__get_current_context\`: 現在の状態を確認（**1回だけ呼ぶ**）
+- \`mcp__vibe-tree__set_focused_branch\`: 作業対象ブランチを変更（UIに表示される）
 - \`mcp__vibe-tree__update_instruction\`: インストラクションを更新
 - \`mcp__vibe-tree__add_todo\`: ToDoを追加（各ブランチに3〜5個）
 - \`mcp__vibe-tree__add_question\`: 疑問点を記録
-- \`mcp__vibe-tree__mark_branch_complete\`: 次のブランチへ進む
 - \`mcp__vibe-tree__update_session_title\`: 全完了後にタイトル更新
 
 ## 処理フロー【厳守・順番に1つずつ】
@@ -1122,15 +1122,18 @@ vibe-treeのMCPツールを使用してください（ToolSearchは不要、直�
 
 1. \`get_current_context\`で状態確認（1回のみ）
 2. 各ブランチについて順番に:
+   - **\`set_focused_branch\`で対象ブランチに切り替え**（これでUIのロボットアイコンが移動する）
    - \`update_instruction\`でインストラクション更新
    - \`add_todo\`でToDoを3〜5個追加
-   - \`mark_branch_complete\`で次へ
 3. 全完了後:\`update_session_title\`でタイトル更新
+
+**注意**: 各ブランチの処理を開始する前に必ず\`set_focused_branch\`を呼び出すこと。これによりUIで作業中のブランチが正しく表示される。
 
 ## 禁止事項
 - ❌ 同じツールを複数回並行で呼び出す
 - ❌ ToolSearchを使う（直接呼び出し可能）
 - ❌ 途中で止まる・確認を求める
+- ❌ \`set_focused_branch\`を呼ばずにブランチを処理する
 `;
 
 // Helper: Build prompt with full context

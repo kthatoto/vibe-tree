@@ -891,6 +891,21 @@
   gap: 12px;
 }
 
+.planning-panel__finalize-btn {
+  padding: 4px 10px;
+  background: transparent;
+  color: #34d399;
+  border: 1px solid #34d399;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.planning-panel__finalize-btn:hover {
+  background: #34d399;
+  color: #fff;
+}
+
 .planning-panel__delete-btn {
   padding: 4px 10px;
   background: transparent;

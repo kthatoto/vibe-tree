@@ -136,167 +136,197 @@
   background: #444;
 }
 
-/* Info tab styles */
+/* Info tab styles - matching TaskDetailPanel */
 .execute-sidebar__info-tab {
-  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
 
-.execute-sidebar__info-section {
+.execute-sidebar__links-section {
+  padding: 8px 12px;
+  border-bottom: 1px solid #374151;
+}
+
+.execute-sidebar__links-header {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
 }
 
-.execute-sidebar__info-label {
-  font-size: 11px;
-  color: #888;
-  font-weight: 500;
+.execute-sidebar__links-header h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9ca3af;
 }
 
-.execute-sidebar__info-value {
-  font-size: 13px;
-  color: #ccc;
+.execute-sidebar__link-item {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  padding: 6px 8px;
+  background: #1f2937;
+  border-radius: 4px;
+  font-size: 12px;
 }
 
-/* Compact row for CI/Review/Reviewers */
-.execute-sidebar__info-row {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-}
-
-.execute-sidebar__info-col {
-  display: flex;
+.execute-sidebar__link-item--detailed {
   flex-direction: column;
-  gap: 2px;
+  align-items: stretch;
+  gap: 6px;
 }
 
-.execute-sidebar__info-col--reviewers {
-  flex: 1;
-  min-width: 0;
+.execute-sidebar__link-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.execute-sidebar__info-link {
+.execute-sidebar__link-url {
   color: #60a5fa;
   text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.execute-sidebar__info-link:hover {
+.execute-sidebar__link-url:hover {
   text-decoration: underline;
 }
 
-.execute-sidebar__pr-status {
+.execute-sidebar__link-number {
+  color: #9ca3af;
+  margin-right: 4px;
+}
+
+.execute-sidebar__link-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.execute-sidebar__link-project {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: #374151;
+  border-radius: 4px;
+  color: #9ca3af;
+}
+
+.execute-sidebar__link-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.execute-sidebar__link-label {
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 4px;
   font-weight: 500;
 }
 
-.execute-sidebar__pr-status--open {
-  background: #166534;
-  color: #4ade80;
+.execute-sidebar__no-links {
+  color: #6b7280;
+  font-size: 12px;
+  padding: 4px 0;
 }
 
-.execute-sidebar__pr-status--closed {
-  background: #991b1b;
-  color: #fca5a5;
-}
-
-.execute-sidebar__pr-status--merged {
-  background: #581c87;
-  color: #c4b5fd;
-}
-
-.execute-sidebar__ci-status {
+/* CI Badge */
+.execute-sidebar__ci-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
   font-size: 12px;
   font-weight: 500;
+  background: #1f2937;
 }
 
-.execute-sidebar__ci-status--success {
-  color: #4ade80;
+.execute-sidebar__ci-badge--success {
+  background: #065f46;
+  color: #34d399;
 }
 
-.execute-sidebar__ci-status--failure {
+.execute-sidebar__ci-badge--failure {
+  background: #7f1d1d;
   color: #f87171;
 }
 
-.execute-sidebar__ci-status--pending {
-  color: #fbbf24;
-}
-
-.execute-sidebar__ci-status--unknown {
-  color: #888;
-}
-
-.execute-sidebar__ci-status--cancelled {
-  color: #9ca3af;
-}
-
-.execute-sidebar__review-status {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-weight: 500;
-}
-
-.execute-sidebar__review-status--approved {
-  background: #166534;
-  color: #4ade80;
-}
-
-.execute-sidebar__review-status--changes {
-  background: #991b1b;
-  color: #fca5a5;
-}
-
-.execute-sidebar__review-status--pending {
+.execute-sidebar__ci-badge--pending {
   background: #78350f;
   color: #fbbf24;
 }
 
-.execute-sidebar__review-status--none {
-  background: #333;
-  color: #888;
+.execute-sidebar__ci-badge--cancelled {
+  background: #374151;
+  color: #9ca3af;
 }
 
-.execute-sidebar__reviewers {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+.execute-sidebar__ci-badge-icon {
+  font-size: 10px;
 }
 
-.execute-sidebar__reviewer {
+.execute-sidebar__ci-badge-count {
+  font-family: monospace;
   font-size: 11px;
-  padding: 2px 6px;
-  background: #1e3a5f;
-  color: #60a5fa;
-  border-radius: 4px;
 }
 
-.execute-sidebar__labels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.execute-sidebar__label {
+/* Review Badge */
+.execute-sidebar__review-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
   font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 4px;
   font-weight: 500;
 }
 
-.execute-sidebar__info-empty {
-  color: #666;
-  font-size: 12px;
+.execute-sidebar__review-badge--approved {
+  background: #065f46;
+  color: #34d399;
+}
+
+.execute-sidebar__review-badge--changes-requested {
+  background: #7f1d1d;
+  color: #f87171;
+}
+
+.execute-sidebar__review-badge--review-required {
+  background: #78350f;
+  color: #fbbf24;
+}
+
+/* Reviewers */
+.execute-sidebar__link-reviewers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.execute-sidebar__link-reviewer {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.execute-sidebar__link-reviewer--none {
+  color: #6b7280;
   font-style: italic;
-  text-align: center;
-  padding: 20px;
+}
+
+/* PR Labels */
+.execute-sidebar__pr-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.execute-sidebar__pr-label {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
 }

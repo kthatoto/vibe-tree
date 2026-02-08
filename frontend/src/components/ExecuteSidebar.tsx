@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, type TaskTodo, type PlanningQuestion, type BranchLink, type TaskInstruction, type GitHubLabel } from "../lib/api";
+import { api, type TaskTodo, type PlanningQuestion, type BranchLink, type TaskInstruction, type GitHubLabel, type GitHubCheck } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import ExecuteBranchTree from "./ExecuteBranchTree";
 import ExecuteTodoList from "./ExecuteTodoList";
@@ -453,135 +453,139 @@ export function ExecuteSidebar({
       <div className="planning-panel__sidebar-content">
         {activeTab === "info" && (
           <div className="execute-sidebar__info-tab">
-            {/* Branch */}
-            <div className="execute-sidebar__info-section">
-              <div className="execute-sidebar__info-label">Branch</div>
-              <div className="execute-sidebar__info-value">{displayBranch}</div>
+            {/* Issue Section */}
+            <div className="execute-sidebar__links-section">
+              <div className="execute-sidebar__links-header">
+                <h4>Issue</h4>
+              </div>
+              {issueLink ? (() => {
+                const rawLabels = issueLink.labels ? JSON.parse(issueLink.labels) : [];
+                const labels: GitHubLabel[] = rawLabels.map((l: string | GitHubLabel) =>
+                  typeof l === "string" ? { name: l, color: "6b7280" } : l
+                );
+                const getTextColor = (bgColor: string) => {
+                  const r = parseInt(bgColor.slice(0, 2), 16);
+                  const g = parseInt(bgColor.slice(2, 4), 16);
+                  const b = parseInt(bgColor.slice(4, 6), 16);
+                  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+                  return luminance > 0.5 ? "#000" : "#fff";
+                };
+                return (
+                  <div className="execute-sidebar__link-item">
+                    <a
+                      href={issueLink.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="execute-sidebar__link-url"
+                    >
+                      <span className="execute-sidebar__link-number">#{issueLink.number}</span>
+                      {issueLink.title}
+                    </a>
+                    {issueLink.projectStatus && (
+                      <span className="execute-sidebar__link-project">{issueLink.projectStatus}</span>
+                    )}
+                    {labels.length > 0 && (
+                      <div className="execute-sidebar__link-labels">
+                        {labels.map((l, i) => (
+                          <span
+                            key={i}
+                            className="execute-sidebar__link-label"
+                            style={{ backgroundColor: `#${l.color}`, color: getTextColor(l.color) }}
+                          >
+                            {l.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })() : (
+                <div className="execute-sidebar__no-links">No issue linked</div>
+              )}
             </div>
 
-            {/* Issue */}
-            {issueLink && (
-              <div className="execute-sidebar__info-section">
-                <div className="execute-sidebar__info-label">Issue</div>
-                <div className="execute-sidebar__info-value">
-                  <a
-                    href={issueLink.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="execute-sidebar__info-link"
-                  >
-                    #{issueLink.number} {issueLink.title}
-                  </a>
-                </div>
+            {/* PR Section */}
+            <div className="execute-sidebar__links-section">
+              <div className="execute-sidebar__links-header">
+                <h4>PR</h4>
               </div>
-            )}
-
-            {/* PR */}
-            {prLink && (() => {
-              const reviewers = prLink.reviewers ? JSON.parse(prLink.reviewers) as string[] : [];
-              const humanReviewers = reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]") && !r.includes("github-actions"));
-              // Labels can be array of strings or array of {name, color} objects
-              const rawLabels = prLink.labels ? JSON.parse(prLink.labels) : [];
-              const labels: GitHubLabel[] = rawLabels.map((l: string | GitHubLabel) =>
-                typeof l === "string" ? { name: l, color: "6b7280" } : l
-              );
-
-              return (
-                <>
-                  {/* PR Link */}
-                  <div className="execute-sidebar__info-section">
-                    <div className="execute-sidebar__info-label">Pull Request</div>
-                    <div className="execute-sidebar__info-value">
+              {prLink ? (() => {
+                const rawLabels = prLink.labels ? JSON.parse(prLink.labels) : [];
+                const labels: GitHubLabel[] = rawLabels.map((l: string | GitHubLabel) =>
+                  typeof l === "string" ? { name: l, color: "6b7280" } : l
+                );
+                const reviewers = prLink.reviewers ? JSON.parse(prLink.reviewers) as string[] : [];
+                const checks: GitHubCheck[] = prLink.checks ? JSON.parse(prLink.checks) : [];
+                const passedChecks = checks.filter((c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED").length;
+                const totalChecks = checks.length;
+                const getTextColor = (bgColor: string) => {
+                  const r = parseInt(bgColor.slice(0, 2), 16);
+                  const g = parseInt(bgColor.slice(2, 4), 16);
+                  const b = parseInt(bgColor.slice(4, 6), 16);
+                  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+                  return luminance > 0.5 ? "#000" : "#fff";
+                };
+                return (
+                  <div className="execute-sidebar__link-item execute-sidebar__link-item--detailed">
+                    <div className="execute-sidebar__link-main">
                       <a
                         href={prLink.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="execute-sidebar__info-link"
+                        className="execute-sidebar__link-url"
                       >
-                        #{prLink.number} {prLink.title}
+                        <span className="execute-sidebar__link-number">#{prLink.number}</span>
+                        {prLink.title}
                       </a>
-                      {prLink.status && (
-                        <span className={`execute-sidebar__pr-status execute-sidebar__pr-status--${prLink.status.toLowerCase()}`}>
-                          {prLink.status}
+                    </div>
+                    <div className="execute-sidebar__link-meta">
+                      {totalChecks > 0 && (
+                        <span className={`execute-sidebar__ci-badge execute-sidebar__ci-badge--${prLink.checksStatus}`}>
+                          <span className="execute-sidebar__ci-badge-icon">
+                            {prLink.checksStatus === "success" ? "✓" : prLink.checksStatus === "failure" ? "✗" : "●"}
+                          </span>
+                          <span className="execute-sidebar__ci-badge-count">{passedChecks}/{totalChecks}</span>
                         </span>
                       )}
-                    </div>
-                  </div>
-
-                  {/* CI / Review / Reviewers - compact row */}
-                  <div className="execute-sidebar__info-row">
-                    {/* CI */}
-                    <div className="execute-sidebar__info-col">
-                      <div className="execute-sidebar__info-label">CI</div>
-                      <span className={`execute-sidebar__ci-status execute-sidebar__ci-status--${prLink.checksStatus || "unknown"}`}>
-                        {prLink.checksStatus === "success" && "✓"}
-                        {prLink.checksStatus === "failure" && "✗"}
-                        {prLink.checksStatus === "pending" && "◌"}
-                        {prLink.checksStatus === "cancelled" && "⊘"}
-                        {!prLink.checksStatus && "-"}
+                      {prLink.reviewDecision && (
+                        <span className={`execute-sidebar__review-badge execute-sidebar__review-badge--${prLink.reviewDecision.toLowerCase().replace("_", "-")}`}>
+                          {prLink.reviewDecision === "APPROVED" ? "Approved" :
+                           prLink.reviewDecision === "CHANGES_REQUESTED" ? "Changes" :
+                           prLink.reviewDecision === "REVIEW_REQUIRED" ? "Review Required" : prLink.reviewDecision}
+                        </span>
+                      )}
+                      {prLink.projectStatus && (
+                        <span className="execute-sidebar__link-project">{prLink.projectStatus}</span>
+                      )}
+                      <span className="execute-sidebar__link-reviewers">
+                        {reviewers.length > 0 ? (
+                          reviewers.map((r, i) => (
+                            <span key={i} className="execute-sidebar__link-reviewer">{r}</span>
+                          ))
+                        ) : (
+                          <span className="execute-sidebar__link-reviewer execute-sidebar__link-reviewer--none">No Reviewers</span>
+                        )}
                       </span>
                     </div>
-
-                    {/* Review */}
-                    <div className="execute-sidebar__info-col">
-                      <div className="execute-sidebar__info-label">Review</div>
-                      {prLink.reviewDecision === "APPROVED" && (
-                        <span className="execute-sidebar__review-status execute-sidebar__review-status--approved">✓</span>
-                      )}
-                      {prLink.reviewDecision === "CHANGES_REQUESTED" && (
-                        <span className="execute-sidebar__review-status execute-sidebar__review-status--changes">✗</span>
-                      )}
-                      {prLink.reviewDecision === "REVIEW_REQUIRED" && (
-                        <span className="execute-sidebar__review-status execute-sidebar__review-status--pending">?</span>
-                      )}
-                      {!prLink.reviewDecision && (
-                        <span className="execute-sidebar__review-status execute-sidebar__review-status--none">-</span>
-                      )}
-                    </div>
-
-                    {/* Reviewers */}
-                    {humanReviewers.length > 0 && (
-                      <div className="execute-sidebar__info-col execute-sidebar__info-col--reviewers">
-                        <div className="execute-sidebar__info-label">Reviewers</div>
-                        <div className="execute-sidebar__reviewers">
-                          {humanReviewers.map((reviewer) => (
-                            <span key={reviewer} className="execute-sidebar__reviewer">{reviewer}</span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Labels */}
-                  {labels.length > 0 && (
-                    <div className="execute-sidebar__info-section">
-                      <div className="execute-sidebar__info-label">Labels</div>
-                      <div className="execute-sidebar__labels">
-                        {labels.map((label) => (
+                    {labels.length > 0 && (
+                      <div className="execute-sidebar__pr-labels">
+                        {labels.map((l, i) => (
                           <span
-                            key={label.name}
-                            className="execute-sidebar__label"
-                            style={{
-                              backgroundColor: `#${label.color}`,
-                              color: parseInt(label.color, 16) > 0x7fffff ? "#000" : "#fff",
-                            }}
+                            key={i}
+                            className="execute-sidebar__pr-label"
+                            style={{ backgroundColor: `#${l.color}`, color: getTextColor(l.color) }}
                           >
-                            {label.name}
+                            {l.name}
                           </span>
                         ))}
                       </div>
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-
-            {/* No PR/Issue message */}
-            {!prLink && !issueLink && (
-              <div className="execute-sidebar__info-empty">
-                No PR or Issue linked to this branch
-              </div>
-            )}
+                    )}
+                  </div>
+                );
+              })() : (
+                <div className="execute-sidebar__no-links">No PR linked</div>
+              )}
+            </div>
           </div>
         )}
 

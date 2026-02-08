@@ -1894,6 +1894,20 @@ export function PlanningPanel({
             <div className="planning-panel__detail-main">
               {/* Chat */}
               <div className="planning-panel__chat">
+                {/* Current branch indicator */}
+                {currentPlanningBranch && (
+                  <div className="planning-panel__branch-indicator">
+                    <span className="planning-panel__branch-indicator-label">
+                      {claudeWorking ? "🤖 Working on:" : "📍 Focused:"}
+                    </span>
+                    <span className="planning-panel__branch-indicator-name">
+                      {currentPlanningBranch}
+                    </span>
+                    <span className="planning-panel__branch-indicator-hint">
+                      Chat messages will reference this branch
+                    </span>
+                  </div>
+                )}
                 {selectedSession.chatSessionId && (
                   <ChatPanel
                     sessionId={selectedSession.chatSessionId}

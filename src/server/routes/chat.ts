@@ -1108,13 +1108,19 @@ const INSTRUCTION_REVIEW_SYSTEM_PROMPT = `あなたはタスクインストラ�
 
 vibe-treeのMCPツールを使用してください（ToolSearchは不要、直接呼び出し可能）。
 
-### 使用するツール
+### 使用するツール（パラメータ名に注意）
 - \`mcp__vibe-tree__get_current_context\`: 現在の状態を確認（**1回だけ呼ぶ**）
+  - パラメータ: \`planningSessionId\`
 - \`mcp__vibe-tree__set_focused_branch\`: 作業対象ブランチを変更（UIに表示される）
+  - パラメータ: \`planningSessionId\`, \`branchName\`
 - \`mcp__vibe-tree__update_instruction\`: インストラクションを更新
+  - パラメータ: \`repoId\`, \`branchName\`, \`instructionMd\`（※instructionではなくinstructionMd）
 - \`mcp__vibe-tree__add_todo\`: ToDoを追加（各ブランチに3〜5個）
+  - パラメータ: \`repoId\`, \`branchName\`, \`title\`, \`description\`（任意）
 - \`mcp__vibe-tree__add_question\`: 疑問点を記録
+  - パラメータ: \`planningSessionId\`, \`question\`, \`branchName\`（任意）, \`assumption\`（任意）
 - \`mcp__vibe-tree__update_session_title\`: 全完了後にタイトル更新
+  - パラメータ: \`planningSessionId\`, \`title\`
 
 ## 処理フロー【厳守・順番に1つずつ】
 

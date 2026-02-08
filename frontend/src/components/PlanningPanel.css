@@ -1878,8 +1878,10 @@
   padding: 8px;
   border-bottom: 1px solid #374151;
   flex-shrink: 0;
-  max-height: 200px;
+  min-height: 120px;
+  max-height: 50%;
   overflow-y: auto;
+  resize: vertical;
 }
 
 /* Planning Sidebar Tabs */

@@ -264,7 +264,7 @@ export function PlanningPanel({
   const [editingTitle, setEditingTitle] = useState("");
 
   // Resizable sidebar
-  const [sidebarWidth, setSidebarWidth] = useState(350);
+  const [sidebarWidth, setSidebarWidth] = useState(420);
   const isResizing = useRef(false);
 
   // Ref to track the latest selected session for async operations

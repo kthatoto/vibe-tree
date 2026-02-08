@@ -310,8 +310,8 @@ export function PlanningPanel({
   // Planning sidebar tabs (without branches - branches are always shown at top)
   const [planningSidebarTab, setPlanningSidebarTab] = useState<"instruction" | "todo" | "questions">("instruction");
 
-  // Planning branch links (PR/Issue)
-  const [planningBranchLinks, setPlanningBranchLinks] = useState<BranchLink[]>([]);
+  // Planning branch links (PR/Issue) for all branches
+  const [planningAllBranchLinks, setPlanningAllBranchLinks] = useState<Map<string, BranchLink[]>>(new Map());
 
   // Planning branch counts (ToDo and Question counts per branch)
   const [branchTodoCounts, setBranchTodoCounts] = useState<Map<string, { total: number; completed: number }>>(new Map());
@@ -841,46 +841,65 @@ export function PlanningPanel({
       .finally(() => setInstructionLoading(false));
   }, [selectedSession?.id, selectedSession?.executeBranches, planningCurrentBranchIndex, repoId]);
 
-  // Load branch links (PR/Issue) for Planning sessions
+  // Load branch links (PR/Issue) for all Planning session branches
   useEffect(() => {
     if (!selectedSession || !repoId || selectedSession.type !== "planning") {
-      setPlanningBranchLinks([]);
+      setPlanningAllBranchLinks(new Map());
       return;
     }
     const planningBranches = selectedSession.executeBranches || [];
-    const currentBranch = planningBranches[planningCurrentBranchIndex];
-    if (!currentBranch) {
-      setPlanningBranchLinks([]);
+    if (planningBranches.length === 0) {
+      setPlanningAllBranchLinks(new Map());
       return;
     }
-    api.getBranchLinks(repoId, currentBranch)
-      .then(setPlanningBranchLinks)
-      .catch(() => setPlanningBranchLinks([]));
-  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, planningCurrentBranchIndex, repoId]);
+
+    const loadAllBranchLinks = async () => {
+      const linksMap = new Map<string, BranchLink[]>();
+      await Promise.all(
+        planningBranches.map(async (branch) => {
+          try {
+            const links = await api.getBranchLinks(repoId, branch);
+            linksMap.set(branch, links);
+          } catch {
+            linksMap.set(branch, []);
+          }
+        })
+      );
+      setPlanningAllBranchLinks(linksMap);
+    };
+
+    loadAllBranchLinks();
+  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, repoId]);
 
   // Subscribe to branch link updates for Planning sessions
   useEffect(() => {
     if (!selectedSession || !repoId || selectedSession.type !== "planning") return;
     const planningBranches = selectedSession.executeBranches || [];
-    const currentBranch = planningBranches[planningCurrentBranchIndex];
-    if (!currentBranch) return;
+    if (planningBranches.length === 0) return;
 
     const unsubCreated = wsClient.on("branchLink.created", (msg) => {
       const data = msg.data as BranchLink;
-      if (data.repoId === repoId && data.branchName === currentBranch) {
-        setPlanningBranchLinks((prev) => {
-          if (prev.some((l) => l.id === data.id)) return prev;
-          return [data, ...prev];
+      if (data.repoId === repoId && planningBranches.includes(data.branchName)) {
+        setPlanningAllBranchLinks((prev) => {
+          const newMap = new Map(prev);
+          const current = newMap.get(data.branchName) || [];
+          if (!current.some((l) => l.id === data.id)) {
+            newMap.set(data.branchName, [data, ...current]);
+          }
+          return newMap;
         });
       }
     });
 
     const unsubUpdated = wsClient.on("branchLink.updated", (msg) => {
       const data = msg.data as BranchLink;
-      if (data.repoId === repoId && data.branchName === currentBranch) {
-        setPlanningBranchLinks((prev) =>
-          prev.map((l) => (l.id === data.id ? data : l))
-        );
+      if (data.repoId === repoId && planningBranches.includes(data.branchName)) {
+        setPlanningAllBranchLinks((prev) => {
+          const newMap = new Map(prev);
+          const current = newMap.get(data.branchName) || [];
+          newMap.set(data.branchName, current.map((l) => (l.id === data.id ? data : l)));
+          return newMap;
+        });
       }
     });
 
@@ -888,7 +907,7 @@ export function PlanningPanel({
       unsubCreated();
       unsubUpdated();
     };
-  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, planningCurrentBranchIndex, repoId]);
+  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, repoId]);
 
   // Clear pending nodes when session changes
   useEffect(() => {
@@ -2085,20 +2104,23 @@ export function PlanningPanel({
                     completedBranches={new Set()}
                     branchTodoCounts={branchTodoCounts}
                     branchQuestionCounts={branchQuestionCounts}
+                    branchLinks={planningAllBranchLinks}
                     workingBranch={claudeWorking ? planningBranches[planningCurrentBranchIndex] : null}
                     showCompletionCount={false}
                   />
                 </div>
 
                 {/* Branch Header with PR/Issue links */}
-                {currentPlanningBranch && (
+                {currentPlanningBranch && (() => {
+                  const currentBranchLinks = planningAllBranchLinks.get(currentPlanningBranch) || [];
+                  return (
                   <div className="execute-sidebar__branch-header">
                     <div className="execute-sidebar__branch-name">
                       {currentPlanningBranch}
                     </div>
-                    {planningBranchLinks.length > 0 && (
+                    {currentBranchLinks.length > 0 && (
                       <div className="execute-sidebar__links">
-                        {planningBranchLinks.filter(l => l.linkType === "pr").map((prLink) => (
+                        {currentBranchLinks.filter(l => l.linkType === "pr").map((prLink) => (
                           <a
                             key={prLink.id}
                             href={prLink.url}
@@ -2114,7 +2136,7 @@ export function PlanningPanel({
                             )}
                           </a>
                         ))}
-                        {planningBranchLinks.filter(l => l.linkType === "issue").map((issueLink) => (
+                        {currentBranchLinks.filter(l => l.linkType === "issue").map((issueLink) => (
                           <a
                             key={issueLink.id}
                             href={issueLink.url}
@@ -2128,7 +2150,8 @@ export function PlanningPanel({
                       </div>
                     )}
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* Tab Header */}
                 <div className="planning-panel__sidebar-tabs">

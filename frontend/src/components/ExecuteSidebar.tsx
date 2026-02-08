@@ -39,6 +39,9 @@ export function ExecuteSidebar({
   // All questions for all branches (for badge counts)
   const [allQuestions, setAllQuestions] = useState<PlanningQuestion[]>([]);
 
+  // All branch links for all branches (for PR status in tree)
+  const [allBranchLinks, setAllBranchLinks] = useState<Map<string, BranchLink[]>>(new Map());
+
   // Branch links and instruction for display branch
   const [branchLinks, setBranchLinks] = useState<BranchLink[]>([]);
   const [instruction, setInstruction] = useState<TaskInstruction | null>(null);
@@ -94,6 +97,64 @@ export function ExecuteSidebar({
     };
 
     loadAllTodos();
+  }, [repoId, executeBranches]);
+
+  // Load all branch links for all branches
+  useEffect(() => {
+    if (!repoId || executeBranches.length === 0) return;
+
+    const loadAllBranchLinks = async () => {
+      const linksMap = new Map<string, BranchLink[]>();
+      await Promise.all(
+        executeBranches.map(async (branch) => {
+          try {
+            const links = await api.getBranchLinks(repoId, branch);
+            linksMap.set(branch, links);
+          } catch {
+            linksMap.set(branch, []);
+          }
+        })
+      );
+      setAllBranchLinks(linksMap);
+    };
+
+    loadAllBranchLinks();
+  }, [repoId, executeBranches]);
+
+  // WebSocket updates for branch links
+  useEffect(() => {
+    if (!repoId || executeBranches.length === 0) return;
+
+    const unsubCreated = wsClient.on("branchLink.created", (msg) => {
+      const data = msg.data as BranchLink;
+      if (data.repoId === repoId && executeBranches.includes(data.branchName)) {
+        setAllBranchLinks((prev) => {
+          const newMap = new Map(prev);
+          const current = newMap.get(data.branchName) || [];
+          if (!current.some((l) => l.id === data.id)) {
+            newMap.set(data.branchName, [data, ...current]);
+          }
+          return newMap;
+        });
+      }
+    });
+
+    const unsubUpdated = wsClient.on("branchLink.updated", (msg) => {
+      const data = msg.data as BranchLink;
+      if (data.repoId === repoId && executeBranches.includes(data.branchName)) {
+        setAllBranchLinks((prev) => {
+          const newMap = new Map(prev);
+          const current = newMap.get(data.branchName) || [];
+          newMap.set(data.branchName, current.map((l) => (l.id === data.id ? data : l)));
+          return newMap;
+        });
+      }
+    });
+
+    return () => {
+      unsubCreated();
+      unsubUpdated();
+    };
   }, [repoId, executeBranches]);
 
   // WebSocket updates for todos
@@ -318,6 +379,7 @@ export function ExecuteSidebar({
           completedBranches={completedBranches}
           branchTodoCounts={branchTodoCounts}
           branchQuestionCounts={branchQuestionCounts}
+          branchLinks={allBranchLinks}
           workingBranch={workingBranch}
         />
       </div>

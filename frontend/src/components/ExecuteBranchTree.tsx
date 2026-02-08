@@ -1,3 +1,4 @@
+import type { BranchLink } from "../lib/api";
 import "./ExecuteBranchTree.css";
 
 interface QuestionCounts {
@@ -15,6 +16,7 @@ interface ExecuteBranchTreeProps {
   completedBranches: Set<string>;
   branchTodoCounts?: Map<string, { total: number; completed: number }>;
   branchQuestionCounts?: Map<string, QuestionCounts>;
+  branchLinks?: Map<string, BranchLink[]>;
   workingBranch?: string | null;
   showCompletionCount?: boolean;
 }
@@ -27,6 +29,7 @@ export function ExecuteBranchTree({
   completedBranches,
   branchTodoCounts = new Map(),
   branchQuestionCounts = new Map(),
+  branchLinks = new Map(),
   workingBranch = null,
   showCompletionCount = true,
 }: ExecuteBranchTreeProps) {
@@ -64,8 +67,11 @@ export function ExecuteBranchTree({
           const isWorking = branch === workingBranch;
           const todoCount = branchTodoCounts.get(branch);
           const questionCount = branchQuestionCounts.get(branch);
+          const links = branchLinks.get(branch) || [];
+          const prLink = links.find(l => l.linkType === "pr");
           const hasTodos = todoCount && todoCount.total > 0;
           const hasQuestions = questionCount && questionCount.total > 0;
+          const hasPR = !!prLink;
 
           return (
             <div
@@ -86,6 +92,58 @@ export function ExecuteBranchTree({
                   </span>
                 )}
               </div>
+              {/* PR badges - CI and Review status */}
+              {hasPR && (
+                <div className="execute-branch-tree__pr-badges">
+                  <a
+                    href={prLink.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="execute-branch-tree__pr-link"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    PR #{prLink.number}
+                  </a>
+                  {/* CI status */}
+                  {prLink.checksStatus === "success" && (
+                    <span className="execute-branch-tree__pr-badge execute-branch-tree__pr-badge--ci-success" title="CI passed">
+                      CI ✔
+                    </span>
+                  )}
+                  {prLink.checksStatus === "failure" && (
+                    <span className="execute-branch-tree__pr-badge execute-branch-tree__pr-badge--ci-failure" title="CI failed">
+                      CI ✗
+                    </span>
+                  )}
+                  {prLink.checksStatus === "pending" && (
+                    <span className="execute-branch-tree__pr-badge execute-branch-tree__pr-badge--ci-pending" title="CI running">
+                      CI ◌
+                    </span>
+                  )}
+                  {/* Review status */}
+                  {prLink.reviewDecision === "APPROVED" && (
+                    <span className="execute-branch-tree__pr-badge execute-branch-tree__pr-badge--review-approved" title="Approved">
+                      Approved ✔
+                    </span>
+                  )}
+                  {prLink.reviewDecision === "CHANGES_REQUESTED" && (
+                    <span className="execute-branch-tree__pr-badge execute-branch-tree__pr-badge--review-changes" title="Changes requested">
+                      Changes ✗
+                    </span>
+                  )}
+                  {prLink.reviewDecision === "REVIEW_REQUIRED" && (
+                    <span className="execute-branch-tree__pr-badge execute-branch-tree__pr-badge--review-pending" title="Review required">
+                      Review
+                    </span>
+                  )}
+                  {/* Reviewers requested but no decision yet */}
+                  {!prLink.reviewDecision && prLink.reviewers && JSON.parse(prLink.reviewers).length > 0 && (
+                    <span className="execute-branch-tree__pr-badge execute-branch-tree__pr-badge--review-requested" title="Review requested">
+                      Review
+                    </span>
+                  )}
+                </div>
+              )}
               {(hasTodos || hasQuestions) && (
                 <div className="execute-branch-tree__badges">
                   {hasTodos && (

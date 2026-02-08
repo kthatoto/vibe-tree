@@ -185,3 +185,71 @@
     transform: translateY(-2px) rotate(5deg);
   }
 }
+
+/* PR badges */
+.execute-branch-tree__pr-badges {
+  display: flex;
+  gap: 6px;
+  padding-left: 22px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.execute-branch-tree__pr-link {
+  font-size: 10px;
+  color: #60a5fa;
+  text-decoration: none;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #1e3a5f;
+}
+
+.execute-branch-tree__pr-link:hover {
+  text-decoration: underline;
+}
+
+.execute-branch-tree__pr-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+/* CI badges */
+.execute-branch-tree__pr-badge--ci-success {
+  background: #14532d;
+  border: 1px solid #22c55e;
+  color: #4ade80;
+}
+
+.execute-branch-tree__pr-badge--ci-failure {
+  background: #7f1d1d;
+  border: 1px solid #ef4444;
+  color: #f87171;
+}
+
+.execute-branch-tree__pr-badge--ci-pending {
+  background: #78350f;
+  border: 1px solid #f59e0b;
+  color: #fbbf24;
+}
+
+/* Review badges */
+.execute-branch-tree__pr-badge--review-approved {
+  background: transparent;
+  border: 1px solid #22c55e;
+  color: #4ade80;
+}
+
+.execute-branch-tree__pr-badge--review-changes {
+  background: transparent;
+  border: 1px solid #ef4444;
+  color: #f87171;
+}
+
+.execute-branch-tree__pr-badge--review-pending,
+.execute-branch-tree__pr-badge--review-requested {
+  background: transparent;
+  border: 1px solid #f59e0b;
+  color: #fbbf24;
+}

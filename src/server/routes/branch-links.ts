@@ -472,7 +472,7 @@ branchLinksRouter.post("/detect", async (c) => {
   // Try to find PR for this branch
   try {
     const result = execSync(
-      `gh pr view --head "${input.branchName}" --repo "${input.repoId}" --json number,title,state,url,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems`,
+      `gh pr view "${input.branchName}" --repo "${input.repoId}" --json number,title,state,url,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems`,
       { encoding: "utf-8", timeout: 10000 }
     ).trim();
 

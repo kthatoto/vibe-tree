@@ -38,7 +38,7 @@
   font-size: 12px;
   font-weight: 600;
   color: #888;
-  text-transform: uppercase;
+  
   letter-spacing: 0.5px;
 }
 
@@ -57,7 +57,7 @@
 .planning-questions__section-header {
   font-size: 10px;
   color: #666;
-  text-transform: uppercase;
+  
   padding: 4px 0;
   border-bottom: 1px solid #333;
   margin-top: 8px;

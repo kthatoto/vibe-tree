@@ -250,15 +250,24 @@ planningSessionsRouter.post("/:id/confirm", async (c) => {
     throw new NotFoundError("Planning session not found");
   }
 
-  if (session.status !== "draft") {
-    throw new BadRequestError("Session is not in draft status");
+  const isPlanningType = session.type === "planning";
+
+  // For planning sessions, allow confirm from any status except "confirmed"
+  // For other types, require "draft" status
+  if (isPlanningType) {
+    if (session.status === "confirmed") {
+      throw new BadRequestError("Session is already confirmed");
+    }
+  } else {
+    if (session.status !== "draft") {
+      throw new BadRequestError("Session is not in draft status");
+    }
   }
 
   const nodes = JSON.parse(session.nodesJson) as TaskNode[];
   const edges = JSON.parse(session.edgesJson) as TaskEdge[];
 
   // Planning type sessions don't require tasks (they focus on instruction editing)
-  const isPlanningType = session.type === "planning";
   if (!isPlanningType && nodes.length === 0) {
     throw new BadRequestError("No tasks to confirm");
   }

@@ -1293,7 +1293,12 @@ ${gitStatus || "Clean working directory"}
 
       if (executeBranches.length > 0) {
         // Multi-branch planning session
-        parts.push(`## 作業対象ブランチ一覧
+        parts.push(`## MCPツール用パラメータ【重要】
+以下の値をMCPツール呼び出しで使用してください：
+- planningSessionId: \`${planningSession[0].id}\`
+- repoId: \`${session.repoId}\`
+
+## 作業対象ブランチ一覧（全${executeBranches.length}件）
 ${executeBranches.map((b, i) => `${i === currentBranchIndex ? "→ " : "  "}${i + 1}. \`${b}\`${i === currentBranchIndex ? " 【現在編集中】" : ""}`).join("\n")}
 
 現在は **${currentBranch}** のインストラクションとToDoを編集しています。
@@ -1323,8 +1328,7 @@ ${executeBranches.map((b, i) => `${i === currentBranchIndex ? "→ " : "  "}${i 
           parts.push(`## タスクインストラクション【精査対象】
 ブランチ: \`${currentBranch}\`
 
-以下がこのタスクのインストラクションです。内容を確認し、不明瞭な点や改善点があれば指摘してください。
-変更がある場合は <<INSTRUCTION_EDIT>> タグで全文を提案してください。
+以下がこのタスクのインストラクションです。必要に応じて \`update_instruction\` MCPツールで更新してください。
 
 \`\`\`markdown
 ${instructions[0].instructionMd}
@@ -1335,8 +1339,7 @@ ${instructions[0].instructionMd}
 ブランチ: \`${currentBranch}\`
 
 このブランチにはまだインストラクションがありません。
-ユーザーと対話してインストラクションを作成してください。
-作成後は <<INSTRUCTION_EDIT>> タグで全文を提案してください。
+\`update_instruction\` MCPツールでインストラクションを作成してください。
 `);
         }
 
@@ -1363,15 +1366,14 @@ ${instructions[0].instructionMd}
 
 ${todoList}
 
-ToDoを更新する場合は <<TODO_UPDATE>> タグを使用してください。
+ToDoを追加/更新するには \`add_todo\`, \`update_todo\` MCPツールを使用してください。
 `);
         } else {
           parts.push(`## ToDoリスト【未作成】
 ブランチ: \`${currentBranch}\`
 
 このブランチにはまだToDoがありません。
-インストラクションに基づいて、具体的な作業項目をToDoとして追加してください。
-<<TODO_UPDATE>> タグを使用してToDoを作成できます。
+\`add_todo\` MCPツールでToDoを3〜5個追加してください。
 `);
         }
       }

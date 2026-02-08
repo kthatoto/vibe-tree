@@ -235,6 +235,10 @@
   color: #888;
 }
 
+.execute-sidebar__ci-status--cancelled {
+  color: #9ca3af;
+}
+
 .execute-sidebar__review-status {
   font-size: 12px;
   padding: 2px 8px;

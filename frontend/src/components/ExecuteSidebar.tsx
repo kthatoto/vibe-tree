@@ -480,7 +480,11 @@ export function ExecuteSidebar({
             {prLink && (() => {
               const reviewers = prLink.reviewers ? JSON.parse(prLink.reviewers) as string[] : [];
               const humanReviewers = reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]") && !r.includes("github-actions"));
-              const labels = prLink.labels ? JSON.parse(prLink.labels) as GitHubLabel[] : [];
+              // Labels can be array of strings or array of {name, color} objects
+              const rawLabels = prLink.labels ? JSON.parse(prLink.labels) : [];
+              const labels: GitHubLabel[] = rawLabels.map((l: string | GitHubLabel) =>
+                typeof l === "string" ? { name: l, color: "6b7280" } : l
+              );
 
               return (
                 <>
@@ -513,6 +517,7 @@ export function ExecuteSidebar({
                         {prLink.checksStatus === "success" && "✓"}
                         {prLink.checksStatus === "failure" && "✗"}
                         {prLink.checksStatus === "pending" && "◌"}
+                        {prLink.checksStatus === "cancelled" && "⊘"}
                         {!prLink.checksStatus && "-"}
                       </span>
                     </div>

@@ -2,23 +2,45 @@
 
 MCP (Model Context Protocol) server for vibe-tree. This allows Claude Code to directly interact with vibe-tree's database for managing tasks, instructions, todos, and questions.
 
-## Installation
+## Usage
+
+The MCP server is integrated into vibe-tree. Run it with:
 
 ```bash
-cd mcp-server
-bun install
+bun run mcp
 ```
 
-## Configuration
+## Claude Code Configuration
 
-Add the following to your Claude Code MCP settings (`~/.config/claude-code/settings.json`):
+Add the following to your Claude Code MCP settings:
+
+**For user-level settings** (`~/.claude/settings.json`):
 
 ```json
 {
   "mcpServers": {
     "vibe-tree": {
       "command": "bun",
-      "args": ["run", "/path/to/vibe-tree/mcp-server/src/index.ts"],
+      "args": ["run", "mcp"],
+      "cwd": "/path/to/vibe-tree",
+      "env": {
+        "VIBE_TREE_DB": "/path/to/.vibetree/vibetree.sqlite",
+        "VIBE_TREE_API": "http://localhost:3000"
+      }
+    }
+  }
+}
+```
+
+**For project-level settings** (`.claude/settings.json` in your project):
+
+```json
+{
+  "mcpServers": {
+    "vibe-tree": {
+      "command": "bun",
+      "args": ["run", "mcp"],
+      "cwd": "/path/to/vibe-tree",
       "env": {
         "VIBE_TREE_DB": "/path/to/.vibetree/vibetree.sqlite",
         "VIBE_TREE_API": "http://localhost:3000"
@@ -63,7 +85,7 @@ Add the following to your Claude Code MCP settings (`~/.config/claude-code/setti
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  vibe-tree (Existing)                                       │
+│  vibe-tree                                                  │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
 │  │  Frontend    │◄───│  Hono API    │◄───│  SQLite DB   │  │
 │  │  (React)     │    │  Server      │    │              │  │
@@ -84,14 +106,6 @@ Add the following to your Claude Code MCP settings (`~/.config/claude-code/setti
                          └───────────┘
 ```
 
-## Development
+## Note
 
-```bash
-# Run in development mode with hot reload
-bun run dev
-
-# Run directly
-bun run start
-```
-
-Note: MCP servers run via STDIO, so `console.log` is not available. Use `console.error` for debugging.
+MCP servers communicate via STDIO, so `console.log` outputs are not visible. Use `console.error` for debugging.

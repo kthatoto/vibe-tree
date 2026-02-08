@@ -55,7 +55,10 @@ export function ChatPanel({
   const streamingChunksRef = useRef<StreamingChunk[]>([]);
   const hasStreamingChunksRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
   // Quick mode (use haiku for faster responses)
   const [quickMode, setQuickMode] = useState(false);
 
@@ -240,12 +243,38 @@ export function ChatPanel({
     };
   }, [sessionId]);
 
-  // Auto scroll to bottom
-  useEffect(() => {
-    if (messages.length > 0 || streamingChunks.length > 0 || !loading) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+  // Check if scrolled to bottom
+  const checkIfAtBottom = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return true;
+    const threshold = 50; // pixels from bottom to consider "at bottom"
+    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+  }, []);
+
+  // Handle scroll events
+  const handleScroll = useCallback(() => {
+    const atBottom = checkIfAtBottom();
+    setIsAtBottom(atBottom);
+    if (atBottom) {
+      setHasNewMessages(false);
     }
-  }, [messages, streamingChunks, loading]);
+  }, [checkIfAtBottom]);
+
+  // Auto scroll to bottom only if already at bottom
+  useEffect(() => {
+    if (isAtBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+    } else if (messages.length > 0 || streamingChunks.length > 0) {
+      setHasNewMessages(true);
+    }
+  }, [messages, streamingChunks, isAtBottom]);
+
+  // Scroll to bottom function
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    setHasNewMessages(false);
+    setIsAtBottom(true);
+  }, []);
 
   // Build execute mode context
   const buildExecuteContext = (): string | undefined => {
@@ -606,16 +635,22 @@ export function ChatPanel({
       height: "100%",
       background: "#111827",
       overflow: "hidden",
+      position: "relative",
     }}>
       {/* Messages */}
-      <div style={{
-        flex: 1,
-        overflowY: "auto",
-        padding: 16,
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-      }}>
+      <div
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: 16,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          position: "relative",
+        }}
+      >
         {messages.map((msg) => {
           // Check if assistant message has chunks
           if (msg.role === "assistant") {
@@ -815,6 +850,34 @@ export function ChatPanel({
 
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Scroll to bottom button */}
+      {hasNewMessages && !isAtBottom && (
+        <button
+          onClick={scrollToBottom}
+          style={{
+            position: "absolute",
+            bottom: 140,
+            right: 24,
+            width: 40,
+            height: 40,
+            borderRadius: "50%",
+            background: "#3b82f6",
+            border: "none",
+            color: "white",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+            zIndex: 10,
+            fontSize: 18,
+          }}
+          title="Scroll to bottom"
+        >
+          ↓
+        </button>
+      )}
 
       {/* Error */}
       {error && (

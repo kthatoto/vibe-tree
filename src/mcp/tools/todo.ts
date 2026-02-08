@@ -6,6 +6,40 @@ import {
   broadcastTodoDeleted,
 } from "../ws/notifier";
 
+// Get todos schema
+export const getTodosSchema = z.object({
+  repoId: z.string().describe("Repository ID (owner/repo format)"),
+  branchName: z.string().describe("Branch name"),
+});
+
+export type GetTodosInput = z.infer<typeof getTodosSchema>;
+
+interface GetTodosOutput {
+  branchName: string;
+  todos: Array<{
+    id: number;
+    title: string;
+    description: string | null;
+    status: string;
+    orderIndex: number;
+  }>;
+}
+
+export function getTodosList(input: GetTodosInput): GetTodosOutput {
+  const todoRows = getTodos(input.repoId, input.branchName);
+
+  return {
+    branchName: input.branchName,
+    todos: todoRows.map((t) => ({
+      id: t.id,
+      title: t.title,
+      description: t.description,
+      status: t.status,
+      orderIndex: t.order_index,
+    })),
+  };
+}
+
 // Schema definitions
 export const addTodoSchema = z.object({
   repoId: z.string().describe("Repository ID (owner/repo format)"),

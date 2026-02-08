@@ -60,24 +60,28 @@ export function ExecuteBranchTree({
               className={`execute-branch-tree__item execute-branch-tree__item--${status} ${isPreview ? "execute-branch-tree__item--preview" : ""}`}
               onClick={() => onPreviewBranch(branch)}
             >
-              <span className={`execute-branch-tree__status execute-branch-tree__status--${status}`}>
-                {getStatusIcon(status)}
-              </span>
-              <span className="execute-branch-tree__name" title={branch}>
-                {branch}
-              </span>
-              <span className="execute-branch-tree__badges">
-                {hasTodos && (
-                  <span className="execute-branch-tree__badge execute-branch-tree__badge--todo" title="ToDo">
-                    📋 {todoCount.completed}/{todoCount.total}
-                  </span>
-                )}
-                {hasQuestions && (
-                  <span className={`execute-branch-tree__badge execute-branch-tree__badge--question ${questionCount.pending > 0 ? "execute-branch-tree__badge--pending" : ""}`} title="Questions">
-                    ❓ {questionCount.pending > 0 ? questionCount.pending : "✓"}
-                  </span>
-                )}
-              </span>
+              <div className="execute-branch-tree__row">
+                <span className={`execute-branch-tree__status execute-branch-tree__status--${status}`}>
+                  {getStatusIcon(status)}
+                </span>
+                <span className="execute-branch-tree__name" title={branch}>
+                  {branch}
+                </span>
+              </div>
+              {(hasTodos || hasQuestions) && (
+                <div className="execute-branch-tree__badges">
+                  {hasTodos && (
+                    <span className="execute-branch-tree__badge execute-branch-tree__badge--todo" title="ToDo">
+                      📋 {todoCount.completed}/{todoCount.total}
+                    </span>
+                  )}
+                  {hasQuestions && (
+                    <span className={`execute-branch-tree__badge execute-branch-tree__badge--question ${questionCount.pending > 0 ? "execute-branch-tree__badge--pending" : ""}`} title="Questions">
+                      ❓ {questionCount.pending > 0 ? questionCount.pending : "✓"}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}

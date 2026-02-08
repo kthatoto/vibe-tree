@@ -1,9 +1,6 @@
 import { z } from "zod";
 import { getDb, getSession, getQuestions } from "../db/client";
-import {
-  broadcastQuestionCreated,
-  broadcastQuestionUpdated,
-} from "../ws/notifier";
+import { broadcastQuestionCreated } from "../ws/notifier";
 
 export const addQuestionSchema = z.object({
   planningSessionId: z.string().describe("Planning session ID"),

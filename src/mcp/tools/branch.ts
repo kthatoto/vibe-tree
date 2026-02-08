@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getDb, getSession } from "../db/client";
-import { broadcastSessionUpdated, broadcastTaskAdvanced } from "../ws/notifier";
+import { broadcastTaskAdvanced } from "../ws/notifier";
 
 export const switchBranchSchema = z.object({
   planningSessionId: z.string().describe("Planning session ID"),

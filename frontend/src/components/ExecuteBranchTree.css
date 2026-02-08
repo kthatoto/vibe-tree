@@ -34,14 +34,21 @@
 
 .execute-branch-tree__item {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
   padding: 6px 8px;
   background: #1a1a1a;
   border-radius: 4px;
   border: 1px solid #333;
   cursor: pointer;
   transition: all 0.15s ease;
+}
+
+.execute-branch-tree__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .execute-branch-tree__item:hover {
@@ -105,7 +112,7 @@
 .execute-branch-tree__badges {
   display: flex;
   gap: 4px;
-  flex-shrink: 0;
+  padding-left: 22px; /* Align with branch name (14px status + 8px gap) */
 }
 
 .execute-branch-tree__badge {

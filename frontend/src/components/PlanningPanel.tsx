@@ -1915,7 +1915,7 @@ export function PlanningPanel({
                     className={`planning-panel__sidebar-tab ${planningSidebarTab === "questions" ? "planning-panel__sidebar-tab--active" : ""}`}
                     onClick={() => setPlanningSidebarTab("questions")}
                   >
-                    Q&A
+                    Questions
                   </button>
                 </div>
 

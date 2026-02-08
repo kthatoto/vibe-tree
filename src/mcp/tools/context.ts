@@ -4,7 +4,6 @@ import {
   getInstruction,
   getTodos,
   getQuestions,
-  type PlanningSessionRow,
 } from "../db/client";
 
 export const getContextSchema = z.object({
@@ -56,7 +55,7 @@ export function getCurrentContext(input: GetContextInput): ContextOutput {
   if (input.branchName) {
     currentBranch = input.branchName;
   } else if (executeBranches.length > 0 && currentIndex < executeBranches.length) {
-    currentBranch = executeBranches[currentIndex];
+    currentBranch = executeBranches[currentIndex] ?? null;
   }
 
   // Get instruction for current branch

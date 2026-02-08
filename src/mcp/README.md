@@ -61,12 +61,19 @@ Add the following to your Claude Code MCP settings:
 
 - `get_current_context` - Get the current planning context including branch, instruction, todos, and questions
 
+### Session
+
+- `get_session` - Get session information including title, type, status, and branches
+- `update_session_title` - Update the session title
+
 ### Instructions
 
+- `get_instruction` - Get the task instruction for a specific branch
 - `update_instruction` - Update the task instruction for a branch
 
 ### Todos
 
+- `get_todos` - Get all todo items for a specific branch
 - `add_todo` - Add a new todo item to a branch
 - `update_todo` - Update an existing todo item
 - `complete_todo` - Mark a todo as completed

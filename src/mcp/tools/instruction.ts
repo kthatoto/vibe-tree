@@ -2,6 +2,43 @@ import { z } from "zod";
 import { getDb, getInstruction } from "../db/client";
 import { broadcastInstructionUpdated } from "../ws/notifier";
 
+// Get instruction schema
+export const getInstructionSchema = z.object({
+  repoId: z.string().describe("Repository ID (owner/repo format)"),
+  branchName: z.string().describe("Branch name"),
+});
+
+export type GetInstructionInput = z.infer<typeof getInstructionSchema>;
+
+interface GetInstructionOutput {
+  found: boolean;
+  id: number | null;
+  branchName: string;
+  instructionMd: string | null;
+}
+
+export function getInstructionInfo(
+  input: GetInstructionInput
+): GetInstructionOutput {
+  const existing = getInstruction(input.repoId, input.branchName);
+
+  if (!existing) {
+    return {
+      found: false,
+      id: null,
+      branchName: input.branchName,
+      instructionMd: null,
+    };
+  }
+
+  return {
+    found: true,
+    id: existing.id,
+    branchName: existing.branch_name ?? input.branchName,
+    instructionMd: existing.instruction_md,
+  };
+}
+
 export const updateInstructionSchema = z.object({
   repoId: z.string().describe("Repository ID (owner/repo format)"),
   branchName: z.string().describe("Branch name"),

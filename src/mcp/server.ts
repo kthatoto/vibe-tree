@@ -9,8 +9,16 @@ import {
 import {
   getContextSchema,
   getCurrentContext,
+  getSessionSchema,
+  getSessionInfo,
+  updateSessionTitleSchema,
+  updateSessionTitle,
+  getInstructionSchema,
+  getInstructionInfo,
   updateInstructionSchema,
   updateInstruction,
+  getTodosSchema,
+  getTodosList,
   addTodoSchema,
   addTodo,
   updateTodoSchema,
@@ -66,6 +74,56 @@ export function createServer() {
           },
         },
         {
+          name: "get_session",
+          description: "Get session information including title, type, status, and branches",
+          inputSchema: {
+            type: "object",
+            properties: {
+              planningSessionId: {
+                type: "string",
+                description: "The planning session ID",
+              },
+            },
+            required: ["planningSessionId"],
+          },
+        },
+        {
+          name: "update_session_title",
+          description: "Update the session title",
+          inputSchema: {
+            type: "object",
+            properties: {
+              planningSessionId: {
+                type: "string",
+                description: "The planning session ID",
+              },
+              title: {
+                type: "string",
+                description: "New session title",
+              },
+            },
+            required: ["planningSessionId", "title"],
+          },
+        },
+        {
+          name: "get_instruction",
+          description: "Get the task instruction for a specific branch",
+          inputSchema: {
+            type: "object",
+            properties: {
+              repoId: {
+                type: "string",
+                description: "Repository ID (owner/repo format)",
+              },
+              branchName: {
+                type: "string",
+                description: "Branch name",
+              },
+            },
+            required: ["repoId", "branchName"],
+          },
+        },
+        {
           name: "update_instruction",
           description: "Update the task instruction for a branch",
           inputSchema: {
@@ -85,6 +143,24 @@ export function createServer() {
               },
             },
             required: ["repoId", "branchName", "instructionMd"],
+          },
+        },
+        {
+          name: "get_todos",
+          description: "Get all todo items for a specific branch",
+          inputSchema: {
+            type: "object",
+            properties: {
+              repoId: {
+                type: "string",
+                description: "Repository ID (owner/repo format)",
+              },
+              branchName: {
+                type: "string",
+                description: "Branch name",
+              },
+            },
+            required: ["repoId", "branchName"],
           },
         },
         {
@@ -266,9 +342,41 @@ export function createServer() {
           };
         }
 
+        case "get_session": {
+          const input = getSessionSchema.parse(args);
+          const result = getSessionInfo(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "update_session_title": {
+          const input = updateSessionTitleSchema.parse(args);
+          const result = updateSessionTitle(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "get_instruction": {
+          const input = getInstructionSchema.parse(args);
+          const result = getInstructionInfo(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
         case "update_instruction": {
           const input = updateInstructionSchema.parse(args);
           const result = updateInstruction(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "get_todos": {
+          const input = getTodosSchema.parse(args);
+          const result = getTodosList(input);
           return {
             content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
           };

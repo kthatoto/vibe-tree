@@ -304,6 +304,7 @@ export function PlanningPanel({
   const [planningSelectedBranches, setPlanningSelectedBranches] = useState<string[]>([]);
   const [planningCurrentBranchIndex, setPlanningCurrentBranchIndex] = useState(0);
   const [planningLoading, setPlanningLoading] = useState(false);
+  const [claudeWorking, setClaudeWorking] = useState(false);
 
   // Planning sidebar tabs (without branches - branches are always shown at top)
   const [planningSidebarTab, setPlanningSidebarTab] = useState<"instruction" | "todo" | "questions">("instruction");
@@ -695,6 +696,33 @@ export function PlanningPanel({
       unsubStreamingEnd();
     };
   }, [selectedSession?.id, selectedSession?.chatSessionId, selectedSession?.title, selectedSession?.type, selectedSession?.executeBranches]);
+
+  // Track Claude working state for planning sessions
+  useEffect(() => {
+    if (!selectedSession?.chatSessionId || selectedSession.type !== "planning") {
+      setClaudeWorking(false);
+      return;
+    }
+
+    const unsubStart = wsClient.on("chat.streaming.start", (msg) => {
+      const data = msg.data as { sessionId: string };
+      if (data.sessionId === selectedSession.chatSessionId) {
+        setClaudeWorking(true);
+      }
+    });
+
+    const unsubEnd = wsClient.on("chat.streaming.end", (msg) => {
+      const data = msg.data as { sessionId: string };
+      if (data.sessionId === selectedSession.chatSessionId) {
+        setClaudeWorking(false);
+      }
+    });
+
+    return () => {
+      unsubStart();
+      unsubEnd();
+    };
+  }, [selectedSession?.chatSessionId, selectedSession?.type]);
 
   // Load external links when session changes
   useEffect(() => {
@@ -1897,6 +1925,7 @@ export function PlanningPanel({
                     completedBranches={new Set()}
                     branchTodoCounts={branchTodoCounts}
                     branchQuestionCounts={branchQuestionCounts}
+                    workingBranch={claudeWorking ? planningBranches[planningCurrentBranchIndex] : null}
                   />
                 </div>
 

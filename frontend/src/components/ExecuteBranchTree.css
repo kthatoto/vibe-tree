@@ -138,3 +138,39 @@
   color: #f59e0b;
   background: #78350f;
 }
+
+/* Working indicator */
+.execute-branch-tree__item--working {
+  border-color: #a855f7;
+  background: #2e1065;
+}
+
+.execute-branch-tree__item--working.execute-branch-tree__item--preview {
+  border-color: #c084fc;
+}
+
+.execute-branch-tree__working-indicator {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.execute-branch-tree__robot {
+  display: inline-block;
+  font-size: 14px;
+  animation: robot-work 0.6s ease-in-out infinite;
+}
+
+@keyframes robot-work {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-2px) rotate(-5deg);
+  }
+  50% {
+    transform: translateY(0) rotate(0deg);
+  }
+  75% {
+    transform: translateY(-2px) rotate(5deg);
+  }
+}

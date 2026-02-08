@@ -8,6 +8,7 @@ interface ExecuteBranchTreeProps {
   completedBranches: Set<string>;
   branchTodoCounts?: Map<string, { total: number; completed: number }>;
   branchQuestionCounts?: Map<string, { total: number; pending: number }>;
+  workingBranch?: string | null;
 }
 
 export function ExecuteBranchTree({
@@ -18,6 +19,7 @@ export function ExecuteBranchTree({
   completedBranches,
   branchTodoCounts = new Map(),
   branchQuestionCounts = new Map(),
+  workingBranch = null,
 }: ExecuteBranchTreeProps) {
   // Determine branch status
   const getBranchStatus = (branch: string, index: number): "completed" | "current" | "pending" => {
@@ -49,6 +51,7 @@ export function ExecuteBranchTree({
         {branches.map((branch, index) => {
           const status = getBranchStatus(branch, index);
           const isPreview = branch === previewBranch;
+          const isWorking = branch === workingBranch;
           const todoCount = branchTodoCounts.get(branch);
           const questionCount = branchQuestionCounts.get(branch);
           const hasTodos = todoCount && todoCount.total > 0;
@@ -57,7 +60,7 @@ export function ExecuteBranchTree({
           return (
             <div
               key={branch}
-              className={`execute-branch-tree__item execute-branch-tree__item--${status} ${isPreview ? "execute-branch-tree__item--preview" : ""}`}
+              className={`execute-branch-tree__item execute-branch-tree__item--${status} ${isPreview ? "execute-branch-tree__item--preview" : ""} ${isWorking ? "execute-branch-tree__item--working" : ""}`}
               onClick={() => onPreviewBranch(branch)}
             >
               <div className="execute-branch-tree__row">
@@ -67,6 +70,11 @@ export function ExecuteBranchTree({
                 <span className="execute-branch-tree__name" title={branch}>
                   {branch}
                 </span>
+                {isWorking && (
+                  <span className="execute-branch-tree__working-indicator" title="Claude is working on this">
+                    <span className="execute-branch-tree__robot">🤖</span>
+                  </span>
+                )}
               </div>
               {(hasTodos || hasQuestions) && (
                 <div className="execute-branch-tree__badges">

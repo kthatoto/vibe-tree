@@ -18,6 +18,7 @@ function toQuestion(q: typeof schema.planningQuestions.$inferSelect) {
     assumption: q.assumption,
     status: q.status as "pending" | "answered" | "skipped",
     answer: q.answer,
+    acknowledged: q.acknowledged ?? false,
     orderIndex: q.orderIndex,
     createdAt: q.createdAt,
     updatedAt: q.updatedAt,
@@ -208,6 +209,7 @@ questionsRouter.post("/:id/answer", async (c) => {
     .set({
       answer,
       status: "answered",
+      acknowledged: false, // Reset acknowledged when answer is updated
       updatedAt: now,
     })
     .where(eq(schema.planningQuestions.id, id));

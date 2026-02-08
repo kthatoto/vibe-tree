@@ -241,6 +241,7 @@ export const planningQuestions = sqliteTable("planning_questions", {
   assumption: text("assumption"), // "assuming X..." context
   status: text("status").notNull().default("pending"), // pending | answered | skipped
   answer: text("answer"),
+  acknowledged: integer("acknowledged", { mode: "boolean" }).notNull().default(false), // AI has consumed/incorporated the answer
   orderIndex: integer("order_index").notNull().default(0),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),

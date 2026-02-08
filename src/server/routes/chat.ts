@@ -1119,6 +1119,10 @@ vibe-treeのMCPツールを使用してください（ToolSearchは不要、直�
   - パラメータ: \`repoId\`, \`branchName\`, \`title\`, \`description\`（任意）
 - \`mcp__vibe-tree__add_question\`: 疑問点を記録
   - パラメータ: \`planningSessionId\`, \`question\`, \`branchName\`（任意）, \`assumption\`（任意）
+- \`mcp__vibe-tree__get_pending_answers\`: ユーザーが回答済みだがまだ確認していない質問を取得
+  - パラメータ: \`planningSessionId\`, \`branchName\`（任意）
+- \`mcp__vibe-tree__acknowledge_answer\`: 回答を確認・取り込んだことを記録
+  - パラメータ: \`questionId\`
 - \`mcp__vibe-tree__update_session_title\`: 全完了後にタイトル更新
   - パラメータ: \`planningSessionId\`, \`title\`
 
@@ -1129,6 +1133,8 @@ vibe-treeのMCPツールを使用してください（ToolSearchは不要、直�
 1. \`get_current_context\`で状態確認（1回のみ）
 2. 各ブランチについて順番に:
    - **\`set_focused_branch\`で対象ブランチに切り替え**（これでUIのロボットアイコンが移動する）
+   - \`get_pending_answers\`で未確認の回答があるか確認し、あれば内容を読んで作業に反映
+   - 回答を取り込んだら\`acknowledge_answer\`で確認済みにする
    - \`update_instruction\`でインストラクション更新
    - \`add_todo\`でToDoを3〜5個追加
 3. 全完了後:\`update_session_title\`でタイトル更新

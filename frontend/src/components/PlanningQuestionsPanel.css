@@ -63,8 +63,12 @@
   margin-top: 8px;
 }
 
-.planning-questions__section--answered {
-  opacity: 0.7;
+.planning-questions__section--awaiting {
+  /* Answered but waiting for AI acknowledgment */
+}
+
+.planning-questions__section--acknowledged {
+  opacity: 0.6;
 }
 
 .planning-questions__section--skipped {
@@ -82,7 +86,11 @@
   border-left: 3px solid #f59e0b;
 }
 
-.planning-questions__item--answered {
+.planning-questions__item--awaiting {
+  border-left: 3px solid #3b82f6;
+}
+
+.planning-questions__item--acknowledged {
   border-left: 3px solid #22c55e;
 }
 

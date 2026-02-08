@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getDb, getSession, getQuestions } from "../db/client";
-import { broadcastQuestionCreated } from "../ws/notifier";
+import { broadcastQuestionCreated, broadcastQuestionUpdated } from "../ws/notifier";
 
 export const addQuestionSchema = z.object({
   planningSessionId: z.string().describe("Planning session ID"),
@@ -25,6 +25,7 @@ interface QuestionOutput {
   assumption: string | null;
   status: string;
   answer: string | null;
+  acknowledged: boolean;
   orderIndex: number;
 }
 
@@ -40,6 +41,7 @@ function getQuestionById(id: number) {
         assumption: string | null;
         status: string;
         answer: string | null;
+        acknowledged: number;
         order_index: number;
         created_at: string;
         updated_at: string;
@@ -59,6 +61,7 @@ function toQuestionOutput(
     assumption: row.assumption,
     status: row.status,
     answer: row.answer,
+    acknowledged: Boolean(row.acknowledged),
     orderIndex: row.order_index,
   };
 }
@@ -106,4 +109,87 @@ export function addQuestion(input: AddQuestionInput): QuestionOutput {
   });
 
   return output;
+}
+
+// Schema for acknowledging an answered question
+export const acknowledgeAnswerSchema = z.object({
+  questionId: z.number().describe("ID of the question to acknowledge"),
+});
+
+export type AcknowledgeAnswerInput = z.infer<typeof acknowledgeAnswerSchema>;
+
+export function acknowledgeAnswer(input: AcknowledgeAnswerInput): QuestionOutput {
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  // Get the question
+  const question = getQuestionById(input.questionId);
+  if (!question) {
+    throw new Error(`Question not found: ${input.questionId}`);
+  }
+
+  // Verify it's answered
+  if (question.status !== "answered") {
+    throw new Error(`Question is not answered yet. Current status: ${question.status}`);
+  }
+
+  // Get session for repoId
+  const session = getSession(question.planning_session_id);
+  if (!session) {
+    throw new Error(`Planning session not found: ${question.planning_session_id}`);
+  }
+
+  // Update the question
+  db.prepare(
+    `UPDATE planning_questions SET acknowledged = 1, updated_at = ? WHERE id = ?`
+  ).run(now, input.questionId);
+
+  const updated = getQuestionById(input.questionId);
+  const output = toQuestionOutput(updated);
+
+  broadcastQuestionUpdated(session.repo_id, {
+    ...output,
+    createdAt: question.created_at,
+    updatedAt: now,
+  });
+
+  return output;
+}
+
+// Schema for getting unanswered questions that need acknowledgment
+export const getPendingAnswersSchema = z.object({
+  planningSessionId: z.string().describe("Planning session ID"),
+  branchName: z.string().optional().describe("Filter by branch name"),
+});
+
+export type GetPendingAnswersInput = z.infer<typeof getPendingAnswersSchema>;
+
+interface PendingAnswersOutput {
+  questions: QuestionOutput[];
+  count: number;
+}
+
+export function getPendingAnswers(input: GetPendingAnswersInput): PendingAnswersOutput {
+  const db = getDb();
+
+  let query = `SELECT * FROM planning_questions
+    WHERE planning_session_id = ?
+    AND status = 'answered'
+    AND acknowledged = 0`;
+  const params: (string | number)[] = [input.planningSessionId];
+
+  if (input.branchName) {
+    query += ` AND branch_name = ?`;
+    params.push(input.branchName);
+  }
+
+  query += ` ORDER BY order_index ASC`;
+
+  const rows = db.prepare(query).all(...params) as ReturnType<typeof getQuestionById>[];
+  const questions = rows.map((row) => toQuestionOutput(row));
+
+  return {
+    questions,
+    count: questions.length,
+  };
 }

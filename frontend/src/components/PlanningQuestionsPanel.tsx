@@ -114,7 +114,8 @@ export function PlanningQuestionsPanel({
     : questions;
 
   const pendingQuestions = filteredQuestions.filter((q) => q.status === "pending");
-  const answeredQuestions = filteredQuestions.filter((q) => q.status === "answered");
+  const answeredUnacknowledged = filteredQuestions.filter((q) => q.status === "answered" && !q.acknowledged);
+  const answeredAcknowledged = filteredQuestions.filter((q) => q.status === "answered" && q.acknowledged);
   const skippedQuestions = filteredQuestions.filter((q) => q.status === "skipped");
 
   if (loading) {
@@ -131,7 +132,9 @@ export function PlanningQuestionsPanel({
         <h4>Questions</h4>
         {questions.length > 0 && (
           <span className="planning-questions__count">
-            {pendingQuestions.length} pending
+            {pendingQuestions.length > 0 && `${pendingQuestions.length} pending`}
+            {pendingQuestions.length > 0 && answeredUnacknowledged.length > 0 && ", "}
+            {answeredUnacknowledged.length > 0 && `${answeredUnacknowledged.length} awaiting`}
           </span>
         )}
       </div>
@@ -218,12 +221,12 @@ export function PlanningQuestionsPanel({
         </div>
       )}
 
-      {/* Answered Questions */}
-      {answeredQuestions.length > 0 && (
-        <div className="planning-questions__section planning-questions__section--answered">
-          <div className="planning-questions__section-header">Answered</div>
-          {answeredQuestions.map((q) => (
-            <div key={q.id} className="planning-questions__item planning-questions__item--answered">
+      {/* Answered - Awaiting AI Acknowledgment */}
+      {answeredUnacknowledged.length > 0 && (
+        <div className="planning-questions__section planning-questions__section--awaiting">
+          <div className="planning-questions__section-header">Awaiting AI</div>
+          {answeredUnacknowledged.map((q) => (
+            <div key={q.id} className="planning-questions__item planning-questions__item--awaiting">
               {q.branchName && (
                 <span className="planning-questions__branch">{q.branchName}</span>
               )}
@@ -279,6 +282,33 @@ export function PlanningQuestionsPanel({
                   )}
                 </div>
               )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Acknowledged - AI has consumed the answer */}
+      {answeredAcknowledged.length > 0 && (
+        <div className="planning-questions__section planning-questions__section--acknowledged">
+          <div className="planning-questions__section-header">Acknowledged</div>
+          {answeredAcknowledged.map((q) => (
+            <div key={q.id} className="planning-questions__item planning-questions__item--acknowledged">
+              {q.branchName && (
+                <span className="planning-questions__branch">{q.branchName}</span>
+              )}
+              <p className="planning-questions__text">{q.question}</p>
+              <div className="planning-questions__answer-row">
+                <p className="planning-questions__answer">{q.answer}</p>
+                {!disabled && (
+                  <button
+                    className="planning-questions__edit-btn"
+                    onClick={() => handleStartAnswer(q)}
+                    title="Edit answer"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

@@ -362,6 +362,7 @@ export interface PlanningQuestion {
   assumption: string | null;
   status: PlanningQuestionStatus;
   answer: string | null;
+  acknowledged: boolean;
   orderIndex: number;
   createdAt: string;
   updatedAt: string;

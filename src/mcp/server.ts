@@ -29,6 +29,10 @@ import {
   deleteTodo,
   addQuestionSchema,
   addQuestion,
+  acknowledgeAnswerSchema,
+  acknowledgeAnswer,
+  getPendingAnswersSchema,
+  getPendingAnswers,
   getFocusedBranchSchema,
   getFocusedBranch,
   setFocusedBranchSchema,
@@ -286,6 +290,38 @@ export function createServer() {
           },
         },
         {
+          name: "acknowledge_answer",
+          description: "Mark an answered question as acknowledged/consumed. Call this after reading and incorporating a user's answer into your work.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              questionId: {
+                type: "number",
+                description: "ID of the question to acknowledge",
+              },
+            },
+            required: ["questionId"],
+          },
+        },
+        {
+          name: "get_pending_answers",
+          description: "Get answered questions that haven't been acknowledged yet. Use this to find answers you need to incorporate.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              planningSessionId: {
+                type: "string",
+                description: "Planning session ID",
+              },
+              branchName: {
+                type: "string",
+                description: "Filter by branch name (optional)",
+              },
+            },
+            required: ["planningSessionId"],
+          },
+        },
+        {
           name: "get_focused_branch",
           description: "Get the currently focused branch in a planning session. Returns: focusedBranch, focusedIndex, allBranches",
           inputSchema: {
@@ -453,6 +489,22 @@ export function createServer() {
         case "add_question": {
           const input = addQuestionSchema.parse(args);
           const result = addQuestion(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "acknowledge_answer": {
+          const input = acknowledgeAnswerSchema.parse(args);
+          const result = acknowledgeAnswer(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "get_pending_answers": {
+          const input = getPendingAnswersSchema.parse(args);
+          const result = getPendingAnswers(input);
           return {
             content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
           };

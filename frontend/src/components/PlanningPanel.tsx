@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   DndContext,
   DragOverlay,
@@ -256,6 +258,7 @@ export function PlanningPanel({
   const [instructionLoading, setInstructionLoading] = useState(false);
   const [instructionSaving, setInstructionSaving] = useState(false);
   const [instructionDirty, setInstructionDirty] = useState(false);
+  const [instructionEditing, setInstructionEditing] = useState(false);
 
   // Title editing with IME support
   const [editingTitle, setEditingTitle] = useState("");
@@ -1926,13 +1929,32 @@ export function PlanningPanel({
                     <div className="planning-panel__instruction">
                       <div className="planning-panel__instruction-header">
                         <h4>{currentPlanningBranch}</h4>
-                        {instructionDirty && (
-                          <span className="planning-panel__instruction-dirty">unsaved</span>
-                        )}
+                        <div className="planning-panel__instruction-actions">
+                          {instructionDirty && (
+                            <span className="planning-panel__instruction-dirty">unsaved</span>
+                          )}
+                          {!instructionEditing ? (
+                            <button
+                              className="planning-panel__instruction-edit-btn"
+                              onClick={() => setInstructionEditing(true)}
+                            >
+                              Edit
+                            </button>
+                          ) : (
+                            <button
+                              className="planning-panel__instruction-edit-btn"
+                              onClick={() => {
+                                setInstructionEditing(false);
+                              }}
+                            >
+                              Done
+                            </button>
+                          )}
+                        </div>
                       </div>
                       {instructionLoading ? (
                         <div className="planning-panel__instruction-loading">Loading...</div>
-                      ) : (
+                      ) : instructionEditing ? (
                         <>
                           <textarea
                             className="planning-panel__instruction-textarea"
@@ -1964,6 +1986,18 @@ export function PlanningPanel({
                             {instructionSaving ? "Saving..." : "Save"}
                           </button>
                         </>
+                      ) : (
+                        <div className="planning-panel__instruction-view">
+                          {currentInstruction ? (
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {currentInstruction}
+                            </ReactMarkdown>
+                          ) : (
+                            <span className="planning-panel__instruction-empty">
+                              No instruction yet. Click Edit to add.
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}

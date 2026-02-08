@@ -118,7 +118,12 @@ export function ExecuteBranchTree({
                   {hasPR && prLink.reviewDecision === "CHANGES_REQUESTED" && (
                     <span className="execute-branch-tree__review execute-branch-tree__review--changes">Changes</span>
                   )}
-                  {hasPR && (prLink.reviewDecision === "REVIEW_REQUIRED" || (!prLink.reviewDecision && prLink.reviewers && JSON.parse(prLink.reviewers).length > 0)) && (
+                  {hasPR && (prLink.reviewDecision === "REVIEW_REQUIRED" || (!prLink.reviewDecision && prLink.reviewers && (() => {
+                    const reviewers = JSON.parse(prLink.reviewers) as string[];
+                    // Exclude GitHub Copilot from reviewers
+                    const humanReviewers = reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]"));
+                    return humanReviewers.length > 0;
+                  })())) && (
                     <span className="execute-branch-tree__review execute-branch-tree__review--requested">Review</span>
                   )}
                   {/* ToDo badge */}

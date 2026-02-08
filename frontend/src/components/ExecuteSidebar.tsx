@@ -370,22 +370,22 @@ export function ExecuteSidebar({
         )}
       </div>
 
-      {/* Tabs */}
-      <div className="execute-sidebar__tabs">
+      {/* Tabs - using planning-panel classes for consistent styling */}
+      <div className="planning-panel__sidebar-tabs">
         <button
-          className={`execute-sidebar__tab ${activeTab === "instruction" ? "execute-sidebar__tab--active" : ""}`}
+          className={`planning-panel__sidebar-tab ${activeTab === "instruction" ? "planning-panel__sidebar-tab--active" : ""}`}
           onClick={() => setActiveTab("instruction")}
         >
           Instruction
         </button>
         <button
-          className={`execute-sidebar__tab ${activeTab === "todo" ? "execute-sidebar__tab--active" : ""}`}
+          className={`planning-panel__sidebar-tab ${activeTab === "todo" ? "planning-panel__sidebar-tab--active" : ""}`}
           onClick={() => setActiveTab("todo")}
         >
           ToDo
         </button>
         <button
-          className={`execute-sidebar__tab ${activeTab === "questions" ? "execute-sidebar__tab--active" : ""}`}
+          className={`planning-panel__sidebar-tab ${activeTab === "questions" ? "planning-panel__sidebar-tab--active" : ""}`}
           onClick={() => setActiveTab("questions")}
         >
           Questions
@@ -397,41 +397,45 @@ export function ExecuteSidebar({
         </button>
       </div>
 
-      {/* Tab Content */}
-      <div className="execute-sidebar__content">
+      {/* Tab Content - using planning-panel classes for consistent styling */}
+      <div className="planning-panel__sidebar-content">
         {activeTab === "instruction" && (
-          <div className="execute-sidebar__instruction">
+          <div className="planning-panel__instruction">
             {instructionLoading ? (
-              <div className="execute-sidebar__instruction-loading">Loading...</div>
+              <div className="planning-panel__instruction-loading">Loading...</div>
             ) : instruction?.instructionMd ? (
-              <div className="execute-sidebar__instruction-view">
+              <div className="planning-panel__instruction-view">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {instruction.instructionMd}
                 </ReactMarkdown>
               </div>
             ) : (
-              <div className="execute-sidebar__instruction-empty">
+              <span className="planning-panel__instruction-empty">
                 No instruction set for this branch
-              </div>
+              </span>
             )}
           </div>
         )}
 
         {activeTab === "todo" && (
-          <ExecuteTodoList
-            repoId={repoId}
-            branchName={displayBranch}
-            planningSessionId={planningSessionId}
-            disabled={!isCurrent}
-          />
+          <div className="planning-panel__todo-section">
+            <ExecuteTodoList
+              repoId={repoId}
+              branchName={displayBranch}
+              planningSessionId={planningSessionId}
+              disabled={!isCurrent}
+            />
+          </div>
         )}
 
         {activeTab === "questions" && planningSessionId && (
-          <PlanningQuestionsPanel
-            planningSessionId={planningSessionId}
-            branchName={displayBranch}
-            disabled={!isCurrent}
-          />
+          <div className="planning-panel__questions-section">
+            <PlanningQuestionsPanel
+              planningSessionId={planningSessionId}
+              branchName={displayBranch}
+              disabled={!isCurrent}
+            />
+          </div>
         )}
       </div>
     </div>

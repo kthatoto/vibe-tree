@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { api, type TaskTodo, type PlanningQuestion } from "../lib/api";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { api, type TaskTodo, type PlanningQuestion, type BranchLink, type TaskInstruction } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import ExecuteBranchTree from "./ExecuteBranchTree";
-import ExecuteBranchDetail from "./ExecuteBranchDetail";
 import ExecuteTodoList from "./ExecuteTodoList";
 import PlanningQuestionsPanel from "./PlanningQuestionsPanel";
 import "./ExecuteSidebar.css";
@@ -29,14 +30,19 @@ export function ExecuteSidebar({
   // Preview branch (clicked but not switched to)
   const [previewBranch, setPreviewBranch] = useState<string | null>(null);
 
-  // Active tab: "todo" or "questions"
-  const [activeTab, setActiveTab] = useState<"todo" | "questions">("todo");
+  // Active tab: "instruction", "todo", or "questions"
+  const [activeTab, setActiveTab] = useState<"instruction" | "todo" | "questions">("instruction");
 
   // All todos for all branches (for completion tracking)
   const [allTodos, setAllTodos] = useState<Map<string, TaskTodo[]>>(new Map());
 
   // All questions for all branches (for badge counts)
   const [allQuestions, setAllQuestions] = useState<PlanningQuestion[]>([]);
+
+  // Branch links and instruction for display branch
+  const [branchLinks, setBranchLinks] = useState<BranchLink[]>([]);
+  const [instruction, setInstruction] = useState<TaskInstruction | null>(null);
+  const [instructionLoading, setInstructionLoading] = useState(false);
 
   // Current branch (actual execution target)
   const currentBranch = executeBranches[currentExecuteIndex] || null;
@@ -48,6 +54,25 @@ export function ExecuteSidebar({
   useEffect(() => {
     setPreviewBranch(null);
   }, [currentExecuteIndex]);
+
+  // Load branch links and instruction for display branch
+  useEffect(() => {
+    if (!repoId || !displayBranch) {
+      setBranchLinks([]);
+      setInstruction(null);
+      return;
+    }
+    setInstructionLoading(true);
+    Promise.all([
+      api.getBranchLinks(repoId, displayBranch).catch(() => []),
+      api.getTaskInstruction(repoId, displayBranch).catch(() => null),
+    ])
+      .then(([links, inst]) => {
+        setBranchLinks(links);
+        setInstruction(inst);
+      })
+      .finally(() => setInstructionLoading(false));
+  }, [repoId, displayBranch]);
 
   // Load all todos for all branches
   useEffect(() => {
@@ -269,11 +294,22 @@ export function ExecuteSidebar({
   }
 
   const isCurrent = displayBranch === currentBranch;
+  const prLink = branchLinks.find((l) => l.linkType === "pr");
+  const issueLink = branchLinks.find((l) => l.linkType === "issue");
+
+  const getChecksStatusIcon = (status: string | null) => {
+    switch (status) {
+      case "success": return "✓";
+      case "failure": return "✕";
+      case "pending": return "◌";
+      default: return "";
+    }
+  };
 
   return (
     <div className="execute-sidebar">
-      {/* Branch Tree */}
-      <div className="execute-sidebar__section">
+      {/* Branch Tree (compact) */}
+      <div className="execute-sidebar__branches">
         <ExecuteBranchTree
           branches={executeBranches}
           currentBranchIndex={currentExecuteIndex}
@@ -286,18 +322,62 @@ export function ExecuteSidebar({
         />
       </div>
 
-      {/* Branch Detail */}
-      <div className="execute-sidebar__section">
-        <ExecuteBranchDetail
-          repoId={repoId}
-          branchName={displayBranch}
-          isCurrent={isCurrent}
-          onSwitchToBranch={!isCurrent && onManualBranchSwitch ? handleSwitchToBranch : undefined}
-        />
+      {/* Branch Header with PR/Issue links */}
+      <div className="execute-sidebar__branch-header">
+        <div className="execute-sidebar__branch-name">
+          {displayBranch}
+          {isCurrent ? (
+            <span className="execute-sidebar__current-badge">Current</span>
+          ) : (
+            onManualBranchSwitch && (
+              <button
+                className="execute-sidebar__switch-btn"
+                onClick={handleSwitchToBranch}
+              >
+                Switch
+              </button>
+            )
+          )}
+        </div>
+        {(prLink || issueLink) && (
+          <div className="execute-sidebar__links">
+            {prLink && (
+              <a
+                href={prLink.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="execute-sidebar__link execute-sidebar__link--pr"
+              >
+                PR #{prLink.number}
+                {prLink.checksStatus && (
+                  <span className={`execute-sidebar__checks execute-sidebar__checks--${prLink.checksStatus}`}>
+                    {getChecksStatusIcon(prLink.checksStatus)}
+                  </span>
+                )}
+              </a>
+            )}
+            {issueLink && (
+              <a
+                href={issueLink.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="execute-sidebar__link execute-sidebar__link--issue"
+              >
+                Issue #{issueLink.number}
+              </a>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
       <div className="execute-sidebar__tabs">
+        <button
+          className={`execute-sidebar__tab ${activeTab === "instruction" ? "execute-sidebar__tab--active" : ""}`}
+          onClick={() => setActiveTab("instruction")}
+        >
+          Instruction
+        </button>
         <button
           className={`execute-sidebar__tab ${activeTab === "todo" ? "execute-sidebar__tab--active" : ""}`}
           onClick={() => setActiveTab("todo")}
@@ -318,26 +398,42 @@ export function ExecuteSidebar({
       </div>
 
       {/* Tab Content */}
-      {activeTab === "todo" && (
-        <div className="execute-sidebar__section execute-sidebar__section--todos">
+      <div className="execute-sidebar__content">
+        {activeTab === "instruction" && (
+          <div className="execute-sidebar__instruction">
+            {instructionLoading ? (
+              <div className="execute-sidebar__instruction-loading">Loading...</div>
+            ) : instruction?.instructionMd ? (
+              <div className="execute-sidebar__instruction-view">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {instruction.instructionMd}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              <div className="execute-sidebar__instruction-empty">
+                No instruction set for this branch
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "todo" && (
           <ExecuteTodoList
             repoId={repoId}
             branchName={displayBranch}
             planningSessionId={planningSessionId}
             disabled={!isCurrent}
           />
-        </div>
-      )}
+        )}
 
-      {activeTab === "questions" && planningSessionId && (
-        <div className="execute-sidebar__section execute-sidebar__section--questions">
+        {activeTab === "questions" && planningSessionId && (
           <PlanningQuestionsPanel
             planningSessionId={planningSessionId}
             branchName={displayBranch}
             disabled={!isCurrent}
           />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

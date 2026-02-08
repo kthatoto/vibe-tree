@@ -1102,41 +1102,44 @@ const INSTRUCTION_REVIEW_SYSTEM_PROMPT = `あなたはタスクインストラ�
 
 ## MCPツールの使用【必須】
 
+ToolSearchで「vibe-tree」を検索するか、以下のツールを直接使用してください。
+ツール名はすべて \`mcp__vibe-tree__\` プレフィックスが付きます。
+
 ### セッション管理
-- \`get_current_context\`: 現在の状態を確認（最初に必ず呼ぶ）
-- \`get_session\`: セッション情報を取得
-- \`update_session_title\`: **全ブランチ完了後、内容を反映したタイトルに更新する**
+- \`mcp__vibe-tree__get_current_context\`: 現在の状態を確認（最初に必ず呼ぶ）
+- \`mcp__vibe-tree__get_session\`: セッション情報を取得
+- \`mcp__vibe-tree__update_session_title\`: **全ブランチ完了後、内容を反映したタイトルに更新する**
 
 ### インストラクション
-- \`get_instruction\`: 現在のインストラクションを取得
-- \`update_instruction\`: インストラクションを更新（Markdown形式の全文）
+- \`mcp__vibe-tree__get_instruction\`: 現在のインストラクションを取得
+- \`mcp__vibe-tree__update_instruction\`: インストラクションを更新（Markdown形式の全文）
 
 ### ToDo管理
-- \`get_todos\`: 現在のToDoリストを取得
-- \`add_todo\`: 新しいToDoを追加（各ブランチに3〜5個程度）
-- \`update_todo\`: 既存のToDoを更新
-- \`complete_todo\`: ToDoを完了にする
-- \`delete_todo\`: ToDoを削除
+- \`mcp__vibe-tree__get_todos\`: 現在のToDoリストを取得
+- \`mcp__vibe-tree__add_todo\`: 新しいToDoを追加（各ブランチに3〜5個程度）
+- \`mcp__vibe-tree__update_todo\`: 既存のToDoを更新
+- \`mcp__vibe-tree__complete_todo\`: ToDoを完了にする
+- \`mcp__vibe-tree__delete_todo\`: ToDoを削除
 
 ### 質問
-- \`add_question\`: 疑問点を記録（処理を止めずに記録だけして進む）
+- \`mcp__vibe-tree__add_question\`: 疑問点を記録（処理を止めずに記録だけして進む）
 
 ### ブランチ操作
-- \`switch_branch\`: 次/前のブランチに切り替え（direction: "next" / "previous"）
-- \`mark_branch_complete\`: 現在のブランチを完了として次へ進む
+- \`mcp__vibe-tree__switch_branch\`: 次/前のブランチに切り替え（direction: "next" / "previous"）
+- \`mcp__vibe-tree__mark_branch_complete\`: 現在のブランチを完了として次へ進む
 
 ## 処理フロー【厳守】
 
 \`\`\`
-1. get_current_context で状態確認
+1. mcp__vibe-tree__get_current_context で状態確認
 2. 現在のブランチについて:
-   a. インストラクションを確認・更新（update_instruction）
-   b. ToDoを3〜5個追加（add_todo）
-   c. 疑問点があれば記録（add_question）- 止まらずに進む
-3. mark_branch_complete で次のブランチへ
+   a. インストラクションを確認・更新（mcp__vibe-tree__update_instruction）
+   b. ToDoを3〜5個追加（mcp__vibe-tree__add_todo）
+   c. 疑問点があれば記録（mcp__vibe-tree__add_question）- 止まらずに進む
+3. mcp__vibe-tree__mark_branch_complete で次のブランチへ
 4. 手順2-3を全ブランチ完了まで繰り返す
 5. 全完了後:
-   a. update_session_title でタイトルを更新
+   a. mcp__vibe-tree__update_session_title でタイトルを更新
    b. 完了報告（「全X件のブランチの設定が完了しました」）
 \`\`\`
 
@@ -1328,7 +1331,7 @@ ${executeBranches.map((b, i) => `${i === currentBranchIndex ? "→ " : "  "}${i 
           parts.push(`## タスクインストラクション【精査対象】
 ブランチ: \`${currentBranch}\`
 
-以下がこのタスクのインストラクションです。必要に応じて \`update_instruction\` MCPツールで更新してください。
+以下がこのタスクのインストラクションです。必要に応じて \`mcp__vibe-tree__update_instruction\` ツールで更新してください。
 
 \`\`\`markdown
 ${instructions[0].instructionMd}
@@ -1339,7 +1342,7 @@ ${instructions[0].instructionMd}
 ブランチ: \`${currentBranch}\`
 
 このブランチにはまだインストラクションがありません。
-\`update_instruction\` MCPツールでインストラクションを作成してください。
+\`mcp__vibe-tree__update_instruction\` ツールでインストラクションを作成してください。
 `);
         }
 
@@ -1366,14 +1369,14 @@ ${instructions[0].instructionMd}
 
 ${todoList}
 
-ToDoを追加/更新するには \`add_todo\`, \`update_todo\` MCPツールを使用してください。
+ToDoを追加/更新するには \`mcp__vibe-tree__add_todo\`, \`mcp__vibe-tree__update_todo\` ツールを使用してください。
 `);
         } else {
           parts.push(`## ToDoリスト【未作成】
 ブランチ: \`${currentBranch}\`
 
 このブランチにはまだToDoがありません。
-\`add_todo\` MCPツールでToDoを3〜5個追加してください。
+\`mcp__vibe-tree__add_todo\` ツールでToDoを3〜5個追加してください。
 `);
         }
       }

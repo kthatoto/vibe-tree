@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import type { TreeNode, TreeEdge } from "../lib/api";
 
 interface ExecuteBranchSelectorProps {
@@ -255,6 +255,20 @@ export default function ExecuteBranchSelector({
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
   }, []);
+
+  // Keyboard shortcut: Cmd+Enter to start execution
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        if (onStartExecution && selectedBranches.length > 0 && !executeLoading) {
+          e.preventDefault();
+          onStartExecution();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onStartExecution, selectedBranches.length, executeLoading]);
 
   const renderNode = (layoutNode: LayoutNode) => {
     const { id, x, y, node } = layoutNode;
@@ -581,7 +595,7 @@ export default function ExecuteBranchSelector({
                 cursor: selectedBranches.length === 0 ? "not-allowed" : "pointer",
               }}
             >
-              {executeLoading ? "Starting..." : "Start"}
+              {executeLoading ? "Starting..." : "Start ⌘↵"}
             </button>
           </div>
         )}

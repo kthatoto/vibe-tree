@@ -14,13 +14,15 @@
   height: 100%;
 }
 
-/* Compact branch tree at top */
+/* Branch tree at top (resizable) */
 .execute-sidebar__branches {
   flex-shrink: 0;
   padding: 8px;
-  border-bottom: 1px solid #333;
-  max-height: 180px;
+  border-bottom: 1px solid #374151;
+  min-height: 120px;
+  max-height: 50%;
   overflow-y: auto;
+  resize: vertical;
 }
 
 /* Branch header with name and links */

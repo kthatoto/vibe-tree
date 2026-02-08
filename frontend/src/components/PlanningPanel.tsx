@@ -311,7 +311,7 @@ export function PlanningPanel({
 
   // Planning branch counts (ToDo and Question counts per branch)
   const [branchTodoCounts, setBranchTodoCounts] = useState<Map<string, { total: number; completed: number }>>(new Map());
-  const [branchQuestionCounts, setBranchQuestionCounts] = useState<Map<string, { total: number; pending: number }>>(new Map());
+  const [branchQuestionCounts, setBranchQuestionCounts] = useState<Map<string, { total: number; pending: number; answered: number; acknowledged: number }>>(new Map());
 
   // Ref to track the latest planning branch index for async operations
   const planningCurrentBranchIndexRef = useRef(planningCurrentBranchIndex);
@@ -366,10 +366,10 @@ export function PlanningPanel({
     const loadQuestionCounts = async () => {
       try {
         const questions = await api.getQuestions(selectedSession.id);
-        const counts = new Map<string, { total: number; pending: number }>();
+        const counts = new Map<string, { total: number; pending: number; answered: number; acknowledged: number }>();
         // Initialize counts for all branches
         for (const branch of selectedSession.executeBranches!) {
-          counts.set(branch, { total: 0, pending: 0 });
+          counts.set(branch, { total: 0, pending: 0, answered: 0, acknowledged: 0 });
         }
         // Count questions per branch
         for (const q of questions) {
@@ -379,6 +379,8 @@ export function PlanningPanel({
             counts.set(branch, {
               total: current.total + 1,
               pending: current.pending + (q.status === "pending" ? 1 : 0),
+              answered: current.answered + (q.status === "answered" && !q.acknowledged ? 1 : 0),
+              acknowledged: current.acknowledged + (q.status === "answered" && q.acknowledged ? 1 : 0),
             });
           }
         }
@@ -411,9 +413,9 @@ export function PlanningPanel({
 
     const updateQuestionCounts = () => {
       api.getQuestions(selectedSession.id).then(questions => {
-        const counts = new Map<string, { total: number; pending: number }>();
+        const counts = new Map<string, { total: number; pending: number; answered: number; acknowledged: number }>();
         for (const branch of selectedSession.executeBranches!) {
-          counts.set(branch, { total: 0, pending: 0 });
+          counts.set(branch, { total: 0, pending: 0, answered: 0, acknowledged: 0 });
         }
         for (const q of questions) {
           const branch = q.branchName || "";
@@ -422,6 +424,8 @@ export function PlanningPanel({
             counts.set(branch, {
               total: current.total + 1,
               pending: current.pending + (q.status === "pending" ? 1 : 0),
+              answered: current.answered + (q.status === "answered" && !q.acknowledged ? 1 : 0),
+              acknowledged: current.acknowledged + (q.status === "answered" && q.acknowledged ? 1 : 0),
             });
           }
         }

@@ -1,5 +1,12 @@
 import "./ExecuteBranchTree.css";
 
+interface QuestionCounts {
+  total: number;
+  pending: number;      // Unanswered
+  answered: number;     // Answered but not acknowledged
+  acknowledged: number; // Answered and acknowledged
+}
+
 interface ExecuteBranchTreeProps {
   branches: string[];
   currentBranchIndex: number;
@@ -7,7 +14,7 @@ interface ExecuteBranchTreeProps {
   onPreviewBranch: (branch: string) => void;
   completedBranches: Set<string>;
   branchTodoCounts?: Map<string, { total: number; completed: number }>;
-  branchQuestionCounts?: Map<string, { total: number; pending: number }>;
+  branchQuestionCounts?: Map<string, QuestionCounts>;
   workingBranch?: string | null;
   showCompletionCount?: boolean;
 }
@@ -87,8 +94,29 @@ export function ExecuteBranchTree({
                     </span>
                   )}
                   {hasQuestions && (
-                    <span className={`execute-branch-tree__badge execute-branch-tree__badge--question ${questionCount.pending > 0 ? "execute-branch-tree__badge--pending" : ""}`} title="Questions">
-                      ❓ {questionCount.pending > 0 ? questionCount.pending : "✓"}
+                    <span
+                      className={`execute-branch-tree__badge execute-branch-tree__badge--question ${
+                        questionCount.pending > 0
+                          ? "execute-branch-tree__badge--q-pending"
+                          : questionCount.answered > 0
+                          ? "execute-branch-tree__badge--q-answered"
+                          : "execute-branch-tree__badge--q-done"
+                      }`}
+                      title={
+                        questionCount.pending > 0
+                          ? `${questionCount.pending} unanswered`
+                          : questionCount.answered > 0
+                          ? `${questionCount.answered} awaiting AI`
+                          : "All acknowledged"
+                      }
+                    >
+                      {questionCount.pending > 0 ? (
+                        <>❓ {questionCount.pending}</>
+                      ) : questionCount.answered > 0 ? (
+                        <>💬 {questionCount.answered}</>
+                      ) : (
+                        <>✅ {questionCount.acknowledged}/{questionCount.total}</>
+                      )}
                     </span>
                   )}
                 </div>

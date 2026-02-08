@@ -113,7 +113,7 @@ export function addQuestion(input: AddQuestionInput): QuestionOutput {
 
 // Schema for acknowledging an answered question
 export const acknowledgeAnswerSchema = z.object({
-  questionId: z.number().describe("ID of the question to acknowledge"),
+  questionId: z.coerce.number().describe("ID of the question to acknowledge"),
 });
 
 export type AcknowledgeAnswerInput = z.infer<typeof acknowledgeAnswerSchema>;

@@ -578,28 +578,9 @@ chatRouter.post("/send", async (c) => {
     claudeArgs.push("--dangerously-skip-permissions");
   }
 
-  // Add MCP server config for vibe-tree tools
-  const vibeTreeRoot = process.cwd();
-  const mcpConfigDir = join(vibeTreeRoot, ".vibetree", "mcp");
-  const mcpConfigPath = join(mcpConfigDir, "config.json");
-
-  // Create MCP config directory if it doesn't exist
-  if (!existsSync(mcpConfigDir)) {
-    mkdirSync(mcpConfigDir, { recursive: true });
-  }
-
-  // Write MCP config file (use bash wrapper to ensure correct working directory)
-  const bashCmd = `cd ${vibeTreeRoot} && VIBE_TREE_DB=.vibetree/vibetree.sqlite VIBE_TREE_API=http://localhost:3000 bun run mcp`;
-  const mcpConfig = {
-    "vibe-tree": {
-      type: "stdio",
-      command: "/bin/bash",
-      args: ["-c", bashCmd],
-      env: {},
-    },
-  };
-  writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
-  claudeArgs.push("--mcp-config", mcpConfigPath);
+  // MCP server config is registered in user scope (~/.claude.json)
+  // via: claude mcp add-json vibe-tree '...' --scope user
+  // The --mcp-config flag appears to cause hangs, so we rely on user scope registration
 
   console.log(`[Chat] Send: Spawning claude process in ${worktreePath}`);
   // Spawn claude process in background

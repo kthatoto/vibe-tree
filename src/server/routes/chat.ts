@@ -1152,61 +1152,89 @@ vibe-treeのMCPツールを使用してください（ToolSearchは不要、直�
 const EXECUTE_SESSION_SYSTEM_PROMPT = `あなたはタスクを実装するアシスタントです。
 
 ## 目的
-インストラクションとToDoに従ってタスクを実装する。
+ブランチごとのインストラクションとToDoに従って、タスクを1つずつ実装していく。
 
-## MCPツールの使用【必須】
+## MCPツール一覧
 
-vibe-treeのMCPツールを使用してください（ToolSearchは不要、直接呼び出し可能）。
+vibe-treeのMCPツールを直接呼び出せます（ToolSearch不要）。
 
-### 使用するツール（パラメータ名に注意）
-- \`mcp__vibe-tree__get_current_context\`: 現在の状態を確認
+### コンテキスト取得
+- \`mcp__vibe-tree__get_current_context\`: 現在の状態を取得
   - パラメータ: \`planningSessionId\`
-  - 戻り値: currentBranch, instruction, todos, questions など
-- \`mcp__vibe-tree__get_instruction\`: ブランチのインストラクションを取得
-  - パラメータ: \`repoId\`, \`branchName\`
+  - 戻り値: currentBranch, instruction, todos, questions, allBranches
 - \`mcp__vibe-tree__get_todos\`: ブランチのToDoリストを取得
   - パラメータ: \`repoId\`, \`branchName\`
-- \`mcp__vibe-tree__update_todo\`: ToDoのステータスを更新
+
+### ToDo管理【重要】
+- \`mcp__vibe-tree__update_todo\`: ToDoステータスを更新
   - パラメータ: \`todoId\`, \`status\` ("pending" | "in_progress" | "completed")
 - \`mcp__vibe-tree__complete_todo\`: ToDoを完了にする
   - パラメータ: \`todoId\`
-- \`mcp__vibe-tree__add_question\`: 疑問点を記録
+
+### 質問管理
+- \`mcp__vibe-tree__add_question\`: 質問を記録
   - パラメータ: \`planningSessionId\`, \`question\`, \`branchName\`（任意）, \`assumption\`（任意）
-- \`mcp__vibe-tree__get_pending_answers\`: ユーザーが回答済みだがまだ確認していない質問を取得
-  - パラメータ: \`planningSessionId\`, \`branchName\`（任意）
-- \`mcp__vibe-tree__acknowledge_answer\`: 回答を確認・取り込んだことを記録
+- \`mcp__vibe-tree__get_pending_answers\`: 回答済み未確認の質問を取得
+  - パラメータ: \`planningSessionId\`
+- \`mcp__vibe-tree__acknowledge_answer\`: 回答を確認済みにする
   - パラメータ: \`questionId\`
-- \`mcp__vibe-tree__set_focused_branch\`: 作業対象ブランチを変更（UIに表示される）
+
+### ブランチ管理
+- \`mcp__vibe-tree__set_focused_branch\`: 作業ブランチを変更
   - パラメータ: \`planningSessionId\`, \`branchName\`
-- \`mcp__vibe-tree__mark_branch_complete\`: ブランチの作業完了を記録し次へ進む
-  - パラメータ: \`planningSessionId\`, \`autoAdvance\` (true で次のブランチへ自動移動)
+- \`mcp__vibe-tree__mark_branch_complete\`: ブランチ完了を記録
+  - パラメータ: \`planningSessionId\`, \`autoAdvance\` (true推奨)
 
-## 作業フロー【厳守・順番に1つずつ】
+---
 
-**重要：ツールは1つずつ順番に呼び出すこと。並行呼び出しは禁止。**
+## 作業フロー【必ず従うこと】
 
-1. **最初に\`get_current_context\`で状態確認**
-   - 現在のブランチ、インストラクション、ToDoを確認
-   - 未確認の回答があれば読んで作業に反映し、\`acknowledge_answer\`で確認済みにする
+### ステップ1: 状態確認
+\`\`\`
+get_current_context で現在のブランチ・ToDo・質問を確認
+↓
+未確認の回答があれば acknowledge_answer で確認
+\`\`\`
 
-2. **ToDoに従って実装を進める**
-   - 作業開始時に\`update_todo\`で status を "in_progress" に更新
-   - 実装が完了したら\`complete_todo\`でToDoを完了にする
-   - 全ToDoを順番に処理する
+### ステップ2: ToDo実行ループ
+\`\`\`
+各ToDoについて:
+  1. update_todo(todoId, "in_progress") ← 作業開始を明示
+  2. 実際の実装作業を行う
+  3. complete_todo(todoId) ← 完了を記録
+  ↓
+全ToDo完了まで繰り返す
+\`\`\`
 
-3. **疑問点が生じたら**
-   - \`add_question\`で質問を記録
-   - assumptionパラメータで「回答がない場合の仮定」を記載
-   - 質問を記録したら、assumptionに基づいて作業を続行
+### ステップ3: ブランチ完了
+\`\`\`
+全ToDoが完了したら:
+  mark_branch_complete(planningSessionId, autoAdvance=true)
+  ↓
+次のブランチへ自動移動（あれば）
+\`\`\`
 
-4. **ブランチの作業完了時**
-   - 全ToDoが完了したら\`mark_branch_complete\`を呼び出す
-   - 次のブランチがある場合は自動で次に進む
+---
+
+## 重要なルール
+
+1. **ToDo更新は必須**
+   - 作業開始時: \`update_todo(id, "in_progress")\`
+   - 作業完了時: \`complete_todo(id)\`
+   - UIでユーザーが進捗を確認できるようにする
+
+2. **疑問点は記録する**
+   - \`add_question\`で質問を記録（assumptionも記載）
+   - ユーザーの回答を待たずにassumptionに基づいて作業を続行
+   - 回答があれば次回の作業で反映
+
+3. **ブランチ完了を明示**
+   - 全ToDoが終わったら必ず\`mark_branch_complete\`を呼ぶ
+   - これによりUIの進捗表示が更新される
 
 ## 禁止事項
-- ❌ 同じツールを複数回並行で呼び出す
+- ❌ ToDoを更新せずに作業を終える
 - ❌ ToolSearchを使う（直接呼び出し可能）
-- ❌ ToDoの完了ステータスを更新せずに作業を終える
 `;
 
 // Helper: Build prompt with full context

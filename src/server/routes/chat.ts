@@ -580,7 +580,6 @@ chatRouter.post("/send", async (c) => {
 
   // Add MCP server config for vibe-tree tools
   const vibeTreeRoot = process.cwd();
-  const vibeTreeDb = join(vibeTreeRoot, ".vibetree", "vibetree.sqlite");
   const mcpConfigDir = join(vibeTreeRoot, ".vibetree", "mcp");
   const mcpConfigPath = join(mcpConfigDir, "config.json");
 
@@ -589,16 +588,14 @@ chatRouter.post("/send", async (c) => {
     mkdirSync(mcpConfigDir, { recursive: true });
   }
 
-  // Write MCP config file
+  // Write MCP config file (use bash wrapper to ensure correct working directory)
+  const bashCmd = `cd ${vibeTreeRoot} && VIBE_TREE_DB=.vibetree/vibetree.sqlite VIBE_TREE_API=http://localhost:3000 bun run mcp`;
   const mcpConfig = {
     "vibe-tree": {
-      command: "bun",
-      args: ["run", "mcp"],
-      cwd: vibeTreeRoot,
-      env: {
-        VIBE_TREE_DB: vibeTreeDb,
-        VIBE_TREE_API: "http://localhost:3000",
-      },
+      type: "stdio",
+      command: "/bin/bash",
+      args: ["-c", bashCmd],
+      env: {},
     },
   };
   writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));

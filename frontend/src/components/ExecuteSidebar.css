@@ -165,6 +165,24 @@
   gap: 6px;
 }
 
+/* Compact row for CI/Review/Reviewers */
+.execute-sidebar__info-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.execute-sidebar__info-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.execute-sidebar__info-col--reviewers {
+  flex: 1;
+  min-width: 0;
+}
+
 .execute-sidebar__info-link {
   color: #60a5fa;
   text-decoration: none;

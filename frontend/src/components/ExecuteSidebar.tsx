@@ -477,82 +477,81 @@ export function ExecuteSidebar({
             )}
 
             {/* PR */}
-            {prLink && (
-              <>
-                <div className="execute-sidebar__info-section">
-                  <div className="execute-sidebar__info-label">Pull Request</div>
-                  <div className="execute-sidebar__info-value">
-                    <a
-                      href={prLink.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="execute-sidebar__info-link"
-                    >
-                      #{prLink.number} {prLink.title}
-                    </a>
-                    {prLink.status && (
-                      <span className={`execute-sidebar__pr-status execute-sidebar__pr-status--${prLink.status.toLowerCase()}`}>
-                        {prLink.status}
-                      </span>
-                    )}
-                  </div>
-                </div>
+            {prLink && (() => {
+              const reviewers = prLink.reviewers ? JSON.parse(prLink.reviewers) as string[] : [];
+              const humanReviewers = reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]") && !r.includes("github-actions"));
+              const labels = prLink.labels ? JSON.parse(prLink.labels) as GitHubLabel[] : [];
 
-                {/* CI Status */}
-                <div className="execute-sidebar__info-section">
-                  <div className="execute-sidebar__info-label">CI Status</div>
-                  <div className="execute-sidebar__info-value">
-                    <span className={`execute-sidebar__ci-status execute-sidebar__ci-status--${prLink.checksStatus || "unknown"}`}>
-                      {prLink.checksStatus === "success" && "✓ Passing"}
-                      {prLink.checksStatus === "failure" && "✗ Failing"}
-                      {prLink.checksStatus === "pending" && "◌ Pending"}
-                      {!prLink.checksStatus && "No checks"}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Review Status */}
-                <div className="execute-sidebar__info-section">
-                  <div className="execute-sidebar__info-label">Review</div>
-                  <div className="execute-sidebar__info-value">
-                    {prLink.reviewDecision === "APPROVED" && (
-                      <span className="execute-sidebar__review-status execute-sidebar__review-status--approved">Approved</span>
-                    )}
-                    {prLink.reviewDecision === "CHANGES_REQUESTED" && (
-                      <span className="execute-sidebar__review-status execute-sidebar__review-status--changes">Changes Requested</span>
-                    )}
-                    {prLink.reviewDecision === "REVIEW_REQUIRED" && (
-                      <span className="execute-sidebar__review-status execute-sidebar__review-status--pending">Review Required</span>
-                    )}
-                    {!prLink.reviewDecision && (
-                      <span className="execute-sidebar__review-status execute-sidebar__review-status--none">No review</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Reviewers */}
-                {prLink.reviewers && (() => {
-                  const reviewers = JSON.parse(prLink.reviewers) as string[];
-                  const humanReviewers = reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]"));
-                  return humanReviewers.length > 0 ? (
-                    <div className="execute-sidebar__info-section">
-                      <div className="execute-sidebar__info-label">Reviewers</div>
-                      <div className="execute-sidebar__info-value execute-sidebar__reviewers">
-                        {humanReviewers.map((reviewer) => (
-                          <span key={reviewer} className="execute-sidebar__reviewer">{reviewer}</span>
-                        ))}
-                      </div>
+              return (
+                <>
+                  {/* PR Link */}
+                  <div className="execute-sidebar__info-section">
+                    <div className="execute-sidebar__info-label">Pull Request</div>
+                    <div className="execute-sidebar__info-value">
+                      <a
+                        href={prLink.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="execute-sidebar__info-link"
+                      >
+                        #{prLink.number} {prLink.title}
+                      </a>
+                      {prLink.status && (
+                        <span className={`execute-sidebar__pr-status execute-sidebar__pr-status--${prLink.status.toLowerCase()}`}>
+                          {prLink.status}
+                        </span>
+                      )}
                     </div>
-                  ) : null;
-                })()}
+                  </div>
 
-                {/* Labels */}
-                {prLink.labels && (() => {
-                  const labels = JSON.parse(prLink.labels) as GitHubLabel[];
-                  return labels.length > 0 ? (
+                  {/* CI / Review / Reviewers - compact row */}
+                  <div className="execute-sidebar__info-row">
+                    {/* CI */}
+                    <div className="execute-sidebar__info-col">
+                      <div className="execute-sidebar__info-label">CI</div>
+                      <span className={`execute-sidebar__ci-status execute-sidebar__ci-status--${prLink.checksStatus || "unknown"}`}>
+                        {prLink.checksStatus === "success" && "✓"}
+                        {prLink.checksStatus === "failure" && "✗"}
+                        {prLink.checksStatus === "pending" && "◌"}
+                        {!prLink.checksStatus && "-"}
+                      </span>
+                    </div>
+
+                    {/* Review */}
+                    <div className="execute-sidebar__info-col">
+                      <div className="execute-sidebar__info-label">Review</div>
+                      {prLink.reviewDecision === "APPROVED" && (
+                        <span className="execute-sidebar__review-status execute-sidebar__review-status--approved">✓</span>
+                      )}
+                      {prLink.reviewDecision === "CHANGES_REQUESTED" && (
+                        <span className="execute-sidebar__review-status execute-sidebar__review-status--changes">✗</span>
+                      )}
+                      {prLink.reviewDecision === "REVIEW_REQUIRED" && (
+                        <span className="execute-sidebar__review-status execute-sidebar__review-status--pending">?</span>
+                      )}
+                      {!prLink.reviewDecision && (
+                        <span className="execute-sidebar__review-status execute-sidebar__review-status--none">-</span>
+                      )}
+                    </div>
+
+                    {/* Reviewers */}
+                    {humanReviewers.length > 0 && (
+                      <div className="execute-sidebar__info-col execute-sidebar__info-col--reviewers">
+                        <div className="execute-sidebar__info-label">Reviewers</div>
+                        <div className="execute-sidebar__reviewers">
+                          {humanReviewers.map((reviewer) => (
+                            <span key={reviewer} className="execute-sidebar__reviewer">{reviewer}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Labels */}
+                  {labels.length > 0 && (
                     <div className="execute-sidebar__info-section">
                       <div className="execute-sidebar__info-label">Labels</div>
-                      <div className="execute-sidebar__info-value execute-sidebar__labels">
+                      <div className="execute-sidebar__labels">
                         {labels.map((label) => (
                           <span
                             key={label.name}
@@ -567,10 +566,10 @@ export function ExecuteSidebar({
                         ))}
                       </div>
                     </div>
-                  ) : null;
-                })()}
-              </>
-            )}
+                  )}
+                </>
+              );
+            })()}
 
             {/* No PR/Issue message */}
             {!prLink && !issueLink && (

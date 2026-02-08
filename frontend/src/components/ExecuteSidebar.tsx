@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, type TaskTodo, type PlanningQuestion, type BranchLink, type TaskInstruction } from "../lib/api";
+import { api, type TaskTodo, type PlanningQuestion, type BranchLink, type TaskInstruction, type GitHubLabel } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import ExecuteBranchTree from "./ExecuteBranchTree";
 import ExecuteTodoList from "./ExecuteTodoList";
@@ -30,8 +30,8 @@ export function ExecuteSidebar({
   // Preview branch (clicked but not switched to)
   const [previewBranch, setPreviewBranch] = useState<string | null>(null);
 
-  // Active tab: "instruction", "todo", or "questions"
-  const [activeTab, setActiveTab] = useState<"instruction" | "todo" | "questions">("instruction");
+  // Active tab: "info", "instruction", "todo", or "questions"
+  const [activeTab, setActiveTab] = useState<"info" | "instruction" | "todo" | "questions">("info");
 
   // All todos for all branches (for completion tracking)
   const [allTodos, setAllTodos] = useState<Map<string, TaskTodo[]>>(new Map());
@@ -358,15 +358,6 @@ export function ExecuteSidebar({
   const prLink = branchLinks.find((l) => l.linkType === "pr");
   const issueLink = branchLinks.find((l) => l.linkType === "issue");
 
-  const getChecksStatusIcon = (status: string | null) => {
-    switch (status) {
-      case "success": return "✓";
-      case "failure": return "✕";
-      case "pending": return "◌";
-      default: return "";
-    }
-  };
-
   return (
     <div className="execute-sidebar">
       {/* Branch Tree (compact) */}
@@ -384,7 +375,7 @@ export function ExecuteSidebar({
         />
       </div>
 
-      {/* Branch Header with PR/Issue links */}
+      {/* Branch Header - simplified, details in Info tab */}
       <div className="execute-sidebar__branch-header">
         <div className="execute-sidebar__branch-name">
           {displayBranch}
@@ -401,39 +392,16 @@ export function ExecuteSidebar({
             )
           )}
         </div>
-        {(prLink || issueLink) && (
-          <div className="execute-sidebar__links">
-            {prLink && (
-              <a
-                href={prLink.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="execute-sidebar__link execute-sidebar__link--pr"
-              >
-                PR #{prLink.number}
-                {prLink.checksStatus && (
-                  <span className={`execute-sidebar__checks execute-sidebar__checks--${prLink.checksStatus}`}>
-                    {getChecksStatusIcon(prLink.checksStatus)}
-                  </span>
-                )}
-              </a>
-            )}
-            {issueLink && (
-              <a
-                href={issueLink.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="execute-sidebar__link execute-sidebar__link--issue"
-              >
-                Issue #{issueLink.number}
-              </a>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Tabs - using planning-panel classes for consistent styling */}
       <div className="planning-panel__sidebar-tabs">
+        <button
+          className={`planning-panel__sidebar-tab ${activeTab === "info" ? "planning-panel__sidebar-tab--active" : ""}`}
+          onClick={() => setActiveTab("info")}
+        >
+          Info
+        </button>
         <button
           className={`planning-panel__sidebar-tab ${activeTab === "instruction" ? "planning-panel__sidebar-tab--active" : ""}`}
           onClick={() => setActiveTab("instruction")}
@@ -461,6 +429,136 @@ export function ExecuteSidebar({
 
       {/* Tab Content - using planning-panel classes for consistent styling */}
       <div className="planning-panel__sidebar-content">
+        {activeTab === "info" && (
+          <div className="execute-sidebar__info-tab">
+            {/* Branch */}
+            <div className="execute-sidebar__info-section">
+              <div className="execute-sidebar__info-label">Branch</div>
+              <div className="execute-sidebar__info-value">{displayBranch}</div>
+            </div>
+
+            {/* Issue */}
+            {issueLink && (
+              <div className="execute-sidebar__info-section">
+                <div className="execute-sidebar__info-label">Issue</div>
+                <div className="execute-sidebar__info-value">
+                  <a
+                    href={issueLink.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="execute-sidebar__info-link"
+                  >
+                    #{issueLink.number} {issueLink.title}
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* PR */}
+            {prLink && (
+              <>
+                <div className="execute-sidebar__info-section">
+                  <div className="execute-sidebar__info-label">Pull Request</div>
+                  <div className="execute-sidebar__info-value">
+                    <a
+                      href={prLink.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="execute-sidebar__info-link"
+                    >
+                      #{prLink.number} {prLink.title}
+                    </a>
+                    {prLink.status && (
+                      <span className={`execute-sidebar__pr-status execute-sidebar__pr-status--${prLink.status.toLowerCase()}`}>
+                        {prLink.status}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* CI Status */}
+                <div className="execute-sidebar__info-section">
+                  <div className="execute-sidebar__info-label">CI Status</div>
+                  <div className="execute-sidebar__info-value">
+                    <span className={`execute-sidebar__ci-status execute-sidebar__ci-status--${prLink.checksStatus || "unknown"}`}>
+                      {prLink.checksStatus === "success" && "✓ Passing"}
+                      {prLink.checksStatus === "failure" && "✗ Failing"}
+                      {prLink.checksStatus === "pending" && "◌ Pending"}
+                      {!prLink.checksStatus && "No checks"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Review Status */}
+                <div className="execute-sidebar__info-section">
+                  <div className="execute-sidebar__info-label">Review</div>
+                  <div className="execute-sidebar__info-value">
+                    {prLink.reviewDecision === "APPROVED" && (
+                      <span className="execute-sidebar__review-status execute-sidebar__review-status--approved">Approved</span>
+                    )}
+                    {prLink.reviewDecision === "CHANGES_REQUESTED" && (
+                      <span className="execute-sidebar__review-status execute-sidebar__review-status--changes">Changes Requested</span>
+                    )}
+                    {prLink.reviewDecision === "REVIEW_REQUIRED" && (
+                      <span className="execute-sidebar__review-status execute-sidebar__review-status--pending">Review Required</span>
+                    )}
+                    {!prLink.reviewDecision && (
+                      <span className="execute-sidebar__review-status execute-sidebar__review-status--none">No review</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Reviewers */}
+                {prLink.reviewers && (() => {
+                  const reviewers = JSON.parse(prLink.reviewers) as string[];
+                  const humanReviewers = reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]"));
+                  return humanReviewers.length > 0 ? (
+                    <div className="execute-sidebar__info-section">
+                      <div className="execute-sidebar__info-label">Reviewers</div>
+                      <div className="execute-sidebar__info-value execute-sidebar__reviewers">
+                        {humanReviewers.map((reviewer) => (
+                          <span key={reviewer} className="execute-sidebar__reviewer">{reviewer}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
+
+                {/* Labels */}
+                {prLink.labels && (() => {
+                  const labels = JSON.parse(prLink.labels) as GitHubLabel[];
+                  return labels.length > 0 ? (
+                    <div className="execute-sidebar__info-section">
+                      <div className="execute-sidebar__info-label">Labels</div>
+                      <div className="execute-sidebar__info-value execute-sidebar__labels">
+                        {labels.map((label) => (
+                          <span
+                            key={label.name}
+                            className="execute-sidebar__label"
+                            style={{
+                              backgroundColor: `#${label.color}`,
+                              color: parseInt(label.color, 16) > 0x7fffff ? "#000" : "#fff",
+                            }}
+                          >
+                            {label.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
+              </>
+            )}
+
+            {/* No PR/Issue message */}
+            {!prLink && !issueLink && (
+              <div className="execute-sidebar__info-empty">
+                No PR or Issue linked to this branch
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === "instruction" && (
           <div className="planning-panel__instruction">
             {instructionLoading ? (

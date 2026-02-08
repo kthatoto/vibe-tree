@@ -135,3 +135,148 @@
 .execute-sidebar__branches::-webkit-scrollbar-thumb:hover {
   background: #444;
 }
+
+/* Info tab styles */
+.execute-sidebar__info-tab {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.execute-sidebar__info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.execute-sidebar__info-label {
+  font-size: 11px;
+  color: #888;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.execute-sidebar__info-value {
+  font-size: 13px;
+  color: #ccc;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.execute-sidebar__info-link {
+  color: #60a5fa;
+  text-decoration: none;
+}
+
+.execute-sidebar__info-link:hover {
+  text-decoration: underline;
+}
+
+.execute-sidebar__pr-status {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.execute-sidebar__pr-status--open {
+  background: #166534;
+  color: #4ade80;
+}
+
+.execute-sidebar__pr-status--closed {
+  background: #991b1b;
+  color: #fca5a5;
+}
+
+.execute-sidebar__pr-status--merged {
+  background: #581c87;
+  color: #c4b5fd;
+}
+
+.execute-sidebar__ci-status {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.execute-sidebar__ci-status--success {
+  color: #4ade80;
+}
+
+.execute-sidebar__ci-status--failure {
+  color: #f87171;
+}
+
+.execute-sidebar__ci-status--pending {
+  color: #fbbf24;
+}
+
+.execute-sidebar__ci-status--unknown {
+  color: #888;
+}
+
+.execute-sidebar__review-status {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.execute-sidebar__review-status--approved {
+  background: #166534;
+  color: #4ade80;
+}
+
+.execute-sidebar__review-status--changes {
+  background: #991b1b;
+  color: #fca5a5;
+}
+
+.execute-sidebar__review-status--pending {
+  background: #78350f;
+  color: #fbbf24;
+}
+
+.execute-sidebar__review-status--none {
+  background: #333;
+  color: #888;
+}
+
+.execute-sidebar__reviewers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.execute-sidebar__reviewer {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: #1e3a5f;
+  color: #60a5fa;
+  border-radius: 4px;
+}
+
+.execute-sidebar__labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.execute-sidebar__label {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.execute-sidebar__info-empty {
+  color: #666;
+  font-size: 12px;
+  font-style: italic;
+  text-align: center;
+  padding: 20px;
+}

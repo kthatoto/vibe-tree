@@ -577,25 +577,6 @@ chatRouter.post("/send", async (c) => {
     claudeArgs.push("--dangerously-skip-permissions");
   }
 
-  // Add MCP server for planning sessions
-  const vibeTreeRoot = process.cwd();
-  const vibeTreeDb = `${vibeTreeRoot}/.vibetree/vibetree.sqlite`;
-  const vibeTreeApi = "http://localhost:3000";
-  const mcpConfig = JSON.stringify({
-    mcpServers: {
-      "vibe-tree": {
-        command: "bun",
-        args: ["run", "mcp"],
-        cwd: vibeTreeRoot,
-        env: {
-          VIBE_TREE_DB: vibeTreeDb,
-          VIBE_TREE_API: vibeTreeApi,
-        },
-      },
-    },
-  });
-  claudeArgs.push("--mcp-config", mcpConfig);
-
   console.log(`[Chat] Send: Spawning claude process in ${worktreePath}`);
   // Spawn claude process in background
   const claudeProcess = spawn("claude", claudeArgs, {

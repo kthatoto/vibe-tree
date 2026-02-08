@@ -2,6 +2,61 @@ import { z } from "zod";
 import { getDb, getSession } from "../db/client";
 import { broadcastTaskAdvanced } from "../ws/notifier";
 
+// Get focused branch schema
+export const getFocusedBranchSchema = z.object({
+  planningSessionId: z.string().describe("Planning session ID"),
+});
+
+export type GetFocusedBranchInput = z.infer<typeof getFocusedBranchSchema>;
+
+interface GetFocusedBranchOutput {
+  focusedBranch: string | null;
+  focusedIndex: number;
+  allBranches: string[];
+  totalBranches: number;
+}
+
+export function getFocusedBranch(input: GetFocusedBranchInput): GetFocusedBranchOutput {
+  const session = getSession(input.planningSessionId);
+  if (!session) {
+    throw new Error(`Planning session not found: ${input.planningSessionId}`);
+  }
+
+  const executeBranches = session.execute_branches_json
+    ? (JSON.parse(session.execute_branches_json) as string[])
+    : [];
+  const currentIndex = session.current_execute_index ?? 0;
+
+  return {
+    focusedBranch: executeBranches[currentIndex] ?? null,
+    focusedIndex: currentIndex,
+    allBranches: executeBranches,
+    totalBranches: executeBranches.length,
+  };
+}
+
+// Set focused branch schema
+export const setFocusedBranchSchema = z.object({
+  planningSessionId: z.string().describe("Planning session ID"),
+  branchName: z.string().describe("Branch name to focus on"),
+});
+
+export type SetFocusedBranchInput = z.infer<typeof setFocusedBranchSchema>;
+
+export function setFocusedBranch(input: SetFocusedBranchInput): GetFocusedBranchOutput {
+  const result = switchBranch({
+    planningSessionId: input.planningSessionId,
+    branchName: input.branchName,
+  });
+
+  return {
+    focusedBranch: result.currentBranch,
+    focusedIndex: result.currentIndex,
+    allBranches: result.allBranches,
+    totalBranches: result.allBranches.length,
+  };
+}
+
 export const switchBranchSchema = z.object({
   planningSessionId: z.string().describe("Planning session ID"),
   branchName: z

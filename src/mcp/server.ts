@@ -29,6 +29,10 @@ import {
   deleteTodo,
   addQuestionSchema,
   addQuestion,
+  getFocusedBranchSchema,
+  getFocusedBranch,
+  setFocusedBranchSchema,
+  setFocusedBranch,
   switchBranchSchema,
   switchBranch,
   markBranchCompleteSchema,
@@ -282,6 +286,38 @@ export function createServer() {
           },
         },
         {
+          name: "get_focused_branch",
+          description: "Get the currently focused branch in a planning session. Returns: focusedBranch, focusedIndex, allBranches",
+          inputSchema: {
+            type: "object",
+            properties: {
+              planningSessionId: {
+                type: "string",
+                description: "Planning session ID",
+              },
+            },
+            required: ["planningSessionId"],
+          },
+        },
+        {
+          name: "set_focused_branch",
+          description: "Change the focused branch to a specific branch. Required: planningSessionId, branchName",
+          inputSchema: {
+            type: "object",
+            properties: {
+              planningSessionId: {
+                type: "string",
+                description: "Planning session ID",
+              },
+              branchName: {
+                type: "string",
+                description: "Branch name to focus on",
+              },
+            },
+            required: ["planningSessionId", "branchName"],
+          },
+        },
+        {
           name: "switch_branch",
           description: "Switch to a different branch in the execute session",
           inputSchema: {
@@ -417,6 +453,22 @@ export function createServer() {
         case "add_question": {
           const input = addQuestionSchema.parse(args);
           const result = addQuestion(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "get_focused_branch": {
+          const input = getFocusedBranchSchema.parse(args);
+          const result = getFocusedBranch(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "set_focused_branch": {
+          const input = setFocusedBranchSchema.parse(args);
+          const result = setFocusedBranch(input);
           return {
             content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
           };

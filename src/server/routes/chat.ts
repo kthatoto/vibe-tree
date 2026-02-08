@@ -1148,6 +1148,67 @@ vibe-treeのMCPツールを使用してください（ToolSearchは不要、直�
 - ❌ \`set_focused_branch\`を呼ばずにブランチを処理する
 `;
 
+// Execute session system prompt (for Execute sessions)
+const EXECUTE_SESSION_SYSTEM_PROMPT = `あなたはタスクを実装するアシスタントです。
+
+## 目的
+インストラクションとToDoに従ってタスクを実装する。
+
+## MCPツールの使用【必須】
+
+vibe-treeのMCPツールを使用してください（ToolSearchは不要、直接呼び出し可能）。
+
+### 使用するツール（パラメータ名に注意）
+- \`mcp__vibe-tree__get_current_context\`: 現在の状態を確認
+  - パラメータ: \`planningSessionId\`
+  - 戻り値: currentBranch, instruction, todos, questions など
+- \`mcp__vibe-tree__get_instruction\`: ブランチのインストラクションを取得
+  - パラメータ: \`repoId\`, \`branchName\`
+- \`mcp__vibe-tree__get_todos\`: ブランチのToDoリストを取得
+  - パラメータ: \`repoId\`, \`branchName\`
+- \`mcp__vibe-tree__update_todo\`: ToDoのステータスを更新
+  - パラメータ: \`todoId\`, \`status\` ("pending" | "in_progress" | "completed")
+- \`mcp__vibe-tree__complete_todo\`: ToDoを完了にする
+  - パラメータ: \`todoId\`
+- \`mcp__vibe-tree__add_question\`: 疑問点を記録
+  - パラメータ: \`planningSessionId\`, \`question\`, \`branchName\`（任意）, \`assumption\`（任意）
+- \`mcp__vibe-tree__get_pending_answers\`: ユーザーが回答済みだがまだ確認していない質問を取得
+  - パラメータ: \`planningSessionId\`, \`branchName\`（任意）
+- \`mcp__vibe-tree__acknowledge_answer\`: 回答を確認・取り込んだことを記録
+  - パラメータ: \`questionId\`
+- \`mcp__vibe-tree__set_focused_branch\`: 作業対象ブランチを変更（UIに表示される）
+  - パラメータ: \`planningSessionId\`, \`branchName\`
+- \`mcp__vibe-tree__mark_branch_complete\`: ブランチの作業完了を記録し次へ進む
+  - パラメータ: \`planningSessionId\`, \`autoAdvance\` (true で次のブランチへ自動移動)
+
+## 作業フロー【厳守・順番に1つずつ】
+
+**重要：ツールは1つずつ順番に呼び出すこと。並行呼び出しは禁止。**
+
+1. **最初に\`get_current_context\`で状態確認**
+   - 現在のブランチ、インストラクション、ToDoを確認
+   - 未確認の回答があれば読んで作業に反映し、\`acknowledge_answer\`で確認済みにする
+
+2. **ToDoに従って実装を進める**
+   - 作業開始時に\`update_todo\`で status を "in_progress" に更新
+   - 実装が完了したら\`complete_todo\`でToDoを完了にする
+   - 全ToDoを順番に処理する
+
+3. **疑問点が生じたら**
+   - \`add_question\`で質問を記録
+   - assumptionパラメータで「回答がない場合の仮定」を記載
+   - 質問を記録したら、assumptionに基づいて作業を続行
+
+4. **ブランチの作業完了時**
+   - 全ToDoが完了したら\`mark_branch_complete\`を呼び出す
+   - 次のブランチがある場合は自動で次に進む
+
+## 禁止事項
+- ❌ 同じツールを複数回並行で呼び出す
+- ❌ ToolSearchを使う（直接呼び出し可能）
+- ❌ ToDoの完了ステータスを更新せずに作業を終える
+`;
+
 // Helper: Build prompt with full context
 async function buildPrompt(
   session: typeof schema.chatSessions.$inferSelect,
@@ -1165,16 +1226,21 @@ async function buildPrompt(
     ? session.worktreePath.replace("planning:", "")
     : session.worktreePath;
 
-  // Get planning session to check if it's an Instruction Review session
+  // Get planning session to check session type
   let isInstructionReviewSession = false;
+  let isExecuteSession = false;
+  let planningSessionData: typeof schema.planningSessions.$inferSelect | null = null;
   if (planningSessionId) {
     const [planningSession] = await db
       .select()
       .from(schema.planningSessions)
       .where(eq(schema.planningSessions.id, planningSessionId));
+    planningSessionData = planningSession ?? null;
     // Use type property if available, fall back to title-based detection for legacy data
     if (planningSession?.type === "planning" || planningSession?.title.startsWith("Planning:")) {
       isInstructionReviewSession = true;
+    } else if (planningSession?.type === "execute") {
+      isExecuteSession = true;
     }
   }
 
@@ -1198,6 +1264,10 @@ async function buildPrompt(
     if (isInstructionReviewSession) {
       // Planning tab: Instruction review mode
       parts.push(INSTRUCTION_REVIEW_SYSTEM_PROMPT);
+      parts.push(`## Repository: ${session.repoId}\n`);
+    } else if (isExecuteSession) {
+      // Execute tab: Task execution mode
+      parts.push(EXECUTE_SESSION_SYSTEM_PROMPT);
       parts.push(`## Repository: ${session.repoId}\n`);
     } else {
       // Refinement tab: Task breakdown mode
@@ -1293,16 +1363,17 @@ ${gitStatus || "Clean working directory"}
         : planningSession[0].baseBranch;
 
       if (executeBranches.length > 0) {
-        // Multi-branch planning session
+        // Multi-branch session (planning or execute)
         parts.push(`## MCPツール用パラメータ【重要】
 以下の値をMCPツール呼び出しで使用してください：
 - planningSessionId: \`${planningSession[0].id}\`
 - repoId: \`${session.repoId}\`
 
 ## 作業対象ブランチ一覧（全${executeBranches.length}件）
-${executeBranches.map((b, i) => `${i === currentBranchIndex ? "→ " : "  "}${i + 1}. \`${b}\`${i === currentBranchIndex ? " 【現在編集中】" : ""}`).join("\n")}
+${executeBranches.map((b, i) => `${i === currentBranchIndex ? "→ " : "  "}${i + 1}. \`${b}\`${i === currentBranchIndex ? " 【現在作業中】" : ""}`).join("\n")}
 
-現在は **${currentBranch}** のインストラクションとToDoを編集しています。
+現在は **${currentBranch}** ${isExecuteSession ? "の実装を行っています。" : "のインストラクションとToDoを編集しています。"}
+${isExecuteSession ? "\n**最初に \`get_current_context\` でインストラクションとToDoを取得してください。**" : ""}
 `);
       } else {
         // Single branch (legacy)

@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { api, type TaskTodo } from "../lib/api";
+import { api, type TaskTodo, type PlanningQuestion } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import ExecuteBranchTree from "./ExecuteBranchTree";
 import ExecuteBranchDetail from "./ExecuteBranchDetail";
 import ExecuteTodoList from "./ExecuteTodoList";
+import PlanningQuestionsPanel from "./PlanningQuestionsPanel";
 import "./ExecuteSidebar.css";
 
 interface ExecuteSidebarProps {
@@ -13,6 +14,7 @@ interface ExecuteSidebarProps {
   planningSessionId?: string;
   onManualBranchSwitch?: (branchIndex: number) => void;
   onBranchCompleted?: (branchName: string) => void;
+  workingBranch?: string | null;
 }
 
 export function ExecuteSidebar({
@@ -22,12 +24,19 @@ export function ExecuteSidebar({
   planningSessionId,
   onManualBranchSwitch,
   onBranchCompleted,
+  workingBranch,
 }: ExecuteSidebarProps) {
   // Preview branch (clicked but not switched to)
   const [previewBranch, setPreviewBranch] = useState<string | null>(null);
 
+  // Active tab: "todo" or "questions"
+  const [activeTab, setActiveTab] = useState<"todo" | "questions">("todo");
+
   // All todos for all branches (for completion tracking)
   const [allTodos, setAllTodos] = useState<Map<string, TaskTodo[]>>(new Map());
+
+  // All questions for all branches (for badge counts)
+  const [allQuestions, setAllQuestions] = useState<PlanningQuestion[]>([]);
 
   // Current branch (actual execution target)
   const currentBranch = executeBranches[currentExecuteIndex] || null;
@@ -119,6 +128,54 @@ export function ExecuteSidebar({
     };
   }, [executeBranches]);
 
+  // Load questions
+  useEffect(() => {
+    if (!planningSessionId) return;
+    api.getQuestions(planningSessionId)
+      .then(setAllQuestions)
+      .catch(console.error);
+  }, [planningSessionId]);
+
+  // WebSocket updates for questions
+  useEffect(() => {
+    if (!planningSessionId) return;
+
+    const unsubQCreated = wsClient.on("question.created", (msg) => {
+      const q = msg.data as PlanningQuestion;
+      if (q.planningSessionId === planningSessionId) {
+        setAllQuestions((prev) => [...prev, q].sort((a, b) => a.orderIndex - b.orderIndex));
+      }
+    });
+
+    const unsubQUpdated = wsClient.on("question.updated", (msg) => {
+      const q = msg.data as PlanningQuestion;
+      if (q.planningSessionId === planningSessionId) {
+        setAllQuestions((prev) => prev.map((item) => (item.id === q.id ? q : item)));
+      }
+    });
+
+    const unsubQAnswered = wsClient.on("question.answered", (msg) => {
+      const q = msg.data as PlanningQuestion;
+      if (q.planningSessionId === planningSessionId) {
+        setAllQuestions((prev) => prev.map((item) => (item.id === q.id ? q : item)));
+      }
+    });
+
+    const unsubQDeleted = wsClient.on("question.deleted", (msg) => {
+      const data = msg.data as { id: number; planningSessionId: string };
+      if (data.planningSessionId === planningSessionId) {
+        setAllQuestions((prev) => prev.filter((q) => q.id !== data.id));
+      }
+    });
+
+    return () => {
+      unsubQCreated();
+      unsubQUpdated();
+      unsubQAnswered();
+      unsubQDeleted();
+    };
+  }, [planningSessionId]);
+
   // Compute completed branches (all todos completed)
   const completedBranches = useMemo(() => {
     const completed = new Set<string>();
@@ -162,6 +219,32 @@ export function ExecuteSidebar({
     return counts;
   }, [allTodos]);
 
+  // Compute question counts per branch
+  const branchQuestionCounts = useMemo(() => {
+    const counts = new Map<string, { total: number; pending: number; answered: number; acknowledged: number }>();
+    executeBranches.forEach((branch) => {
+      const branchQuestions = allQuestions.filter((q) => q.branchName === branch);
+      counts.set(branch, {
+        total: branchQuestions.length,
+        pending: branchQuestions.filter((q) => q.status === "pending").length,
+        answered: branchQuestions.filter((q) => q.status === "answered" && !q.acknowledged).length,
+        acknowledged: branchQuestions.filter((q) => q.status === "answered" && q.acknowledged).length,
+      });
+    });
+    return counts;
+  }, [allQuestions, executeBranches]);
+
+  // Count pending questions for display branch
+  const displayBranchQuestionCount = useMemo(() => {
+    if (!displayBranch) return { total: 0, pending: 0, answered: 0 };
+    const branchQuestions = allQuestions.filter((q) => q.branchName === displayBranch);
+    return {
+      total: branchQuestions.length,
+      pending: branchQuestions.filter((q) => q.status === "pending").length,
+      answered: branchQuestions.filter((q) => q.status === "answered" && !q.acknowledged).length,
+    };
+  }, [allQuestions, displayBranch]);
+
   // Handle preview branch selection
   const handlePreviewBranch = useCallback((branch: string) => {
     setPreviewBranch(branch === previewBranch ? null : branch);
@@ -198,6 +281,8 @@ export function ExecuteSidebar({
           onPreviewBranch={handlePreviewBranch}
           completedBranches={completedBranches}
           branchTodoCounts={branchTodoCounts}
+          branchQuestionCounts={branchQuestionCounts}
+          workingBranch={workingBranch}
         />
       </div>
 
@@ -211,15 +296,48 @@ export function ExecuteSidebar({
         />
       </div>
 
-      {/* ToDo List */}
-      <div className="execute-sidebar__section execute-sidebar__section--todos">
-        <ExecuteTodoList
-          repoId={repoId}
-          branchName={displayBranch}
-          planningSessionId={planningSessionId}
-          disabled={!isCurrent}
-        />
+      {/* Tabs */}
+      <div className="execute-sidebar__tabs">
+        <button
+          className={`execute-sidebar__tab ${activeTab === "todo" ? "execute-sidebar__tab--active" : ""}`}
+          onClick={() => setActiveTab("todo")}
+        >
+          ToDo
+        </button>
+        <button
+          className={`execute-sidebar__tab ${activeTab === "questions" ? "execute-sidebar__tab--active" : ""}`}
+          onClick={() => setActiveTab("questions")}
+        >
+          Questions
+          {(displayBranchQuestionCount.pending > 0 || displayBranchQuestionCount.answered > 0) && (
+            <span className="execute-sidebar__tab-badge">
+              {displayBranchQuestionCount.pending + displayBranchQuestionCount.answered}
+            </span>
+          )}
+        </button>
       </div>
+
+      {/* Tab Content */}
+      {activeTab === "todo" && (
+        <div className="execute-sidebar__section execute-sidebar__section--todos">
+          <ExecuteTodoList
+            repoId={repoId}
+            branchName={displayBranch}
+            planningSessionId={planningSessionId}
+            disabled={!isCurrent}
+          />
+        </div>
+      )}
+
+      {activeTab === "questions" && planningSessionId && (
+        <div className="execute-sidebar__section execute-sidebar__section--questions">
+          <PlanningQuestionsPanel
+            planningSessionId={planningSessionId}
+            branchName={displayBranch}
+            disabled={!isCurrent}
+          />
+        </div>
+      )}
     </div>
   );
 }

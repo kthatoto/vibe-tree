@@ -701,9 +701,9 @@ export function PlanningPanel({
     };
   }, [selectedSession?.id, selectedSession?.chatSessionId, selectedSession?.title, selectedSession?.type, selectedSession?.executeBranches]);
 
-  // Track Claude working state for planning sessions
+  // Track Claude working state for planning and execute sessions
   useEffect(() => {
-    if (!selectedSession?.chatSessionId || selectedSession.type !== "planning") {
+    if (!selectedSession?.chatSessionId || (selectedSession.type !== "planning" && selectedSession.type !== "execute")) {
       setClaudeWorking(false);
       return;
     }
@@ -1867,6 +1867,20 @@ export function PlanningPanel({
             <div className="planning-panel__detail-main">
               {/* Chat */}
               <div className="planning-panel__chat">
+                {/* Current branch indicator */}
+                {selectedSession.executeBranches[selectedSession.currentExecuteIndex] && (
+                  <div className="planning-panel__branch-indicator">
+                    <span className="planning-panel__branch-indicator-label">
+                      {claudeWorking ? "🤖 Working on:" : "📍 Current:"}
+                    </span>
+                    <span className="planning-panel__branch-indicator-name">
+                      {selectedSession.executeBranches[selectedSession.currentExecuteIndex]}
+                    </span>
+                    <span className="planning-panel__branch-indicator-hint">
+                      Task {selectedSession.currentExecuteIndex + 1} of {selectedSession.executeBranches.length}
+                    </span>
+                  </div>
+                )}
                 {selectedSession.chatSessionId && (
                   <ChatPanel
                     sessionId={selectedSession.chatSessionId}
@@ -1902,6 +1916,7 @@ export function PlanningPanel({
                   planningSessionId={selectedSession.id}
                   onManualBranchSwitch={handleManualBranchSwitch}
                   onBranchCompleted={handleBranchCompleted}
+                  workingBranch={claudeWorking ? selectedSession.executeBranches[selectedSession.currentExecuteIndex] : null}
                 />
               </div>
             </div>

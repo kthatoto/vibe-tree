@@ -69,6 +69,15 @@
   border-color: #444;
 }
 
+.execute-todo-list__item--in_progress {
+  border-color: #3b82f6;
+  background: #1e3a5f;
+}
+
+.execute-todo-list__item--in_progress .execute-todo-list__title {
+  color: #93c5fd;
+}
+
 .execute-todo-list__item--completed {
   opacity: 0.6;
 }

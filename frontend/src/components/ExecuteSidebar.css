@@ -20,9 +20,53 @@
   flex-direction: column;
 }
 
-.execute-sidebar__section--todos {
+.execute-sidebar__section--todos,
+.execute-sidebar__section--questions {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+}
+
+/* Tabs */
+.execute-sidebar__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 4px;
+  border-bottom: 1px solid #333;
+}
+
+.execute-sidebar__tab {
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.execute-sidebar__tab:hover {
+  color: #bbb;
+}
+
+.execute-sidebar__tab--active {
+  color: #fff;
+  border-bottom-color: #3b82f6;
+}
+
+.execute-sidebar__tab-badge {
+  background: #f59e0b;
+  color: #000;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 8px;
 }
 
 /* Scrollbar styling */

@@ -97,8 +97,10 @@ export function ExecuteTodoList({
   const handleToggleStatus = useCallback(
     async (todo: TaskTodo) => {
       if (disabled) return;
-      const nextStatus: TaskTodoStatus =
-        todo.status === "completed" ? "pending" : "completed";
+      // Cycle through: pending -> in_progress -> completed -> pending
+      const statusCycle: TaskTodoStatus[] = ["pending", "in_progress", "completed"];
+      const currentIndex = statusCycle.indexOf(todo.status);
+      const nextStatus = statusCycle[(currentIndex + 1) % statusCycle.length];
       try {
         await api.updateTodo(todo.id, { status: nextStatus });
       } catch (err) {

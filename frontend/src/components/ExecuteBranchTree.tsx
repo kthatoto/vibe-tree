@@ -79,6 +79,7 @@ export function ExecuteBranchTree({
               className={`execute-branch-tree__item execute-branch-tree__item--${status} ${isPreview ? "execute-branch-tree__item--preview" : ""} ${isWorking ? "execute-branch-tree__item--working" : ""}`}
               onClick={() => onPreviewBranch(branch)}
             >
+              {/* Row 1: Branch name */}
               <div className="execute-branch-tree__row">
                 <span className={`execute-branch-tree__status execute-branch-tree__status--${status}`}>
                   {getStatusIcon(status)}
@@ -92,65 +93,41 @@ export function ExecuteBranchTree({
                   </span>
                 )}
               </div>
-              {/* PR badges - CI and Review status */}
-              {hasPR && (
-                <div className="execute-branch-tree__pr-badges">
-                  <a
-                    href={prLink.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="execute-branch-tree__pr-link"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    PR #{prLink.number}
-                  </a>
-                  {/* CI status */}
-                  {prLink.checksStatus === "success" && (
-                    <span className="execute-branch-tree__pr-badge execute-branch-tree__pr-badge--ci-success" title="CI passed">
-                      CI ✔
-                    </span>
-                  )}
-                  {prLink.checksStatus === "failure" && (
-                    <span className="execute-branch-tree__pr-badge execute-branch-tree__pr-badge--ci-failure" title="CI failed">
-                      CI ✗
-                    </span>
-                  )}
-                  {prLink.checksStatus === "pending" && (
-                    <span className="execute-branch-tree__pr-badge execute-branch-tree__pr-badge--ci-pending" title="CI running">
-                      CI ◌
-                    </span>
+              {/* Row 2: All badges (PR, Issue, ToDo, Question) */}
+              {(hasPR || hasTodos || hasQuestions) && (
+                <div className="execute-branch-tree__badges-row">
+                  {/* PR badge */}
+                  {hasPR && (
+                    <a
+                      href={prLink.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="execute-branch-tree__pr-link"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      PR #{prLink.number}
+                      {prLink.checksStatus === "success" && <span className="execute-branch-tree__ci execute-branch-tree__ci--success">✔</span>}
+                      {prLink.checksStatus === "failure" && <span className="execute-branch-tree__ci execute-branch-tree__ci--failure">✗</span>}
+                      {prLink.checksStatus === "pending" && <span className="execute-branch-tree__ci execute-branch-tree__ci--pending">◌</span>}
+                    </a>
                   )}
                   {/* Review status */}
-                  {prLink.reviewDecision === "APPROVED" && (
-                    <span className="execute-branch-tree__pr-badge execute-branch-tree__pr-badge--review-approved" title="Approved">
-                      Approved ✔
-                    </span>
+                  {hasPR && prLink.reviewDecision === "APPROVED" && (
+                    <span className="execute-branch-tree__review execute-branch-tree__review--approved">Approved</span>
                   )}
-                  {prLink.reviewDecision === "CHANGES_REQUESTED" && (
-                    <span className="execute-branch-tree__pr-badge execute-branch-tree__pr-badge--review-changes" title="Changes requested">
-                      Changes ✗
-                    </span>
+                  {hasPR && prLink.reviewDecision === "CHANGES_REQUESTED" && (
+                    <span className="execute-branch-tree__review execute-branch-tree__review--changes">Changes</span>
                   )}
-                  {prLink.reviewDecision === "REVIEW_REQUIRED" && (
-                    <span className="execute-branch-tree__pr-badge execute-branch-tree__pr-badge--review-pending" title="Review required">
-                      Review
-                    </span>
+                  {hasPR && (prLink.reviewDecision === "REVIEW_REQUIRED" || (!prLink.reviewDecision && prLink.reviewers && JSON.parse(prLink.reviewers).length > 0)) && (
+                    <span className="execute-branch-tree__review execute-branch-tree__review--requested">Review</span>
                   )}
-                  {/* Reviewers requested but no decision yet */}
-                  {!prLink.reviewDecision && prLink.reviewers && JSON.parse(prLink.reviewers).length > 0 && (
-                    <span className="execute-branch-tree__pr-badge execute-branch-tree__pr-badge--review-requested" title="Review requested">
-                      Review
-                    </span>
-                  )}
-                </div>
-              )}
-              {(hasTodos || hasQuestions) && (
-                <div className="execute-branch-tree__badges">
+                  {/* ToDo badge */}
                   {hasTodos && (
-                    <span className="execute-branch-tree__badge execute-branch-tree__badge--todo" title="ToDo">
+                    <span className="execute-branch-tree__badge execute-branch-tree__badge--todo">
                       📋 {todoCount.completed}/{todoCount.total}
                     </span>
                   )}
+                  {/* Question badge */}
                   {hasQuestions && (
                     <span
                       className={`execute-branch-tree__badge execute-branch-tree__badge--question ${
@@ -160,20 +137,13 @@ export function ExecuteBranchTree({
                           ? "execute-branch-tree__badge--q-answered"
                           : "execute-branch-tree__badge--q-done"
                       }`}
-                      title={
-                        questionCount.pending > 0
-                          ? `${questionCount.pending} unanswered`
-                          : questionCount.answered > 0
-                          ? `${questionCount.answered} awaiting AI`
-                          : "All acknowledged"
-                      }
                     >
                       {questionCount.pending > 0 ? (
                         <>❓ {questionCount.pending}</>
                       ) : questionCount.answered > 0 ? (
                         <>💬 {questionCount.answered}</>
                       ) : (
-                        <>✅ {questionCount.acknowledged}/{questionCount.total}</>
+                        <>✅ {questionCount.acknowledged}</>
                       )}
                     </span>
                   )}

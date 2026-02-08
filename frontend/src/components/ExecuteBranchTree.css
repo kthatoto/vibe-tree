@@ -1,14 +1,16 @@
 .execute-branch-tree {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  height: 100%;
+  overflow: hidden;
 }
 
 .execute-branch-tree__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 4px;
+  padding: 0 4px 8px;
+  flex-shrink: 0;
 }
 
 .execute-branch-tree__header h4 {
@@ -16,8 +18,6 @@
   font-size: 12px;
   font-weight: 600;
   color: #888;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .execute-branch-tree__count {
@@ -30,6 +30,8 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .execute-branch-tree__item {

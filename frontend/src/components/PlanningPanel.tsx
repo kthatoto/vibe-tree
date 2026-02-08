@@ -22,6 +22,7 @@ import {
   type TreeNode,
   type TreeEdge,
   type TaskInstruction,
+  type BranchLink,
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import { useSessionNotifications } from "../lib/useSessionNotifications";
@@ -308,6 +309,9 @@ export function PlanningPanel({
 
   // Planning sidebar tabs (without branches - branches are always shown at top)
   const [planningSidebarTab, setPlanningSidebarTab] = useState<"instruction" | "todo" | "questions">("instruction");
+
+  // Planning branch links (PR/Issue)
+  const [planningBranchLinks, setPlanningBranchLinks] = useState<BranchLink[]>([]);
 
   // Planning branch counts (ToDo and Question counts per branch)
   const [branchTodoCounts, setBranchTodoCounts] = useState<Map<string, { total: number; completed: number }>>(new Map());
@@ -836,6 +840,55 @@ export function PlanningPanel({
       .catch(console.error)
       .finally(() => setInstructionLoading(false));
   }, [selectedSession?.id, selectedSession?.executeBranches, planningCurrentBranchIndex, repoId]);
+
+  // Load branch links (PR/Issue) for Planning sessions
+  useEffect(() => {
+    if (!selectedSession || !repoId || selectedSession.type !== "planning") {
+      setPlanningBranchLinks([]);
+      return;
+    }
+    const planningBranches = selectedSession.executeBranches || [];
+    const currentBranch = planningBranches[planningCurrentBranchIndex];
+    if (!currentBranch) {
+      setPlanningBranchLinks([]);
+      return;
+    }
+    api.getBranchLinks(repoId, currentBranch)
+      .then(setPlanningBranchLinks)
+      .catch(() => setPlanningBranchLinks([]));
+  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, planningCurrentBranchIndex, repoId]);
+
+  // Subscribe to branch link updates for Planning sessions
+  useEffect(() => {
+    if (!selectedSession || !repoId || selectedSession.type !== "planning") return;
+    const planningBranches = selectedSession.executeBranches || [];
+    const currentBranch = planningBranches[planningCurrentBranchIndex];
+    if (!currentBranch) return;
+
+    const unsubCreated = wsClient.on("branchLink.created", (msg) => {
+      const data = msg.data as BranchLink;
+      if (data.repoId === repoId && data.branchName === currentBranch) {
+        setPlanningBranchLinks((prev) => {
+          if (prev.some((l) => l.id === data.id)) return prev;
+          return [data, ...prev];
+        });
+      }
+    });
+
+    const unsubUpdated = wsClient.on("branchLink.updated", (msg) => {
+      const data = msg.data as BranchLink;
+      if (data.repoId === repoId && data.branchName === currentBranch) {
+        setPlanningBranchLinks((prev) =>
+          prev.map((l) => (l.id === data.id ? data : l))
+        );
+      }
+    });
+
+    return () => {
+      unsubCreated();
+      unsubUpdated();
+    };
+  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, planningCurrentBranchIndex, repoId]);
 
   // Clear pending nodes when session changes
   useEffect(() => {
@@ -2036,6 +2089,46 @@ export function PlanningPanel({
                     showCompletionCount={false}
                   />
                 </div>
+
+                {/* Branch Header with PR/Issue links */}
+                {currentPlanningBranch && (
+                  <div className="execute-sidebar__branch-header">
+                    <div className="execute-sidebar__branch-name">
+                      {currentPlanningBranch}
+                    </div>
+                    {planningBranchLinks.length > 0 && (
+                      <div className="execute-sidebar__links">
+                        {planningBranchLinks.filter(l => l.linkType === "pr").map((prLink) => (
+                          <a
+                            key={prLink.id}
+                            href={prLink.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="execute-sidebar__link execute-sidebar__link--pr"
+                          >
+                            PR #{prLink.number}
+                            {prLink.checksStatus && (
+                              <span className={`execute-sidebar__checks execute-sidebar__checks--${prLink.checksStatus}`}>
+                                {prLink.checksStatus === "success" ? "✓" : prLink.checksStatus === "failure" ? "✕" : "◌"}
+                              </span>
+                            )}
+                          </a>
+                        ))}
+                        {planningBranchLinks.filter(l => l.linkType === "issue").map((issueLink) => (
+                          <a
+                            key={issueLink.id}
+                            href={issueLink.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="execute-sidebar__link execute-sidebar__link--issue"
+                          >
+                            Issue #{issueLink.number}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Tab Header */}
                 <div className="planning-panel__sidebar-tabs">

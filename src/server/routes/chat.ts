@@ -1211,6 +1211,14 @@ const REFINEMENT_SYSTEM_PROMPT = `あなたはプロジェクト計画のアシ�
 - GitHub Issueが共有されている場合、関連するタスクにissueフィールドでURLを紐づける
 - ユーザーがブランチ名の変更を依頼したら、新しいタスク提案で修正版を提示する
 - ユーザーが情報を共有したら、まず内容を理解・整理してから質問やタスク提案を行う
+
+## セッションタイトルの自動更新【重要】
+タスクを提案したら、セッションの内容を反映したタイトルに更新すること。
+
+\`mcp__vibe-tree__update_session_title\` を使用:
+- パラメータ: \`planningSessionId\`, \`title\`
+- タイトルは議論の主題を簡潔に表す（例：「ユーザー認証機能の追加」「ダッシュボードUI改善」）
+- タスク提案のたびに、内容に応じてタイトルを更新する
 `;
 
 // Instruction review system prompt (for Planning sessions)

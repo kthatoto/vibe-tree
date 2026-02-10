@@ -192,7 +192,6 @@ function DraggableTaskItem({
 
 interface PlanningPanelProps {
   repoId: string;
-  branches: string[];
   defaultBranch: string;
   onTasksChange?: (nodes: TaskNode[], edges: TaskEdge[]) => void;
   onSessionSelect?: (session: PlanningSession | null) => void;
@@ -208,7 +207,6 @@ interface PlanningPanelProps {
 
 export function PlanningPanel({
   repoId,
-  branches,
   defaultBranch,
   onTasksChange,
   onSessionSelect,
@@ -261,8 +259,6 @@ export function PlanningPanel({
   const [instructionDirty, setInstructionDirty] = useState(false);
   const [instructionEditing, setInstructionEditing] = useState(false);
 
-  // Title editing with IME support
-  const [editingTitle, setEditingTitle] = useState("");
 
   // Resizable sidebar
   const [sidebarWidth, setSidebarWidth] = useState(420);
@@ -883,10 +879,6 @@ export function PlanningPanel({
     pendingNodesRef.current = [];
   }, [selectedSession?.id]);
 
-  // Sync editing title with selected session
-  useEffect(() => {
-    setEditingTitle(selectedSession?.title || "");
-  }, [selectedSession?.id, selectedSession?.title]);
 
   const handleCreateSession = async () => {
     // All session types use defaultBranch
@@ -1055,28 +1047,6 @@ export function PlanningPanel({
       handleStartPlanningSession();
     }
   }, [pendingPlanning]);
-
-  const handleUpdateTitle = async (title: string) => {
-    if (!selectedSession) return;
-    try {
-      const updated = await api.updatePlanningSession(selectedSession.id, { title });
-      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-      onSessionSelect?.(updated);
-    } catch (err) {
-      console.error("Failed to update title:", err);
-    }
-  };
-
-  const handleUpdateBaseBranch = async (baseBranch: string) => {
-    if (!selectedSession) return;
-    try {
-      const updated = await api.updatePlanningSession(selectedSession.id, { baseBranch });
-      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-      onSessionSelect?.(updated);
-    } catch (err) {
-      console.error("Failed to update base branch:", err);
-    }
-  };
 
   // Sidebar resize handlers
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -1802,26 +1772,7 @@ export function PlanningPanel({
             <span className={`planning-panel__execute-status planning-panel__execute-status--${executeStatus}`}>
               {executeStatusLabel}
             </span>
-            {executeEditMode ? (
-              <input
-                type="text"
-                value={executeEditTitle}
-                onChange={(e) => setExecuteEditTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    handleSaveExecuteEdit();
-                  } else if (e.key === "Escape") {
-                    handleCancelExecuteEdit();
-                  }
-                }}
-                className="planning-panel__title-input"
-                placeholder="Untitled Session"
-                autoFocus
-              />
-            ) : (
-              <span className="planning-panel__header-title">{selectedSession.title}</span>
-            )}
+            <span className="planning-panel__header-title">{selectedSession.title}</span>
             {executeEditMode ? (
               <>
                 <button
@@ -2236,37 +2187,28 @@ export function PlanningPanel({
     }
 
     // Non-Execute, Non-Planning Session (Refinement)
+    const refinementStatus = selectedSession.status === "confirmed" ? "confirmed" : "draft";
+    const refinementStatusLabel = selectedSession.status === "confirmed" ? "Confirmed" : "Draft";
+
     return (
       <div className="planning-panel__detail-content">
         <div className="planning-panel__header">
           <span className={`planning-panel__session-type planning-panel__session-type--${sessionTypeValue}`}>
-          <span className="planning-panel__session-type-icon">{sessionTypeIcon}</span>
-          {sessionTypeLabel}
-        </span>
-        <select
-          value={selectedSession.baseBranch}
-          onChange={(e) => handleUpdateBaseBranch(e.target.value)}
-          className="planning-panel__branch-select"
-          disabled={selectedSession.status !== "draft"}
-        >
-          {branches.map((b) => (
-            <option key={b} value={b}>{b}</option>
-          ))}
-        </select>
-        <input
-          type="text"
-          value={editingTitle}
-          onChange={(e) => setEditingTitle(e.target.value)}
-          onBlur={() => {
-            if (editingTitle !== selectedSession.title) {
-              handleUpdateTitle(editingTitle);
-            }
-          }}
-          className="planning-panel__title-input"
-          placeholder="Untitled Session"
-          disabled={selectedSession.status !== "draft"}
-        />
-      </div>
+            <span className="planning-panel__session-type-icon">{sessionTypeIcon}</span>
+            {sessionTypeLabel}
+          </span>
+          <span className={`planning-panel__execute-status planning-panel__execute-status--${refinementStatus}`}>
+            {refinementStatusLabel}
+          </span>
+          <span className="planning-panel__header-title">{selectedSession.title}</span>
+          <button
+            className="planning-panel__delete-btn"
+            onClick={handleDelete}
+            title="Delete this session"
+          >
+            Delete
+          </button>
+        </div>
 
       {/* Non-Execute Session: Original layout */}
       <div className="planning-panel__detail-main">

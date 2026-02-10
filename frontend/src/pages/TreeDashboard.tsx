@@ -1402,7 +1402,6 @@ export default function TreeDashboard() {
               <div className="sessions-container">
                 <PlanningPanel
                   repoId={snapshot.repoId}
-                  branches={snapshot.branches}
                   defaultBranch={snapshot.defaultBranch}
                   onTasksChange={handlePlanningTasksChange}
                   onSessionSelect={handlePlanningSessionSelect}

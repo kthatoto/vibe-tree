@@ -127,6 +127,7 @@ export function AskUserQuestionUI({ data, onSubmit, disabled }: AskUserQuestionU
         padding: "10px 14px",
         background: "#0f172a",
         borderBottom: "1px solid #3b82f6",
+        borderRadius: "7px 7px 0 0",
         display: "flex",
         alignItems: "center",
         gap: 8,

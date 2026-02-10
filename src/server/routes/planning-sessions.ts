@@ -136,10 +136,15 @@ planningSessionsRouter.post("/", async (c) => {
 
   // Generate default title based on type if not provided
   const sessionType = type || "refinement";
-  let defaultTitle = "Untitled Session";
+  let defaultTitle = "";
   if (!title) {
-    const typeLabel = sessionType === "refinement" ? "Refinement" : sessionType === "planning" ? "Planning" : "Execute";
-    defaultTitle = `${typeLabel}: ${baseBranch}`;
+    // Use simple timestamp as initial title - AI will update it later
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const day = now.getDate();
+    const hours = now.getHours().toString().padStart(2, "0");
+    const minutes = now.getMinutes().toString().padStart(2, "0");
+    defaultTitle = `${month}/${day} ${hours}:${minutes}`;
   }
 
   // Create planning session

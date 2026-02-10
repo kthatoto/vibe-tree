@@ -619,36 +619,8 @@ export function PlanningPanel({
     };
   }, [repoId, selectedSession?.id]);
 
-  // Auto-advance for Execute Session when streaming ends
-  useEffect(() => {
-    if (!selectedSession || selectedSession.type !== "execute" || !selectedSession.executeBranches || !selectedSession.chatSessionId) {
-      return;
-    }
-
-    const unsubStreamingEnd = wsClient.on("chat.streaming.end", (msg) => {
-      const data = msg.data as { sessionId: string };
-      if (data.sessionId === selectedSession.chatSessionId) {
-        // Auto-advance to next task after a short delay
-        // Check if there are more tasks to execute
-        if (selectedSession.currentExecuteIndex < selectedSession.executeBranches!.length - 1) {
-          // Wait a bit before auto-advancing to let user see the result
-          setTimeout(async () => {
-            try {
-              const result = await api.advanceExecuteTask(selectedSession.id);
-              setSessions((prev) => prev.map((s) => (s.id === result.id ? result : s)));
-              onSessionSelect?.(result);
-            } catch (err) {
-              setError((err as Error).message);
-            }
-          }, 1500);
-        }
-      }
-    });
-
-    return () => {
-      unsubStreamingEnd();
-    };
-  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, selectedSession?.chatSessionId, selectedSession?.currentExecuteIndex, onSessionSelect]);
+  // Note: Execute session branch advancement is handled by MCP tool mark_branch_complete
+  // No auto-advance on streaming.end - AI must explicitly call mark_branch_complete
 
   // Auto-generate session title when streaming ends
   const messageCountRef = useRef<Map<string, number>>(new Map());
@@ -1305,29 +1277,11 @@ export function PlanningPanel({
   // Note: ToDo and Question updates are now handled via MCP tools
   // The MCP server directly updates the database and sends WebSocket notifications
 
-  // Handle branch completion (all todos done)
-  const handleBranchCompleted = useCallback(async (branchName: string) => {
-    if (!selectedSession || selectedSession.type !== "execute") return;
-
-    // Check if there are more branches to execute
-    const currentIndex = selectedSession.currentExecuteIndex;
-    const totalBranches = selectedSession.executeBranches?.length || 0;
-
-    console.log(`Branch ${branchName} completed. Current: ${currentIndex + 1}/${totalBranches}`);
-
-    if (currentIndex < totalBranches - 1) {
-      // Auto-advance to next branch
-      try {
-        const result = await api.advanceExecuteTask(selectedSession.id);
-        setSessions((prev) => prev.map((s) => (s.id === result.id ? result : s)));
-        onSessionSelect?.(result);
-      } catch (err) {
-        console.error("Failed to advance to next branch:", err);
-      }
-    } else {
-      console.log("All branches completed!");
-    }
-  }, [selectedSession, onSessionSelect]);
+  // Note: Branch completion and advancement is handled by MCP tool mark_branch_complete
+  // Frontend only logs completion for debugging
+  const handleBranchCompleted = useCallback((branchName: string) => {
+    console.log(`[PlanningPanel] Branch ${branchName} todos completed (MCP will handle advancement)`);
+  }, []);
 
   // External link handlers
   const handleAddLink = async () => {

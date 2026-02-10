@@ -685,19 +685,8 @@ export function PlanningPanel({
         }
       }
 
-      // Auto-advance for Planning Session - automatically advance to next branch without confirmation
-      if (selectedSession.type === "planning" && selectedSession.executeBranches) {
-        const currentIdx = planningCurrentBranchIndexRef.current;
-        const maxIdx = selectedSession.executeBranches.length - 1;
-
-        if (currentIdx < maxIdx) {
-          // Immediately advance to next branch
-          const nextIdx = currentIdx + 1;
-          setPlanningCurrentBranchIndex(nextIdx);
-          // Update backend - use advanceExecuteTask instead
-          api.advanceExecuteTask(selectedSession.id).catch(console.error);
-        }
-      }
+      // Note: For Planning sessions, branch advancement is handled by MCP tool `mark_branch_complete`
+      // which broadcasts `planning.taskAdvanced` event. No auto-advance here.
     });
 
     return () => {

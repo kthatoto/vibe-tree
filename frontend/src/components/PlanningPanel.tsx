@@ -240,7 +240,7 @@ export function PlanningPanel({
 
   // New session form
   const [showNewForm, setShowNewForm] = useState(false);
-  const [newBaseBranch, setNewBaseBranch] = useState(defaultBranch);
+  // newBaseBranch removed - all session types now use defaultBranch
 
   // External links for selected session
   const [externalLinks, setExternalLinks] = useState<ExternalLink[]>([]);
@@ -889,8 +889,8 @@ export function PlanningPanel({
   }, [selectedSession?.id, selectedSession?.title]);
 
   const handleCreateSession = async () => {
-    // For refinement, require branch; for planning/execute, use default (branches selected later)
-    const baseBranch = newSessionType === "refinement" ? newBaseBranch.trim() : defaultBranch;
+    // All session types use defaultBranch
+    const baseBranch = defaultBranch;
     if (!baseBranch) return;
     setCreating(true);
     setError(null);
@@ -906,7 +906,6 @@ export function PlanningPanel({
       const replaceEmpty = activeTabId !== null && isEmptyTab(activeTabId);
       openTab(session, replaceEmpty);
       setShowNewForm(false);
-      setNewBaseBranch(defaultBranch);
       setNewSessionType("refinement");
     } catch (err) {
       setError((err as Error).message);
@@ -1662,17 +1661,7 @@ export function PlanningPanel({
               </button>
             </div>
             {/* Branch selection only for Refinement (Planning/Execute select branches later) */}
-            {newSessionType === "refinement" && (
-              <select
-                value={newBaseBranch}
-                onChange={(e) => setNewBaseBranch(e.target.value)}
-                className="planning-panel__select"
-              >
-                {branches.map((b) => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
-              </select>
-            )}
+            {/* All session types use defaultBranch - no branch selection needed */}
             <div className="planning-panel__form-actions">
               <button onClick={handleCreateSession} disabled={creating}>
                 {creating ? "Creating..." : "Create (⌘↵)"}

@@ -61,6 +61,13 @@ export function ChatPanel({
   const [hasNewMessages, setHasNewMessages] = useState(false);
   // Quick mode (use haiku for faster responses)
   const [quickMode, setQuickMode] = useState(false);
+  // Context stats
+  const [contextStats, setContextStats] = useState<{
+    messageCount: number;
+    summaryCount: number;
+    artifactCount: number;
+    totalRawTokens: number;
+  } | null>(null);
 
   // Refs for callbacks to avoid stale closures in WebSocket handlers
   const executeContextRef = useRef(executeContext);
@@ -73,10 +80,12 @@ export function ChatPanel({
   // Load messages and restore streaming state if active
   const loadMessages = useCallback(async () => {
     try {
-      const [msgs, streamingState] = await Promise.all([
+      const [msgs, streamingState, stats] = await Promise.all([
         api.getChatMessages(sessionId),
         api.getStreamingState(sessionId),
+        api.getContextStats(sessionId).catch(() => null),
       ]);
+      setContextStats(stats);
       setMessages(msgs);
 
       // Check if last assistant message is still streaming
@@ -900,10 +909,11 @@ export function ChatPanel({
         flexDirection: "column",
         gap: 8,
       }}>
-        {/* Quick mode toggle */}
+        {/* Quick mode toggle and context stats */}
         <div style={{
           display: "flex",
           alignItems: "center",
+          justifyContent: "space-between",
           gap: 8,
         }}>
           <label style={{
@@ -939,6 +949,35 @@ export function ChatPanel({
             </div>
             Quick (Haiku)
           </label>
+          {/* Context stats badge */}
+          {contextStats && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 11,
+                color: "#9ca3af",
+              }}
+              title={`Messages: ${contextStats.messageCount}\nSummaries: ${contextStats.summaryCount}\nArtifacts: ${contextStats.artifactCount}\nTokens: ~${contextStats.totalRawTokens.toLocaleString()}`}
+            >
+              <span style={{
+                padding: "2px 6px",
+                background: contextStats.summaryCount > 0 ? "#065f46" : "#374151",
+                borderRadius: 4,
+                color: contextStats.summaryCount > 0 ? "#34d399" : "#9ca3af",
+              }}>
+                {contextStats.summaryCount > 0 ? `${contextStats.summaryCount} summary` : "No summary"}
+              </span>
+              <span style={{
+                padding: "2px 6px",
+                background: "#374151",
+                borderRadius: 4,
+              }}>
+                ~{Math.round(contextStats.totalRawTokens / 1000)}k tokens
+              </span>
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <textarea

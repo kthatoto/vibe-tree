@@ -1510,6 +1510,11 @@
   flex: 1;
 }
 
+.planning-panel__tab-title--untitled {
+  color: #6b7280;
+  font-style: italic;
+}
+
 .planning-panel__tab-close {
   display: flex;
   align-items: center;

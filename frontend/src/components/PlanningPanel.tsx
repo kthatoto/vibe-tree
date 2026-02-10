@@ -1544,7 +1544,9 @@ export function PlanningPanel({
                 >
                   {isThinking && <span className="planning-panel__tab-thinking-indicator" />}
                   <span className="planning-panel__tab-icon">{typeIcon}</span>
-                  <span className="planning-panel__tab-title">{session.title}</span>
+                  <span className={`planning-panel__tab-title${!session.title ? " planning-panel__tab-title--untitled" : ""}`}>
+                    {session.title || "Untitled Session"}
+                  </span>
                   <button
                     className="planning-panel__tab-close"
                     onClick={(e) => {

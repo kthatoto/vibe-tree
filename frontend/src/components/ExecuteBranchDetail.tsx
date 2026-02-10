@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, type BranchLink, type TaskInstruction } from "../lib/api";
+import { wsClient } from "../lib/ws";
 import "./ExecuteBranchDetail.css";
 
 interface ExecuteBranchDetailProps {
@@ -35,6 +36,23 @@ export function ExecuteBranchDetail({
         setInstruction(taskInstruction);
       })
       .finally(() => setLoading(false));
+  }, [repoId, branchName]);
+
+  // Subscribe to real-time PR updates
+  useEffect(() => {
+    if (!repoId || !branchName) return;
+
+    const unsubLinkUpdated = wsClient.on("branchLink.updated", (msg) => {
+      const data = msg.data as { branchName: string; linkType: string; [key: string]: unknown };
+      if (data.branchName === branchName) {
+        // Refetch links when our branch's link is updated
+        api.getBranchLinks(repoId, branchName).then(setLinks).catch(() => {});
+      }
+    });
+
+    return () => {
+      unsubLinkUpdated();
+    };
   }, [repoId, branchName]);
 
   const prLink = links.find((l) => l.linkType === "pr");
@@ -122,6 +140,19 @@ export function ExecuteBranchDetail({
                       "Review required"}
                 </span>
               )}
+              {/* Reviewers */}
+              {(() => {
+                const reviewers: string[] = prLink.reviewers
+                  ? (() => { try { return JSON.parse(prLink.reviewers) } catch { return [] } })()
+                  : [];
+                return reviewers.length > 0 ? (
+                  <span className="execute-branch-detail__reviewers">
+                    {reviewers.map((r, i) => (
+                      <span key={i} className="execute-branch-detail__reviewer">@{r}</span>
+                    ))}
+                  </span>
+                ) : null;
+              })()}
             </div>
           )}
           {issueLink && (

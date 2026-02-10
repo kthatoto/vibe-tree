@@ -151,6 +151,22 @@
   color: #888;
 }
 
+.execute-branch-detail__reviewers {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.execute-branch-detail__reviewer {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: #2d3748;
+  color: #a0aec0;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
 .execute-branch-detail__issue-title {
   font-size: 11px;
   color: #888;

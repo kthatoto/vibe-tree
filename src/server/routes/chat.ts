@@ -1645,12 +1645,17 @@ ToDoを追加/更新するには \`mcp__vibe-tree__add_todo\`, \`mcp__vibe-tree_
         }
       }
 
-      const links = await db
+      const allLinks = await db
         .select()
         .from(schema.externalLinks)
         .where(eq(schema.externalLinks.planningSessionId, planningSession[0].id));
 
-      console.log(`[Chat] Found ${links.length} external links for planning session ${planningSession[0].id}`);
+      // For Planning/Execute sessions, filter to session-level links + current branch links
+      const links = (isInstructionReviewSession || isExecuteSession)
+        ? allLinks.filter((link) => link.branchName === null || link.branchName === currentBranch)
+        : allLinks;
+
+      console.log(`[Chat] Found ${links.length} external links for planning session ${planningSession[0].id} (branch: ${currentBranch})`);
 
       if (links.length > 0) {
         const linksContext = links.map((link) => {

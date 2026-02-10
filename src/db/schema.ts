@@ -180,6 +180,7 @@ export const requirementsNotes = sqliteTable("requirements_notes", {
 export const externalLinks = sqliteTable("external_links", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   planningSessionId: text("planning_session_id").notNull(), // references planning_sessions.id
+  branchName: text("branch_name"), // null = session-level, set = branch-specific
   linkType: text("link_type").notNull(), // 'notion' | 'figma' | 'github_issue' | 'github_pr' | 'url'
   url: text("url").notNull(),
   title: text("title"), // extracted or user-provided title

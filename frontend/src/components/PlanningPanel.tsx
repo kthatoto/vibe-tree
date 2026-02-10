@@ -747,16 +747,20 @@ export function PlanningPanel({
     };
   }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, planningCurrentBranchIndex, instructionDirty]);
 
-  // Load external links when session changes
+  // Load external links when session or current branch changes
   useEffect(() => {
     if (!selectedSession) {
       setExternalLinks([]);
       return;
     }
-    api.getExternalLinks(selectedSession.id)
+    // For Planning/Execute sessions, filter by current branch
+    const branchName = (selectedSession.type === "planning" || selectedSession.type === "execute")
+      ? (selectedSession.executeBranches || [])[selectedSession.currentExecuteIndex ?? 0]
+      : undefined;
+    api.getExternalLinks(selectedSession.id, branchName)
       .then(setExternalLinks)
       .catch(console.error);
-  }, [selectedSession?.id]);
+  }, [selectedSession?.id, selectedSession?.type, selectedSession?.currentExecuteIndex]);
 
   // Load chat messages when session changes
   useEffect(() => {
@@ -1283,12 +1287,24 @@ export function PlanningPanel({
     console.log(`[PlanningPanel] Branch ${branchName} todos completed (MCP will handle advancement)`);
   }, []);
 
+  // Get current branch for Planning/Execute sessions
+  const getCurrentBranchName = (): string | undefined => {
+    if (!selectedSession) return undefined;
+    if (selectedSession.type === "planning" || selectedSession.type === "execute") {
+      const branches = selectedSession.executeBranches || [];
+      const index = selectedSession.currentExecuteIndex ?? 0;
+      return branches[index] || undefined;
+    }
+    return undefined; // Refinement sessions don't have branch-specific links
+  };
+
   // External link handlers
   const handleAddLink = async () => {
     if (!newLinkUrl.trim() || !selectedSession || addingLink) return;
     setAddingLink(true);
     try {
-      const link = await api.addExternalLink(selectedSession.id, newLinkUrl.trim());
+      const branchName = getCurrentBranchName();
+      const link = await api.addExternalLink(selectedSession.id, newLinkUrl.trim(), undefined, branchName);
       setExternalLinks((prev) => [...prev, link]);
       setNewLinkUrl("");
     } catch (err) {
@@ -2291,14 +2307,18 @@ export function PlanningPanel({
             <div className="planning-panel__links-list">
               {externalLinks.map((link) => {
                 const { iconSrc, className } = getLinkTypeIcon(link.linkType);
+                const isSessionLevel = link.branchName === null;
+                const linkTitle = link.branchName
+                  ? `${link.title || link.url} (Branch: ${link.branchName})`
+                  : link.title || link.url;
                 return (
                   <a
                     key={link.id}
                     href={link.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`planning-panel__link-icon ${className}`}
-                    title={link.title || link.url}
+                    className={`planning-panel__link-icon ${className}${isSessionLevel ? ' planning-panel__link-icon--session' : ''}`}
+                    title={linkTitle}
                   >
                     <img src={iconSrc} alt={link.linkType} />
                     {selectedSession.status === "draft" && (

@@ -437,6 +437,7 @@ async function fetchLinkContent(url: string, linkType: string): Promise<{ title?
 // Schema
 const addLinkSchema = z.object({
   planningSessionId: z.string().min(1),
+  branchName: z.string().optional(), // null = session-level, set = branch-specific
   url: z.string().url(),
   title: z.string().optional(),
 });
@@ -445,26 +446,36 @@ const updateLinkSchema = z.object({
   title: z.string().optional(),
 });
 
-// GET /api/external-links?planningSessionId=xxx
+// GET /api/external-links?planningSessionId=xxx&branchName=xxx
 externalLinksRouter.get("/", async (c) => {
   const planningSessionId = c.req.query("planningSessionId");
+  const branchName = c.req.query("branchName");
+
   if (!planningSessionId) {
     throw new BadRequestError("planningSessionId is required");
   }
 
-  const links = await db
+  let query = db
     .select()
     .from(externalLinks)
     .where(eq(externalLinks.planningSessionId, planningSessionId))
     .orderBy(externalLinks.createdAt);
 
-  return c.json(links);
+  const links = await query;
+
+  // Filter by branchName if provided
+  // If branchName is provided, return links for that branch OR session-level links (null branchName)
+  const filteredLinks = branchName
+    ? links.filter((link) => link.branchName === branchName || link.branchName === null)
+    : links;
+
+  return c.json(filteredLinks);
 });
 
 // POST /api/external-links - Add a new link
 externalLinksRouter.post("/", async (c) => {
   const body = await c.req.json();
-  const { planningSessionId, url, title } = validateOrThrow(addLinkSchema, body);
+  const { planningSessionId, branchName, url, title } = validateOrThrow(addLinkSchema, body);
 
   const linkType = detectLinkType(url);
   const now = new Date().toISOString();
@@ -476,6 +487,7 @@ externalLinksRouter.post("/", async (c) => {
     .insert(externalLinks)
     .values({
       planningSessionId,
+      branchName: branchName || null,
       url,
       linkType,
       title: title || fetchedTitle || null,
@@ -489,6 +501,7 @@ externalLinksRouter.post("/", async (c) => {
   broadcast({
     type: "external-link.created",
     planningSessionId,
+    branchName: branchName || null,
     data: inserted,
   });
 

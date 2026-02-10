@@ -279,6 +279,7 @@ export type ExternalLinkType = "notion" | "figma" | "github_issue" | "github_pr"
 export interface ExternalLink {
   id: number;
   planningSessionId: string;
+  branchName: string | null; // null = session-level, set = branch-specific
   linkType: ExternalLinkType;
   url: string;
   title: string | null;
@@ -782,12 +783,12 @@ export const api = {
     ),
 
   // External Links
-  getExternalLinks: (planningSessionId: string) =>
-    fetchJson<ExternalLink[]>(`${API_BASE}/external-links?planningSessionId=${encodeURIComponent(planningSessionId)}`),
-  addExternalLink: (planningSessionId: string, url: string, title?: string) =>
+  getExternalLinks: (planningSessionId: string, branchName?: string) =>
+    fetchJson<ExternalLink[]>(`${API_BASE}/external-links?planningSessionId=${encodeURIComponent(planningSessionId)}${branchName ? `&branchName=${encodeURIComponent(branchName)}` : ''}`),
+  addExternalLink: (planningSessionId: string, url: string, title?: string, branchName?: string) =>
     fetchJson<ExternalLink>(`${API_BASE}/external-links`, {
       method: "POST",
-      body: JSON.stringify({ planningSessionId, url, title }),
+      body: JSON.stringify({ planningSessionId, url, title, branchName }),
     }),
   refreshExternalLink: (id: number) =>
     fetchJson<ExternalLink>(`${API_BASE}/external-links/${id}/refresh`, {

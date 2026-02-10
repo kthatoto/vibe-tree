@@ -1384,6 +1384,10 @@ get_current_context で現在のブランチ・ToDo・質問を確認
    - **注意**: 未完了ToDoがあるとエラーになる
    - これによりUIの進捗表示が更新される
 
+7. **Figmaリンクは必ず参照**
+   - 共有されたFigmaリンクがある場合は、デザインを確認して実装する
+   - UI/UX関連のタスクでは特に重要
+
 ## 禁止事項
 - ❌ ToDoを更新せずに作業を終える
 - ❌ ToDoを飛ばして次に進む
@@ -1397,6 +1401,7 @@ get_current_context で現在のブランチ・ToDo・質問を確認
 2. 完了時: update_todo → git commit
 3. ブランチ完了時: git push → mark_branch_complete
 4. 全ToDo完了前にmark_branch_completeを呼ばない
+5. Figmaリンクがあればデザインを参照して実装
 `;
 
 // Helper: Build prompt with full context
@@ -1665,11 +1670,19 @@ ToDoを追加/更新するには \`mcp__vibe-tree__add_todo\`, \`mcp__vibe-tree_
           }
         });
 
-        parts.push(`## 共有されたリンク・ドキュメント
+        if (isExecuteSession) {
+          parts.push(`## 共有されたリンク・ドキュメント【重要：実装の参考にすること】
+以下のリンクがRefinementで共有されています。**特にFigmaリンクがある場合は、デザインを参照して実装してください。**
+
+${linksContext.join("\n\n---\n\n")}
+`);
+        } else {
+          parts.push(`## 共有されたリンク・ドキュメント
 以下のリンクがユーザーから共有されています。これらの内容を読んで、タスクを提案してください。
 
 ${linksContext.join("\n\n---\n\n")}
 `);
+        }
       }
     } else {
       console.log(`[Chat] No planning session found with chatSessionId=${session.id}`);

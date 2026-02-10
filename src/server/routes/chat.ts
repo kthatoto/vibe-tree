@@ -23,6 +23,13 @@ import type {
   ChatSummary,
   BranchNamingRule,
 } from "../../shared/types";
+import {
+  autoSummarizeIfNeeded,
+  buildCompactedContext,
+  shouldExternalize,
+  externalizeArtifact,
+  estimateTokens,
+} from "../services/context-compactor";
 
 export const chatRouter = new Hono();
 
@@ -766,9 +773,40 @@ chatRouter.post("/send", async (c) => {
     const status = code === 0 ? "success" : "failed";
 
     // Save structured content with chunks for all sessions
+    // Externalize large tool_results as artifacts
     let assistantContent: string;
     if (streamingChunks.length > 0) {
-      assistantContent = JSON.stringify({ chunks: streamingChunks });
+      const processedChunks = await Promise.all(
+        streamingChunks.map(async (chunk) => {
+          // Externalize large tool_results
+          if (chunk.type === "tool_result" && chunk.content && shouldExternalize(chunk.content)) {
+            try {
+              const artifactOptions: Parameters<typeof externalizeArtifact>[0] = {
+                sessionId: input.sessionId,
+                artifactType: "tool_result",
+                content: chunk.content,
+              };
+              if (assistantMsgId) {
+                artifactOptions.messageId = assistantMsgId;
+              }
+              const { refId, summary } = await externalizeArtifact(artifactOptions);
+              console.log(`[Chat] Externalized large tool_result as ${refId}`);
+              // Replace content with reference and summary
+              return {
+                ...chunk,
+                content: `[Artifact: ${refId}]\n${summary}`,
+                artifactRef: refId,
+              };
+            } catch (err) {
+              console.error(`[Chat] Failed to externalize artifact:`, err);
+              // Keep original content if externalization fails
+              return chunk;
+            }
+          }
+          return chunk;
+        })
+      );
+      assistantContent = JSON.stringify({ chunks: processedChunks });
     } else {
       assistantContent = accumulatedText.trim() || "Claude execution failed. Please try again.";
     }
@@ -838,6 +876,16 @@ chatRouter.post("/send", async (c) => {
               console.error(`[Chat] Failed to auto-link PR:`, err);
             }
           }
+        }
+
+        // Auto-summarize if context is getting large
+        try {
+          const { summarized } = await autoSummarizeIfNeeded(input.sessionId);
+          if (summarized) {
+            console.log(`[Chat] Auto-summarized session ${input.sessionId}`);
+          }
+        } catch (err) {
+          console.error(`[Chat] Auto-summarization failed:`, err);
         }
       }
     }
@@ -913,6 +961,88 @@ chatRouter.get("/streaming/:sessionId", async (c) => {
     isStreaming: !state.isComplete,
     runId: state.runId,
     chunks: state.chunks,
+  });
+});
+
+// GET /api/chat/artifacts/:refId - Get artifact content by reference ID
+chatRouter.get("/artifacts/:refId", async (c) => {
+  const refId = c.req.param("refId");
+
+  const [artifact] = await db
+    .select()
+    .from(schema.artifacts)
+    .where(eq(schema.artifacts.refId, refId))
+    .limit(1);
+
+  if (!artifact) {
+    throw new NotFoundError("Artifact not found");
+  }
+
+  return c.json({
+    refId: artifact.refId,
+    artifactType: artifact.artifactType,
+    content: artifact.content,
+    summary: artifact.summaryMarkdown,
+    tokenEstimate: artifact.tokenEstimate,
+    metadata: artifact.metadata ? JSON.parse(artifact.metadata) : null,
+    createdAt: artifact.createdAt,
+  });
+});
+
+// GET /api/chat/context-stats/:sessionId - Get context compression stats
+chatRouter.get("/context-stats/:sessionId", async (c) => {
+  const sessionId = c.req.param("sessionId");
+
+  // Get messages count
+  const messages = await db
+    .select()
+    .from(schema.chatMessages)
+    .where(eq(schema.chatMessages.sessionId, sessionId));
+
+  // Get summaries
+  const summaries = await db
+    .select()
+    .from(schema.chatSummaries)
+    .where(eq(schema.chatSummaries.sessionId, sessionId))
+    .orderBy(desc(schema.chatSummaries.createdAt));
+
+  // Get artifacts for this session
+  const artifacts = await db
+    .select()
+    .from(schema.artifacts)
+    .where(eq(schema.artifacts.sessionId, sessionId));
+
+  // Calculate stats
+  const latestSummary = summaries[0];
+  const coveredMessages = latestSummary
+    ? messages.filter((m) => m.id <= latestSummary.coveredUntilMessageId).length
+    : 0;
+  const uncoveredMessages = messages.length - coveredMessages;
+
+  let totalRawTokens = 0;
+  for (const msg of messages) {
+    totalRawTokens += estimateTokens(msg.content);
+  }
+
+  let artifactsTokensSaved = 0;
+  for (const artifact of artifacts) {
+    artifactsTokensSaved += (artifact.tokenEstimate ?? 0) - estimateTokens(artifact.summaryMarkdown ?? "");
+  }
+
+  return c.json({
+    messageCount: messages.length,
+    coveredMessages,
+    uncoveredMessages,
+    summaryCount: summaries.length,
+    artifactCount: artifacts.length,
+    totalRawTokens,
+    artifactsTokensSaved,
+    latestSummary: latestSummary
+      ? {
+          coveredUntilMessageId: latestSummary.coveredUntilMessageId,
+          createdAt: latestSummary.createdAt,
+        }
+      : null,
   });
 });
 
@@ -1528,34 +1658,41 @@ ${plans[0].contentMd}
     }
   }
 
-  // 5. Memory: Latest summary + recent messages
-  const summaries = await db
-    .select()
-    .from(schema.chatSummaries)
-    .where(eq(schema.chatSummaries.sessionId, session.id))
-    .orderBy(desc(schema.chatSummaries.createdAt))
-    .limit(1);
+  // 5. Memory: Compacted context (summary + recent messages)
+  const { summary, recentMessages, totalTokens } = await buildCompactedContext(session.id);
 
-  if (summaries[0]) {
+  if (summary) {
     parts.push(`## Previous Conversation Summary
-${summaries[0].summaryMarkdown}
+${summary}
 `);
   }
 
-  // Get recent messages (last 20)
-  const messages = await db
-    .select()
-    .from(schema.chatMessages)
-    .where(eq(schema.chatMessages.sessionId, session.id))
-    .orderBy(desc(schema.chatMessages.createdAt))
-    .limit(20);
+  if (recentMessages.length > 0) {
+    // Parse and format recent messages
+    const formattedMessages = recentMessages.map((m) => {
+      let content = m.content;
+      // Parse JSON content for assistant messages
+      try {
+        const parsed = JSON.parse(m.content);
+        if (parsed.chunks) {
+          content = parsed.chunks
+            .filter((c: { type: string }) => c.type === "text")
+            .map((c: { content: string }) => c.content || "")
+            .join("");
+        }
+      } catch {
+        // Plain text
+      }
+      return `**${m.role}**: ${content.slice(0, 500)}${content.length > 500 ? "..." : ""}`;
+    });
 
-  if (messages.length > 0) {
-    const recentMsgs = messages.reverse(); // Oldest first
     parts.push(`## Recent Conversation
-${recentMsgs.map((m) => `**${m.role}**: ${m.content.slice(0, 500)}${m.content.length > 500 ? "..." : ""}`).join("\n\n")}
+${formattedMessages.join("\n\n")}
 `);
   }
+
+  // Log context size for monitoring
+  console.log(`[Chat] Context tokens estimate: ${totalTokens}`);
 
   // 6. Context and Mode-specific prompts
   if (context) {

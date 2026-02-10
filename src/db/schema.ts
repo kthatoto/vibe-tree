@@ -267,3 +267,67 @@ export const branchLinks = sqliteTable("branch_links", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+// ============================================================
+// Conversation Compact System Tables
+// ============================================================
+
+// Chat segments (会話のセグメント管理 - サブセッション的な単位)
+export const chatSegments = sqliteTable("chat_segments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  sessionId: text("session_id")
+    .notNull()
+    .references(() => chatSessions.id),
+  segmentIndex: integer("segment_index").notNull(), // 0, 1, 2, ...
+  startMessageId: integer("start_message_id").notNull(), // このセグメントの最初のメッセージID
+  endMessageId: integer("end_message_id"), // このセグメントの最後のメッセージID (null = 現在進行中)
+  summaryMarkdown: text("summary_markdown"), // セグメント完了時の要約
+  tokenEstimate: integer("token_estimate"), // 推定トークン数
+  status: text("status").notNull().default("active"), // 'active' | 'summarized'
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// Artifacts (大きなtool_resultや外部コンテンツの外部化)
+export const artifacts = sqliteTable("artifacts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  sessionId: text("session_id").references(() => chatSessions.id),
+  messageId: integer("message_id").references(() => chatMessages.id),
+  artifactType: text("artifact_type").notNull(), // 'tool_result' | 'figma_design' | 'file_content' | 'code_block'
+  refId: text("ref_id").notNull().unique(), // "artifact_xxx" 形式の参照ID
+  contentHash: text("content_hash"), // コンテンツのハッシュ (重複排除用)
+  content: text("content").notNull(), // 実際のコンテンツ
+  summaryMarkdown: text("summary_markdown"), // コンテンツの要約 (プロンプト用)
+  tokenEstimate: integer("token_estimate"), // 推定トークン数
+  metadata: text("metadata"), // JSON: { toolName, sourceUrl, etc. }
+  createdAt: text("created_at").notNull(),
+});
+
+// Figma snapshots (Figmaデザインのスナップショット - 2段階取得用)
+export const figmaSnapshots = sqliteTable("figma_snapshots", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  externalLinkId: integer("external_link_id")
+    .notNull()
+    .references(() => externalLinks.id),
+  fileKey: text("file_key").notNull(), // Figma file key
+  nodeId: text("node_id"), // specific node ID (null = entire file)
+  snapshotType: text("snapshot_type").notNull(), // 'metadata' | 'design_context' | 'image'
+  content: text("content").notNull(), // JSON or base64
+  version: text("version"), // Figma file version
+  fetchedAt: text("fetched_at").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+// Context snapshots (プロンプト構築時のコンテキストスナップショット - デバッグ/分析用)
+export const contextSnapshots = sqliteTable("context_snapshots", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  sessionId: text("session_id")
+    .notNull()
+    .references(() => chatSessions.id),
+  messageId: integer("message_id").references(() => chatMessages.id),
+  promptTokens: integer("prompt_tokens"), // 実際のトークン数
+  includedSegments: text("included_segments"), // JSON: [segmentId, ...]
+  includedArtifacts: text("included_artifacts"), // JSON: [artifactRefId, ...]
+  compressionRatio: integer("compression_ratio"), // 圧縮率 (%)
+  createdAt: text("created_at").notNull(),
+});

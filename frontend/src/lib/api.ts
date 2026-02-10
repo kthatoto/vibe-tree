@@ -694,6 +694,34 @@ export const api = {
       }>;
     }>(`${API_BASE}/chat/streaming/${sessionId}`),
 
+  // Get artifact by reference ID
+  getArtifact: (refId: string) =>
+    fetchJson<{
+      refId: string;
+      artifactType: string;
+      content: string;
+      summary: string | null;
+      tokenEstimate: number | null;
+      metadata: Record<string, unknown> | null;
+      createdAt: string;
+    }>(`${API_BASE}/chat/artifacts/${refId}`),
+
+  // Get context compression stats
+  getContextStats: (sessionId: string) =>
+    fetchJson<{
+      messageCount: number;
+      coveredMessages: number;
+      uncoveredMessages: number;
+      summaryCount: number;
+      artifactCount: number;
+      totalRawTokens: number;
+      artifactsTokensSaved: number;
+      latestSummary: {
+        coveredUntilMessageId: number;
+        createdAt: string;
+      } | null;
+    }>(`${API_BASE}/chat/context-stats/${sessionId}`),
+
   // Terminal
   createTerminalSession: (repoId: string, worktreePath: string) =>
     fetchJson<TerminalSession>(`${API_BASE}/term/sessions`, {

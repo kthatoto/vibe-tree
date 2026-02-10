@@ -1276,6 +1276,12 @@ vibe-treeのMCPツールを使用してください（ToolSearchは不要、直�
 - ❌ ToolSearchを使う（直接呼び出し可能）
 - ❌ 途中で止まる・確認を求める
 - ❌ \`set_focused_branch\`を呼ばずにブランチを処理する
+
+---
+【リマインダー】これを常に意識すること：
+1. ツールは1つずつ直列で呼ぶ
+2. 各ブランチで set_focused_branch を最初に呼ぶ
+3. 全ブランチ完了まで止まらない
 `;
 
 // Execute session system prompt (for Execute sessions)
@@ -1346,25 +1352,51 @@ get_current_context で現在のブランチ・ToDo・質問を確認
 
 ---
 
-## 重要なルール
+## 重要なルール【厳守】
 
-1. **ToDo更新は必須**
+1. **直列作業（1つずつ順番に）**
+   - ToDoは必ず上から順番に1つずつ完了させる
+   - 1つのToDoが完全に終わるまで次に進まない
+   - 並列作業は禁止
+
+2. **ToDo更新は必須**
    - 作業開始時: \`update_todo(id, "in_progress")\`
    - 作業完了時: \`complete_todo(id)\`
    - UIでユーザーが進捗を確認できるようにする
 
-2. **疑問点は記録する**
+3. **コミットとプッシュ**
+   - 各ToDo完了時: 必ず \`git commit\` する
+   - ブランチ完了時: 必ず \`git push\` してからmark_branch_completeを呼ぶ
+   - コミットメッセージは英語で簡潔に
+
+4. **ブランチ順序を守る**
+   - executeBranchesの順番通りに作業する
+   - 勝手にブランチを飛ばさない
+   - mark_branch_completeで次に自動進行
+
+5. **疑問点は記録する**
    - \`add_question\`で質問を記録（assumptionも記載）
    - ユーザーの回答を待たずにassumptionに基づいて作業を続行
    - 回答があれば次回の作業で反映
 
-3. **ブランチ完了を明示**
+6. **ブランチ完了を明示**
    - 全ToDoが終わったら必ず\`mark_branch_complete\`を呼ぶ
+   - **注意**: 未完了ToDoがあるとエラーになる
    - これによりUIの進捗表示が更新される
 
 ## 禁止事項
 - ❌ ToDoを更新せずに作業を終える
+- ❌ ToDoを飛ばして次に進む
+- ❌ コミット・プッシュせずにブランチを完了する
 - ❌ ToolSearchを使う（直接呼び出し可能）
+- ❌ ブランチを順番通りに進めない
+
+---
+【リマインダー】各作業で必ず確認すること：
+1. ToDoは1つずつ順番に（直列）
+2. 完了時: update_todo → git commit
+3. ブランチ完了時: git push → mark_branch_complete
+4. 全ToDo完了前にmark_branch_completeを呼ばない
 `;
 
 // Helper: Build prompt with full context
@@ -1832,9 +1864,28 @@ gh pr create --base ${parentBranch} --title "PR タイトル" --body "PR の説�
     }
   }
 
-  // 7. User message
-  parts.push(`## User Request
+  // 7. User message with reminder for Execute sessions
+  if (isExecuteSession) {
+    parts.push(`## 作業前の確認【毎回チェック】
+- [ ] ToDoは1つずつ直列で処理しているか
+- [ ] 現在のToDoを in_progress にしたか
+- [ ] 完了したToDoは complete_todo → git commit したか
+- [ ] ブランチ完了時は git push → mark_branch_complete の順か
+
+## User Request
 ${userMessage}`);
+  } else if (isInstructionReviewSession) {
+    parts.push(`## 作業前の確認【毎回チェック】
+- [ ] ツールは1つずつ直列で呼んでいるか
+- [ ] 各ブランチで最初に set_focused_branch を呼んだか
+- [ ] 全ブランチ完了まで止まらずに続けているか
+
+## User Request
+${userMessage}`);
+  } else {
+    parts.push(`## User Request
+${userMessage}`);
+  }
 
   return parts.join("\n");
 }

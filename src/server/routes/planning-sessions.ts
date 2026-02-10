@@ -773,7 +773,7 @@ planningSessionsRouter.post("/:id/generate-title", async (c) => {
     .limit(10); // Get first 10 messages max for title generation
 
   if (messages.length === 0) {
-    return c.json({ title: session.title, updated: false });
+    return c.json({ title: session.title || "Untitled Session", updated: false });
   }
 
   // Build conversation summary for title generation
@@ -798,7 +798,7 @@ planningSessionsRouter.post("/:id/generate-title", async (c) => {
 
   // Determine if we should be conservative about changes
   const isConservative = messageCount > 6;
-  const currentTitle = session.title;
+  const currentTitle = session.title || "Untitled Session";
 
   // Build prompt
   let prompt: string;

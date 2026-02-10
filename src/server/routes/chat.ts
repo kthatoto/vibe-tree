@@ -1440,7 +1440,7 @@ async function buildPrompt(
       .where(eq(schema.planningSessions.id, planningSessionId));
     planningSessionData = planningSession ?? null;
     // Use type property if available, fall back to title-based detection for legacy data
-    if (planningSession?.type === "planning" || planningSession?.title.startsWith("Planning:")) {
+    if (planningSession?.type === "planning" || planningSession?.title?.startsWith("Planning:")) {
       isInstructionReviewSession = true;
     } else if (planningSession?.type === "execute") {
       isExecuteSession = true;

@@ -223,7 +223,7 @@ scanRouter.post("/", async (c) => {
     );
 
   for (const session of confirmedSessions) {
-    console.log(`[Scan] Processing confirmed session: ${session.id}, title: ${session.title}`);
+    console.log(`[Scan] Processing confirmed session: ${session.id}, title: ${session.title || "Untitled"}`);
     const sessionNodes = JSON.parse(session.nodesJson) as Array<{
       id: string;
       title: string;

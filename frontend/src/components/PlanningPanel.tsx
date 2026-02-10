@@ -565,11 +565,21 @@ export function PlanningPanel({
 
     const unsubUpdated = wsClient.on("planning.updated", (msg) => {
       if (msg.data && typeof msg.data === "object" && "id" in msg.data) {
-        const updated = msg.data as PlanningSession;
-        setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+        const updated = msg.data as Partial<PlanningSession> & { id: string };
+        setSessions((prev) => prev.map((s) => {
+          if (s.id === updated.id) {
+            // Merge updated fields with existing session (preserve nodes/edges if not in update)
+            return { ...s, ...updated, nodes: updated.nodes ?? s.nodes, edges: updated.edges ?? s.edges };
+          }
+          return s;
+        }));
         if (activeTabId === updated.id) {
-          onSessionSelect?.(updated);
-          onTasksChange?.(updated.nodes, updated.edges);
+          const existing = sessions.find(s => s.id === updated.id);
+          if (existing) {
+            const merged = { ...existing, ...updated, nodes: updated.nodes ?? existing.nodes, edges: updated.edges ?? existing.edges };
+            onSessionSelect?.(merged as PlanningSession);
+            onTasksChange?.(merged.nodes, merged.edges);
+          }
         }
       }
     });

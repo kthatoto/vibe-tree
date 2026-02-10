@@ -189,15 +189,7 @@ export function switchBranch(input: SwitchBranchInput): SwitchBranchOutput {
 export function markBranchComplete(
   input: MarkBranchCompleteInput
 ): SwitchBranchOutput {
-  // For now, marking complete just advances to the next branch
-  if (input.autoAdvance) {
-    return switchBranch({
-      planningSessionId: input.planningSessionId,
-      direction: "next",
-    });
-  }
-
-  // If not auto-advancing, just return current state
+  const db = getDb();
   const session = getSession(input.planningSessionId);
   if (!session) {
     throw new Error(`Planning session not found: ${input.planningSessionId}`);
@@ -207,7 +199,43 @@ export function markBranchComplete(
     ? (JSON.parse(session.execute_branches_json) as string[])
     : [];
   const currentIndex = session.current_execute_index ?? 0;
+  const currentBranch = executeBranches[currentIndex];
 
+  if (!currentBranch) {
+    throw new Error("No current branch to mark complete");
+  }
+
+  // Check if all todos are completed for this branch
+  const incompleteTodos = db
+    .prepare(
+      `SELECT id, title, status FROM task_todos
+       WHERE repo_id = ? AND branch_name = ? AND status != 'completed'`
+    )
+    .all(session.repo_id, currentBranch) as Array<{
+    id: number;
+    title: string;
+    status: string;
+  }>;
+
+  if (incompleteTodos.length > 0) {
+    const todoList = incompleteTodos
+      .map((t) => `- [${t.status}] ${t.title} (id: ${t.id})`)
+      .join("\n");
+    throw new Error(
+      `Cannot mark branch complete: ${incompleteTodos.length} incomplete ToDo(s) remain.\n\n` +
+        `Please complete these ToDos first using complete_todo or update_todo:\n${todoList}`
+    );
+  }
+
+  // All todos complete, proceed with advancement
+  if (input.autoAdvance) {
+    return switchBranch({
+      planningSessionId: input.planningSessionId,
+      direction: "next",
+    });
+  }
+
+  // If not auto-advancing, just return current state
   return {
     success: true,
     currentBranch: executeBranches[currentIndex] ?? null,

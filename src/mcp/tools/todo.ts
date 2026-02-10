@@ -54,7 +54,7 @@ export const addTodoSchema = z.object({
 });
 
 export const updateTodoSchema = z.object({
-  todoId: z.number().describe("Todo ID"),
+  todoId: z.coerce.number().describe("Todo ID"),
   title: z.string().optional().describe("New title"),
   description: z.string().optional().describe("New description"),
   status: z
@@ -64,11 +64,11 @@ export const updateTodoSchema = z.object({
 });
 
 export const completeTodoSchema = z.object({
-  todoId: z.number().describe("Todo ID to mark as completed"),
+  todoId: z.coerce.number().describe("Todo ID to mark as completed"),
 });
 
 export const deleteTodoSchema = z.object({
-  todoId: z.number().describe("Todo ID to delete"),
+  todoId: z.coerce.number().describe("Todo ID to delete"),
 });
 
 export type AddTodoInput = z.infer<typeof addTodoSchema>;

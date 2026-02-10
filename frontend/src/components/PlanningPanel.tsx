@@ -722,8 +722,9 @@ export function PlanningPanel({
   }, [selectedSession?.chatSessionId, selectedSession?.type]);
 
   // Handle branch switch events from MCP server (set_focused_branch, switch_branch)
+  // Handle task advancement for both Planning and Execute sessions
   useEffect(() => {
-    if (!selectedSession || selectedSession.type !== "planning") {
+    if (!selectedSession || (selectedSession.type !== "planning" && selectedSession.type !== "execute")) {
       return;
     }
 
@@ -731,8 +732,11 @@ export function PlanningPanel({
       const data = msg.data as { id: string; newIndex?: number; currentExecuteIndex?: number };
       if (data.id === selectedSession.id) {
         const newIndex = data.newIndex ?? data.currentExecuteIndex ?? 0;
-        setPlanningCurrentBranchIndex(newIndex);
-        // Also update the session in the list
+        // Update local state for Planning sessions
+        if (selectedSession.type === "planning") {
+          setPlanningCurrentBranchIndex(newIndex);
+        }
+        // Update the session in the list (for both Planning and Execute)
         setSessions((prev) =>
           prev.map((s) =>
             s.id === selectedSession.id

@@ -175,6 +175,7 @@ export function ChatPanel({
     const unsubStart = wsClient.on("chat.streaming.start", (msg) => {
       const data = msg.data as { sessionId: string };
       if (data.sessionId === sessionId) {
+        setLoading(true);
         setStreamingChunks([]);
         streamingChunksRef.current = [];
         hasStreamingChunksRef.current = false;

@@ -631,15 +631,9 @@ export function PlanningPanel({
       const currentCount = (messageCountRef.current.get(selectedSession.id) || 0) + 1;
       messageCountRef.current.set(selectedSession.id, currentCount);
 
-      // Title generation
-      const isDefaultTitle =
-        selectedSession.title === "Untitled Session" ||
-        selectedSession.title.startsWith("New ") ||
-        selectedSession.title.startsWith("Planning:") ||
-        selectedSession.title.startsWith("Refinement:") ||
-        selectedSession.title.startsWith("Execute:");
-
-      const shouldUpdateTitle = currentCount <= 6 || isDefaultTitle;
+      // Title generation - update if untitled (null) or within first 6 messages
+      const isUntitled = !selectedSession.title;
+      const shouldUpdateTitle = currentCount <= 6 || isUntitled;
       if (shouldUpdateTitle) {
         try {
           const result = await api.generateSessionTitle(selectedSession.id, currentCount);
@@ -1707,8 +1701,8 @@ export function PlanningPanel({
                 {isThinking && <span className="planning-panel__session-thinking" />}
                 {hasUnread && <span className="planning-panel__session-unread" />}
               </div>
-              <div className="planning-panel__session-title">
-                {session.title}
+              <div className={`planning-panel__session-title${!session.title ? " planning-panel__session-title--untitled" : ""}`}>
+                {session.title || "Untitled Session"}
               </div>
               <div className="planning-panel__session-base">
                 {session.baseBranch}
@@ -1772,7 +1766,9 @@ export function PlanningPanel({
             <span className={`planning-panel__execute-status planning-panel__execute-status--${executeStatus}`}>
               {executeStatusLabel}
             </span>
-            <span className="planning-panel__header-title">{selectedSession.title}</span>
+            <span className={`planning-panel__header-title${!selectedSession.title ? " planning-panel__header-title--untitled" : ""}`}>
+              {selectedSession.title || "Untitled Session"}
+            </span>
             {executeEditMode ? (
               <>
                 <button
@@ -1920,7 +1916,9 @@ export function PlanningPanel({
             <span className={`planning-panel__execute-status planning-panel__execute-status--${planningStatus}`}>
               {planningStatusLabel}
             </span>
-            <span className="planning-panel__header-title">{selectedSession.title}</span>
+            <span className={`planning-panel__header-title${!selectedSession.title ? " planning-panel__header-title--untitled" : ""}`}>
+              {selectedSession.title || "Untitled Session"}
+            </span>
             {hasBranches && selectedSession.status !== "confirmed" && (
               <button
                 className="planning-panel__finalize-btn"
@@ -2200,7 +2198,9 @@ export function PlanningPanel({
           <span className={`planning-panel__execute-status planning-panel__execute-status--${refinementStatus}`}>
             {refinementStatusLabel}
           </span>
-          <span className="planning-panel__header-title">{selectedSession.title}</span>
+          <span className={`planning-panel__header-title${!selectedSession.title ? " planning-panel__header-title--untitled" : ""}`}>
+            {selectedSession.title || "Untitled Session"}
+          </span>
           <button
             className="planning-panel__delete-btn"
             onClick={handleDelete}

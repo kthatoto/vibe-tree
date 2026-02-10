@@ -424,6 +424,11 @@
   white-space: nowrap;
 }
 
+.planning-panel__session-title--untitled {
+  color: #6b7280;
+  font-style: italic;
+}
+
 .planning-panel__session-meta {
   display: flex;
   gap: 8px;
@@ -1787,6 +1792,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.planning-panel__header-title--untitled {
+  color: #6b7280;
+  font-style: italic;
 }
 
 .planning-panel__edit-btn {

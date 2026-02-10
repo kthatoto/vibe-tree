@@ -134,12 +134,20 @@ planningSessionsRouter.post("/", async (c) => {
   const sessionId = randomUUID();
   const chatSessionId = randomUUID();
 
+  // Generate default title based on type if not provided
+  const sessionType = type || "refinement";
+  let defaultTitle = "Untitled Session";
+  if (!title) {
+    const typeLabel = sessionType === "refinement" ? "Refinement" : sessionType === "planning" ? "Planning" : "Execute";
+    defaultTitle = `${typeLabel}: ${baseBranch}`;
+  }
+
   // Create planning session
   await db.insert(schema.planningSessions).values({
     id: sessionId,
     repoId,
-    title: title || "Untitled Session",
-    type: type || "refinement",
+    title: title || defaultTitle,
+    type: sessionType,
     baseBranch,
     status: "draft",
     nodesJson: "[]",

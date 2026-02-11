@@ -1,4 +1,4 @@
-import type { BranchLink } from "../lib/api";
+import type { BranchLink, InstructionConfirmationStatus } from "../lib/api";
 import { getResourceIcon } from "../lib/resourceIcons";
 import "./ExecuteBranchTree.css";
 
@@ -27,6 +27,7 @@ interface ExecuteBranchTreeProps {
   branchQuestionCounts?: Map<string, QuestionCounts>;
   branchLinks?: Map<string, BranchLink[]>;
   branchResourceCounts?: Map<string, ResourceCounts>;
+  branchInstructionStatus?: Map<string, InstructionConfirmationStatus>;
   showCompletionCount?: boolean;
   onRefresh?: () => void;
   isRefreshing?: boolean;
@@ -44,6 +45,7 @@ export function ExecuteBranchTree({
   branchQuestionCounts = new Map(),
   branchLinks = new Map(),
   branchResourceCounts = new Map(),
+  branchInstructionStatus = new Map(),
   showCompletionCount = true,
   onRefresh,
   isRefreshing = false,
@@ -94,6 +96,7 @@ export function ExecuteBranchTree({
           const todoCount = branchTodoCounts.get(branch);
           const questionCount = branchQuestionCounts.get(branch);
           const resourceCount = branchResourceCounts.get(branch);
+          const instructionStatus = branchInstructionStatus.get(branch);
           const links = branchLinks.get(branch) || [];
           const prLink = links.find(l => l.linkType === "pr");
           const hasTodos = todoCount && todoCount.total > 0;
@@ -103,6 +106,7 @@ export function ExecuteBranchTree({
           const hasNotion = resourceCount && resourceCount.notion > 0;
           const hasOtherResources = resourceCount && (resourceCount.other > 0 || resourceCount.files > 0);
           const hasPR = !!prLink;
+          const hasInstructionStatus = instructionStatus && instructionStatus !== "unconfirmed";
 
           return (
             <div
@@ -124,8 +128,8 @@ export function ExecuteBranchTree({
                   </span>
                 )}
               </div>
-              {/* Row 2: All badges (PR, Issue, ToDo, Question, Resources) */}
-              {(hasPR || hasTodos || hasQuestions || hasFigma || hasGithubIssue || hasNotion || hasOtherResources) && (
+              {/* Row 2: All badges (PR, Issue, ToDo, Question, Resources, Instruction Status) */}
+              {(hasPR || hasTodos || hasQuestions || hasFigma || hasGithubIssue || hasNotion || hasOtherResources || hasInstructionStatus) && (
                 <div className="execute-branch-tree__badges-row">
                   {/* PR badge */}
                   {hasPR && (
@@ -219,6 +223,19 @@ export function ExecuteBranchTree({
                           <span className="execute-branch-tree__link-count">{(resourceCount?.other || 0) + (resourceCount?.files || 0)}</span>
                         </span>
                       )}
+                    </span>
+                  )}
+                  {/* Instruction confirmation status */}
+                  {hasInstructionStatus && (
+                    <span
+                      className={`execute-branch-tree__badge execute-branch-tree__badge--instruction execute-branch-tree__badge--instruction-${instructionStatus}`}
+                      title={
+                        instructionStatus === "confirmed"
+                          ? "Instruction confirmed"
+                          : "Instruction changed since confirmation"
+                      }
+                    >
+                      {instructionStatus === "confirmed" ? "✓" : "⚠"}
                     </span>
                   )}
                 </div>

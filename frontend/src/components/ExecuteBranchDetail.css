@@ -184,6 +184,7 @@
 .execute-branch-detail__instruction-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 4px;
 }
 
@@ -192,8 +193,61 @@
   font-size: 12px;
   font-weight: 600;
   color: #888;
-  
+
   letter-spacing: 0.5px;
+}
+
+.execute-branch-detail__confirm-btn {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+}
+
+/* Unconfirmed state - subtle gray button */
+.execute-branch-detail__confirm-btn--unconfirmed {
+  background: #333;
+  border: 1px solid #444;
+  color: #888;
+}
+
+.execute-branch-detail__confirm-btn--unconfirmed:hover:not(:disabled) {
+  background: #444;
+  border-color: #555;
+  color: #ccc;
+}
+
+/* Confirmed state - green with check */
+.execute-branch-detail__confirm-btn--confirmed {
+  background: #22c55e22;
+  border: 1px solid #22c55e44;
+  color: #4ade80;
+}
+
+.execute-branch-detail__confirm-btn--confirmed:hover:not(:disabled) {
+  background: #22c55e33;
+  border-color: #22c55e66;
+  color: #86efac;
+}
+
+/* Changed state - orange warning */
+.execute-branch-detail__confirm-btn--changed {
+  background: #f59e0b22;
+  border: 1px solid #f59e0b55;
+  color: #fbbf24;
+}
+
+.execute-branch-detail__confirm-btn--changed:hover:not(:disabled) {
+  background: #f59e0b33;
+  border-color: #f59e0b77;
+  color: #fcd34d;
+}
+
+.execute-branch-detail__confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .execute-branch-detail__instruction-content {

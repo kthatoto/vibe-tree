@@ -239,6 +239,7 @@ export default function TreeDashboard() {
           taskId: null,
           branchName,
           instructionMd: "",
+          confirmationStatus: "unconfirmed",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };

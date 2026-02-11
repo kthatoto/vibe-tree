@@ -3,12 +3,18 @@ import { db, schema } from "../../db";
 import { eq, desc, and } from "drizzle-orm";
 import { broadcast } from "../ws";
 import { z } from "zod";
+import crypto from "crypto";
 import {
   repoIdQuerySchema,
   logInstructionSchema,
   validateOrThrow,
 } from "../../shared/validation";
 import { BadRequestError } from "../middleware/error-handler";
+
+// Helper to compute content hash for instruction comparison
+function computeContentHash(content: string): string {
+  return crypto.createHash("sha256").update(content).digest("hex").slice(0, 16);
+}
 
 export const instructionsRouter = new Hono();
 
@@ -74,6 +80,22 @@ const updateTaskInstructionSchema = z.object({
   instructionMd: z.string(),
 });
 
+// Helper to compute confirmation status
+function getConfirmationStatus(instruction: {
+  instructionMd: string;
+  confirmedAt: string | null;
+  confirmedContentHash: string | null;
+}): "unconfirmed" | "confirmed" | "changed" {
+  if (!instruction.confirmedAt || !instruction.confirmedContentHash) {
+    return "unconfirmed";
+  }
+  const currentHash = computeContentHash(instruction.instructionMd);
+  if (currentHash !== instruction.confirmedContentHash) {
+    return "changed";
+  }
+  return "confirmed";
+}
+
 // GET /api/instructions/task?repoId=...&branchName=...
 instructionsRouter.get("/task", async (c) => {
   const query = validateOrThrow(taskInstructionQuerySchema, {
@@ -100,10 +122,16 @@ instructionsRouter.get("/task", async (c) => {
       branchName: query.branchName,
       instructionMd: "",
       taskId: null,
+      confirmedAt: null,
+      confirmedContentHash: null,
+      confirmationStatus: "unconfirmed" as const,
     });
   }
 
-  return c.json(instruction);
+  return c.json({
+    ...instruction,
+    confirmationStatus: getConfirmationStatus(instruction),
+  });
 });
 
 // PATCH /api/instructions/task - Update or create task instruction
@@ -142,10 +170,10 @@ instructionsRouter.patch("/task", async (c) => {
     broadcast({
       type: "taskInstruction.updated",
       repoId: input.repoId,
-      data: updated,
+      data: { ...updated, confirmationStatus: getConfirmationStatus(updated) },
     });
 
-    return c.json(updated);
+    return c.json({ ...updated, confirmationStatus: getConfirmationStatus(updated) });
   } else {
     // Create new
     const result = await db
@@ -168,9 +196,105 @@ instructionsRouter.patch("/task", async (c) => {
     broadcast({
       type: "taskInstruction.created",
       repoId: input.repoId,
-      data: created,
+      data: { ...created, confirmationStatus: "unconfirmed" as const },
     });
 
-    return c.json(created, 201);
+    return c.json({ ...created, confirmationStatus: "unconfirmed" as const }, 201);
   }
+});
+
+// Confirm instruction schema
+const confirmInstructionSchema = z.object({
+  repoId: z.string().min(1),
+  branchName: z.string().min(1),
+});
+
+// POST /api/instructions/task/confirm - Confirm instruction
+instructionsRouter.post("/task/confirm", async (c) => {
+  const body = await c.req.json();
+  const input = validateOrThrow(confirmInstructionSchema, body);
+  const now = new Date().toISOString();
+
+  const [existing] = await db
+    .select()
+    .from(schema.taskInstructions)
+    .where(
+      and(
+        eq(schema.taskInstructions.repoId, input.repoId),
+        eq(schema.taskInstructions.branchName, input.branchName)
+      )
+    )
+    .limit(1);
+
+  if (!existing) {
+    throw new BadRequestError("Task instruction not found");
+  }
+
+  const contentHash = computeContentHash(existing.instructionMd);
+
+  await db
+    .update(schema.taskInstructions)
+    .set({
+      confirmedAt: now,
+      confirmedContentHash: contentHash,
+      updatedAt: now,
+    })
+    .where(eq(schema.taskInstructions.id, existing.id));
+
+  const [updated] = await db
+    .select()
+    .from(schema.taskInstructions)
+    .where(eq(schema.taskInstructions.id, existing.id));
+
+  broadcast({
+    type: "taskInstruction.confirmed",
+    repoId: input.repoId,
+    data: { ...updated, confirmationStatus: "confirmed" as const },
+  });
+
+  return c.json({ ...updated, confirmationStatus: "confirmed" as const });
+});
+
+// POST /api/instructions/task/unconfirm - Unconfirm instruction
+instructionsRouter.post("/task/unconfirm", async (c) => {
+  const body = await c.req.json();
+  const input = validateOrThrow(confirmInstructionSchema, body);
+  const now = new Date().toISOString();
+
+  const [existing] = await db
+    .select()
+    .from(schema.taskInstructions)
+    .where(
+      and(
+        eq(schema.taskInstructions.repoId, input.repoId),
+        eq(schema.taskInstructions.branchName, input.branchName)
+      )
+    )
+    .limit(1);
+
+  if (!existing) {
+    throw new BadRequestError("Task instruction not found");
+  }
+
+  await db
+    .update(schema.taskInstructions)
+    .set({
+      confirmedAt: null,
+      confirmedContentHash: null,
+      updatedAt: now,
+    })
+    .where(eq(schema.taskInstructions.id, existing.id));
+
+  const [updated] = await db
+    .select()
+    .from(schema.taskInstructions)
+    .where(eq(schema.taskInstructions.id, existing.id));
+
+  broadcast({
+    type: "taskInstruction.unconfirmed",
+    repoId: input.repoId,
+    data: { ...updated, confirmationStatus: "unconfirmed" as const },
+  });
+
+  return c.json({ ...updated, confirmationStatus: "unconfirmed" as const });
 });

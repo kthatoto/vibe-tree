@@ -327,7 +327,11 @@ export type WSMessageType =
   | "agent.finished"
   | "agent.stopped"
   | "agent.output"
-  | "chat.message";
+  | "chat.message"
+  | "taskInstruction.created"
+  | "taskInstruction.updated"
+  | "taskInstruction.confirmed"
+  | "taskInstruction.unconfirmed";
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;

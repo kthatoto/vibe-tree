@@ -324,6 +324,8 @@ export interface PlanningSession {
 }
 
 // Task Instruction types
+export type InstructionConfirmationStatus = "unconfirmed" | "confirmed" | "changed";
+
 export interface TaskInstruction {
   id: number | null;
   repoId: string;
@@ -331,6 +333,9 @@ export interface TaskInstruction {
   branchName: string | null;
   instructionMd: string;
   abstractedRules?: string | null;
+  confirmedAt?: string | null;
+  confirmedContentHash?: string | null;
+  confirmationStatus: InstructionConfirmationStatus;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -954,6 +959,16 @@ export const api = {
     fetchJson<TaskInstruction>(`${API_BASE}/instructions/task`, {
       method: "PATCH",
       body: JSON.stringify({ repoId, branchName, instructionMd }),
+    }),
+  confirmTaskInstruction: (repoId: string, branchName: string) =>
+    fetchJson<TaskInstruction>(`${API_BASE}/instructions/task/confirm`, {
+      method: "POST",
+      body: JSON.stringify({ repoId, branchName }),
+    }),
+  unconfirmTaskInstruction: (repoId: string, branchName: string) =>
+    fetchJson<TaskInstruction>(`${API_BASE}/instructions/task/unconfirm`, {
+      method: "POST",
+      body: JSON.stringify({ repoId, branchName }),
     }),
 
   // Worktree

@@ -353,3 +353,21 @@
   color: #9ca3af;
   font-size: 10px;
 }
+
+/* Instruction confirmation status badge */
+.execute-branch-tree__badge--instruction {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.execute-branch-tree__badge--instruction-confirmed {
+  color: #4ade80;
+  background: #22c55e22;
+}
+
+.execute-branch-tree__badge--instruction-changed {
+  color: #fbbf24;
+  background: #f59e0b22;
+}

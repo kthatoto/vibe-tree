@@ -201,6 +201,8 @@ export const taskInstructions = sqliteTable("task_instructions", {
   branchName: text("branch_name"),
   instructionMd: text("instruction_md").notNull(), // initial plan/instruction
   abstractedRules: text("abstracted_rules"), // JSON: extracted patterns/rules
+  confirmedAt: text("confirmed_at"), // ISO timestamp when user confirmed instruction
+  confirmedContentHash: text("confirmed_content_hash"), // hash of instructionMd at confirmation time
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

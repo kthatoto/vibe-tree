@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, type TaskTodo, type PlanningQuestion, type BranchLink, type BranchExternalLink, type BranchFile, type TaskInstruction, type GitHubLabel, type GitHubCheck } from "../lib/api";
+import { api, type TaskTodo, type PlanningQuestion, type BranchLink, type BranchExternalLink, type BranchFile, type TaskInstruction, type GitHubLabel, type GitHubCheck, type InstructionConfirmationStatus } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import { getResourceIcon } from "../lib/resourceIcons";
 import ExecuteBranchTree from "./ExecuteBranchTree";
@@ -50,12 +50,16 @@ export function ExecuteSidebar({
   // All branch resource counts (for tree badges)
   const [allResourceCounts, setAllResourceCounts] = useState<Map<string, { figma: number; githubIssue: number; notion: number; other: number; files: number }>>(new Map());
 
+  // All instruction confirmation statuses (for tree badges)
+  const [allInstructionStatuses, setAllInstructionStatuses] = useState<Map<string, InstructionConfirmationStatus>>(new Map());
+
   // Branch links and instruction for display branch
   const [branchLinks, setBranchLinks] = useState<BranchLink[]>([]);
   const [externalLinks, setExternalLinks] = useState<BranchExternalLink[]>([]);
   const [branchFiles, setBranchFiles] = useState<BranchFile[]>([]);
   const [instruction, setInstruction] = useState<TaskInstruction | null>(null);
   const [instructionLoading, setInstructionLoading] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   // Refresh state
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -200,6 +204,30 @@ export function ExecuteSidebar({
     });
   }, [repoId, executeBranches]);
 
+  // Load instruction confirmation statuses for all branches
+  useEffect(() => {
+    if (!repoId || executeBranches.length === 0) return;
+
+    const loadStatuses = async () => {
+      const statusMap = new Map<string, InstructionConfirmationStatus>();
+      await Promise.all(
+        executeBranches.map(async (branch) => {
+          try {
+            const inst = await api.getTaskInstruction(repoId, branch);
+            if (inst && inst.instructionMd) {
+              statusMap.set(branch, inst.confirmationStatus);
+            }
+          } catch {
+            // Ignore errors
+          }
+        })
+      );
+      setAllInstructionStatuses(statusMap);
+    };
+
+    loadStatuses();
+  }, [repoId, executeBranches]);
+
   // WebSocket updates for branch links
   useEffect(() => {
     if (!repoId || executeBranches.length === 0) return;
@@ -235,6 +263,43 @@ export function ExecuteSidebar({
       unsubUpdated();
     };
   }, [repoId, executeBranches]);
+
+  // WebSocket updates for instruction confirmation
+  useEffect(() => {
+    if (!repoId || executeBranches.length === 0) return;
+
+    const updateInstructionStatus = (data: TaskInstruction & { confirmationStatus: InstructionConfirmationStatus }) => {
+      if (data.branchName && executeBranches.includes(data.branchName)) {
+        setAllInstructionStatuses((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(data.branchName!, data.confirmationStatus);
+          return newMap;
+        });
+        // Also update local instruction if this is the display branch
+        if (data.branchName === displayBranch) {
+          setInstruction(data);
+        }
+      }
+    };
+
+    const unsubConfirmed = wsClient.on("taskInstruction.confirmed", (msg) => {
+      updateInstructionStatus(msg.data as TaskInstruction & { confirmationStatus: InstructionConfirmationStatus });
+    });
+
+    const unsubUnconfirmed = wsClient.on("taskInstruction.unconfirmed", (msg) => {
+      updateInstructionStatus(msg.data as TaskInstruction & { confirmationStatus: InstructionConfirmationStatus });
+    });
+
+    const unsubUpdated = wsClient.on("taskInstruction.updated", (msg) => {
+      updateInstructionStatus(msg.data as TaskInstruction & { confirmationStatus: InstructionConfirmationStatus });
+    });
+
+    return () => {
+      unsubConfirmed();
+      unsubUnconfirmed();
+      unsubUpdated();
+    };
+  }, [repoId, executeBranches, displayBranch]);
 
   // WebSocket updates for todos
   useEffect(() => {
@@ -425,6 +490,38 @@ export function ExecuteSidebar({
     }
   }, [previewBranch, executeBranches, onManualBranchSwitch]);
 
+  // Handle confirm/unconfirm toggle
+  const handleConfirmToggle = useCallback(async () => {
+    if (!instruction || !instruction.instructionMd || !displayBranch || confirming) return;
+
+    setConfirming(true);
+    try {
+      if (instruction.confirmationStatus === "confirmed") {
+        // Unconfirm
+        const updated = await api.unconfirmTaskInstruction(repoId, displayBranch);
+        setInstruction(updated);
+        setAllInstructionStatuses((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(displayBranch, updated.confirmationStatus);
+          return newMap;
+        });
+      } else {
+        // Confirm (both unconfirmed and changed states)
+        const updated = await api.confirmTaskInstruction(repoId, displayBranch);
+        setInstruction(updated);
+        setAllInstructionStatuses((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(displayBranch, updated.confirmationStatus);
+          return newMap;
+        });
+      }
+    } catch (err) {
+      console.error("Failed to toggle instruction confirmation:", err);
+    } finally {
+      setConfirming(false);
+    }
+  }, [instruction, confirming, repoId, displayBranch]);
+
   // Handle refresh all branch links
   const handleRefreshAll = useCallback(async () => {
     if (!repoId || executeBranches.length === 0 || isRefreshing) return;
@@ -484,6 +581,7 @@ export function ExecuteSidebar({
           branchQuestionCounts={branchQuestionCounts}
           branchLinks={allBranchLinks}
           branchResourceCounts={allResourceCounts}
+          branchInstructionStatus={allInstructionStatuses}
           onRefresh={handleRefreshAll}
           isRefreshing={isRefreshing}
           onExpandToggle={onExpandToggle}
@@ -767,11 +865,37 @@ export function ExecuteSidebar({
             {instructionLoading ? (
               <div className="planning-panel__instruction-loading">Loading...</div>
             ) : instruction?.instructionMd ? (
-              <div className="planning-panel__instruction-view">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {instruction.instructionMd}
-                </ReactMarkdown>
-              </div>
+              <>
+                <div className="execute-sidebar__instruction-header">
+                  <button
+                    className={`execute-sidebar__confirm-btn execute-sidebar__confirm-btn--${instruction.confirmationStatus}`}
+                    onClick={handleConfirmToggle}
+                    disabled={confirming}
+                    title={
+                      instruction.confirmationStatus === "confirmed"
+                        ? "Click to unconfirm"
+                        : instruction.confirmationStatus === "changed"
+                        ? "Instruction changed since last confirmation - click to re-confirm"
+                        : "Click to confirm instruction"
+                    }
+                  >
+                    {confirming ? (
+                      "..."
+                    ) : instruction.confirmationStatus === "confirmed" ? (
+                      <>✓ Confirmed</>
+                    ) : instruction.confirmationStatus === "changed" ? (
+                      <>⚠ Changed</>
+                    ) : (
+                      "Confirm"
+                    )}
+                  </button>
+                </div>
+                <div className="planning-panel__instruction-view">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {instruction.instructionMd}
+                  </ReactMarkdown>
+                </div>
+              </>
             ) : (
               <span className="planning-panel__instruction-empty">
                 No instruction set for this branch

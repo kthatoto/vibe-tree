@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, type BranchLink, type TaskInstruction } from "../lib/api";
@@ -21,6 +21,7 @@ export function ExecuteBranchDetail({
   const [links, setLinks] = useState<BranchLink[]>([]);
   const [instruction, setInstruction] = useState<TaskInstruction | null>(null);
   const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState(false);
 
   // Load branch links and instruction
   useEffect(() => {
@@ -50,10 +51,57 @@ export function ExecuteBranchDetail({
       }
     });
 
+    // Subscribe to instruction updates
+    const unsubInstructionUpdated = wsClient.on("taskInstruction.updated", (msg) => {
+      const data = msg.data as TaskInstruction & { branchName: string };
+      if (data.branchName === branchName) {
+        setInstruction(data);
+      }
+    });
+
+    const unsubInstructionConfirmed = wsClient.on("taskInstruction.confirmed", (msg) => {
+      const data = msg.data as TaskInstruction & { branchName: string };
+      if (data.branchName === branchName) {
+        setInstruction(data);
+      }
+    });
+
+    const unsubInstructionUnconfirmed = wsClient.on("taskInstruction.unconfirmed", (msg) => {
+      const data = msg.data as TaskInstruction & { branchName: string };
+      if (data.branchName === branchName) {
+        setInstruction(data);
+      }
+    });
+
     return () => {
       unsubLinkUpdated();
+      unsubInstructionUpdated();
+      unsubInstructionConfirmed();
+      unsubInstructionUnconfirmed();
     };
   }, [repoId, branchName]);
+
+  // Handle confirm/unconfirm toggle
+  const handleConfirmToggle = useCallback(async () => {
+    if (!instruction || !instruction.instructionMd || confirming) return;
+
+    setConfirming(true);
+    try {
+      if (instruction.confirmationStatus === "confirmed") {
+        // Unconfirm
+        const updated = await api.unconfirmTaskInstruction(repoId, branchName);
+        setInstruction(updated);
+      } else {
+        // Confirm (both unconfirmed and changed states)
+        const updated = await api.confirmTaskInstruction(repoId, branchName);
+        setInstruction(updated);
+      }
+    } catch (err) {
+      console.error("Failed to toggle instruction confirmation:", err);
+    } finally {
+      setConfirming(false);
+    }
+  }, [instruction, confirming, repoId, branchName]);
 
   const prLink = links.find((l) => l.linkType === "pr");
   const issueLink = links.find((l) => l.linkType === "issue");
@@ -179,6 +227,30 @@ export function ExecuteBranchDetail({
       <div className="execute-branch-detail__instruction">
         <div className="execute-branch-detail__instruction-header">
           <h4>Instruction</h4>
+          {instruction?.instructionMd && (
+            <button
+              className={`execute-branch-detail__confirm-btn execute-branch-detail__confirm-btn--${instruction.confirmationStatus}`}
+              onClick={handleConfirmToggle}
+              disabled={confirming}
+              title={
+                instruction.confirmationStatus === "confirmed"
+                  ? "Click to unconfirm"
+                  : instruction.confirmationStatus === "changed"
+                  ? "Instruction changed since last confirmation - click to re-confirm"
+                  : "Click to confirm instruction"
+              }
+            >
+              {confirming ? (
+                "..."
+              ) : instruction.confirmationStatus === "confirmed" ? (
+                <>✓ Confirmed</>
+              ) : instruction.confirmationStatus === "changed" ? (
+                <>⚠ Changed</>
+              ) : (
+                "Confirm"
+              )}
+            </button>
+          )}
         </div>
         <div className="execute-branch-detail__instruction-content">
           {instruction?.instructionMd ? (

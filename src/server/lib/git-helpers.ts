@@ -362,12 +362,21 @@ export async function buildTree(
     nodes.push(node);
 
     if (baseBranch && branch.name !== defaultBranch) {
-      const { parent, confidence } = await findBestParent(branch.name, branchNames, defaultBranch, repoPath);
-      edges.push({
-        parent,
-        child: branch.name,
-        confidence,
-      });
+      try {
+        const { parent, confidence } = await findBestParent(branch.name, branchNames, defaultBranch, repoPath);
+        edges.push({
+          parent,
+          child: branch.name,
+          confidence,
+        });
+      } catch {
+        // Fallback to default branch as parent if git ancestry lookup fails
+        edges.push({
+          parent: defaultBranch,
+          child: branch.name,
+          confidence: "low",
+        });
+      }
     }
   }
 

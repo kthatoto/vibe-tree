@@ -729,6 +729,18 @@ export function PlanningPanel({
       return;
     }
 
+    // Check initial streaming state when session is selected
+    const checkInitialState = async () => {
+      try {
+        const streamingState = await api.getStreamingState(selectedSession.chatSessionId);
+        console.log("[PlanningPanel] Initial streaming state:", streamingState.isStreaming);
+        setClaudeWorking(streamingState.isStreaming);
+      } catch (err) {
+        console.error("[PlanningPanel] Failed to check initial streaming state:", err);
+      }
+    };
+    checkInitialState();
+
     const unsubStart = wsClient.on("chat.streaming.start", (msg) => {
       const data = msg.data as { sessionId: string };
       if (data.sessionId === selectedSession.chatSessionId) {
@@ -747,6 +759,29 @@ export function PlanningPanel({
       unsubStart();
       unsubEnd();
     };
+  }, [selectedSession?.chatSessionId, selectedSession?.type]);
+
+  // Re-fetch streaming state when tab becomes visible (handles tab switching)
+  useEffect(() => {
+    if (!selectedSession?.chatSessionId || (selectedSession.type !== "planning" && selectedSession.type !== "execute")) {
+      return;
+    }
+
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === "visible") {
+        console.log("[PlanningPanel] Tab became visible, checking streaming state");
+        try {
+          const streamingState = await api.getStreamingState(selectedSession.chatSessionId);
+          console.log("[PlanningPanel] Streaming state:", streamingState.isStreaming);
+          setClaudeWorking(streamingState.isStreaming);
+        } catch (err) {
+          console.error("[PlanningPanel] Failed to check streaming state:", err);
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [selectedSession?.chatSessionId, selectedSession?.type]);
 
   // Handle branch switch events from MCP server (set_focused_branch, switch_branch)

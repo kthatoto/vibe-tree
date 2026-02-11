@@ -541,7 +541,7 @@ chatRouter.post("/send", async (c) => {
         broadcast({
           type: "chat.streaming.end",
           repoId: session.repoId,
-          data: { sessionId: input.sessionId, message: toMessage(updatedMsg), interrupted: true },
+          data: { sessionId: input.sessionId, message: toMessage(updatedMsg), interrupted: true, runId: runningRun.id },
         });
       }
     }
@@ -876,12 +876,12 @@ chatRouter.post("/send", async (c) => {
           .set({ lastUsedAt: finishedAt, updatedAt: finishedAt })
           .where(eq(schema.chatSessions.id, input.sessionId));
 
-        console.log(`[Chat] Close: Broadcasting streaming.end for sessionId=${input.sessionId}, repoId=${session.repoId}`);
+        console.log(`[Chat] Close: Broadcasting streaming.end for sessionId=${input.sessionId}, repoId=${session.repoId}, runId=${runId}`);
         // Broadcast streaming end
         broadcast({
           type: "chat.streaming.end",
           repoId: session.repoId,
-          data: { sessionId: input.sessionId, message: toMessage(updatedMsg) },
+          data: { sessionId: input.sessionId, message: toMessage(updatedMsg), runId },
         });
 
         // Broadcast assistant message
@@ -954,7 +954,7 @@ chatRouter.post("/send", async (c) => {
         broadcast({
           type: "chat.streaming.end",
           repoId: session.repoId,
-          data: { sessionId: input.sessionId, message: toMessage(updatedMsg) },
+          data: { sessionId: input.sessionId, message: toMessage(updatedMsg), runId },
         });
 
         broadcast({

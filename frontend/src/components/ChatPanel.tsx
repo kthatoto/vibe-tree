@@ -146,6 +146,18 @@ export function ChatPanel({
     loadMessages();
   }, [loadMessages]);
 
+  // Re-fetch streaming state when tab becomes visible (handles tab switching)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        console.log("[ChatPanel] Tab became visible, re-fetching streaming state");
+        loadMessages();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [loadMessages]);
+
   // Cancel execution on Escape key (document-level listener)
   useEffect(() => {
     const handleEscapeKey = async (e: KeyboardEvent) => {
@@ -170,11 +182,19 @@ export function ChatPanel({
     streamingChunksRef.current = streamingChunks;
   }, [streamingChunks]);
 
+  // Track current runId to filter out streaming.end from old/cancelled runs
+  const currentRunIdRef = useRef<number | null>(null);
+
   // Listen for WebSocket streaming events
   useEffect(() => {
     const unsubStart = wsClient.on("chat.streaming.start", (msg) => {
-      const data = msg.data as { sessionId: string };
+      const data = msg.data as { sessionId: string; runId?: number };
+      console.log(`[ChatPanel] streaming.start received, msgSessionId=${data.sessionId}, currentSessionId=${sessionId}, match=${data.sessionId === sessionId}, runId=${data.runId}`);
       if (data.sessionId === sessionId) {
+        console.log(`[ChatPanel] streaming.start: setting loading=true, runId=${data.runId}`);
+        if (data.runId) {
+          currentRunIdRef.current = data.runId;
+        }
         setLoading(true);
         setStreamingChunks([]);
         streamingChunksRef.current = [];
@@ -202,9 +222,14 @@ export function ChatPanel({
     });
 
     const unsubEnd = wsClient.on("chat.streaming.end", (msg) => {
-      const data = msg.data as { sessionId: string; message?: ChatMessage; interrupted?: boolean };
-      console.log(`[ChatPanel] streaming.end received, msgSessionId=${data.sessionId}, currentSessionId=${sessionId}, match=${data.sessionId === sessionId}, interrupted=${data.interrupted}`);
+      const data = msg.data as { sessionId: string; message?: ChatMessage; interrupted?: boolean; runId?: number };
+      console.log(`[ChatPanel] streaming.end received, msgSessionId=${data.sessionId}, currentSessionId=${sessionId}, match=${data.sessionId === sessionId}, interrupted=${data.interrupted}, runId=${data.runId}, currentRunId=${currentRunIdRef.current}`);
       if (data.sessionId === sessionId) {
+        // Ignore streaming.end from old runs (e.g., cancelled run that finished late)
+        if (data.runId && currentRunIdRef.current && data.runId !== currentRunIdRef.current) {
+          console.log(`[ChatPanel] streaming.end: ignoring old run (runId=${data.runId}, currentRunId=${currentRunIdRef.current})`);
+          return;
+        }
         console.log(`[ChatPanel] streaming.end: message=${!!data.message}, interrupted=${data.interrupted}`);
 
         // Add the message to messages list and clear streaming chunks
@@ -234,7 +259,10 @@ export function ChatPanel({
       const data = msg.data as ChatMessage | undefined;
       if (data && data.sessionId === sessionId) {
         // Skip adding assistant message - it will be added by streaming.end
-        if (data.role === "assistant" && hasStreamingChunksRef.current) {
+        if (data.role === "assistant") {
+          // Always skip assistant messages here - they are handled by streaming.end
+          // This prevents race conditions where chat.message arrives and sets loading=false
+          // before streaming.start can set it back to true
           return;
         }
         setMessages((prev) => {
@@ -246,10 +274,6 @@ export function ChatPanel({
           const updated = [...prev, data];
           return updated.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
         });
-        // Stop loading when we receive an assistant message
-        if (data.role === "assistant") {
-          setLoading(false);
-        }
       }
     });
 

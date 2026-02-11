@@ -1013,7 +1013,7 @@ export function ChatPanel({
             placeholder="Type a message... (⌘+Enter to send)"
             style={{
               flex: 1,
-              resize: "none",
+              resize: "vertical",
               border: "1px solid #374151",
               borderRadius: 4,
               padding: "8px 12px",
@@ -1023,6 +1023,7 @@ export function ChatPanel({
               background: "#1f2937",
               color: "#f3f4f6",
               minHeight: 80,
+              maxHeight: 400,
             }}
             disabled={disabled}
           />

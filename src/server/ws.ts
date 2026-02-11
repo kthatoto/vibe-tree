@@ -30,7 +30,7 @@ export function handleWsMessage(ws: WSClient, message: string | Buffer) {
   }
 }
 
-export function broadcast(message: { type: string; repoId?: string; planningSessionId?: string; data?: unknown }) {
+export function broadcast(message: { type: string; repoId?: string; planningSessionId?: string; branchName?: string; data?: unknown }) {
   const json = JSON.stringify(message);
   console.log(`[WS] Broadcast: type=${message.type}, repoId=${message.repoId}, clients=${clients.length}`);
   let sentCount = 0;

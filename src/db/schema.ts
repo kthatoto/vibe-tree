@@ -332,3 +332,37 @@ export const contextSnapshots = sqliteTable("context_snapshots", {
   compressionRatio: integer("compression_ratio"), // 圧縮率 (%)
   createdAt: text("created_at").notNull(),
 });
+
+// ============================================================
+// Branch Resources (ブランチに紐づくリンク・ファイル)
+// ============================================================
+
+// Branch external links (ブランチに直接紐づく外部リンク - セッションに依存しない)
+export const branchExternalLinks = sqliteTable("branch_external_links", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  repoId: text("repo_id").notNull(),
+  branchName: text("branch_name").notNull(),
+  linkType: text("link_type").notNull(), // 'figma' | 'notion' | 'github_issue' | 'url'
+  url: text("url").notNull(),
+  title: text("title"), // extracted or user-provided title
+  description: text("description"), // optional description/note
+  contentCache: text("content_cache"), // cached content (markdown)
+  lastFetchedAt: text("last_fetched_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// Branch files (ブランチに紐づくファイル - 画像、スクリーンショット等)
+export const branchFiles = sqliteTable("branch_files", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  repoId: text("repo_id").notNull(),
+  branchName: text("branch_name").notNull(),
+  filePath: text("file_path").notNull(), // relative path from storage root
+  originalName: text("original_name"), // original file name
+  mimeType: text("mime_type"), // e.g., 'image/png', 'image/jpeg'
+  fileSize: integer("file_size"), // file size in bytes
+  description: text("description"), // optional description/note
+  sourceType: text("source_type"), // 'figma_mcp' | 'upload' | 'screenshot'
+  sourceUrl: text("source_url"), // original URL if from external source
+  createdAt: text("created_at").notNull(),
+});

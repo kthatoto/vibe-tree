@@ -372,6 +372,37 @@ export interface PlanningQuestion {
 // Branch Link types
 export type BranchLinkType = "issue" | "pr";
 
+// Branch Resource types
+export type BranchExternalLinkType = "figma" | "notion" | "github_issue" | "url";
+
+export interface BranchExternalLink {
+  id: number;
+  repoId: string;
+  branchName: string;
+  linkType: BranchExternalLinkType;
+  url: string;
+  title: string | null;
+  description: string | null;
+  contentCache: string | null;
+  lastFetchedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BranchFile {
+  id: number;
+  repoId: string;
+  branchName: string;
+  filePath: string;
+  originalName: string | null;
+  mimeType: string | null;
+  fileSize: number | null;
+  description: string | null;
+  sourceType: string | null; // 'figma_mcp' | 'upload' | 'screenshot'
+  sourceUrl: string | null;
+  createdAt: string;
+}
+
 export interface GitHubCheck {
   name: string;
   status: string;
@@ -1110,4 +1141,80 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ answer }),
     }),
+
+  // Branch Resources - External Links
+  getBranchExternalLinks: (repoId: string, branchName: string) =>
+    fetchJson<BranchExternalLink[]>(
+      `${API_BASE}/branch-resources/links?repoId=${encodeURIComponent(repoId)}&branchName=${encodeURIComponent(branchName)}`
+    ),
+  getBranchExternalLinksBatch: (repoId: string, branches: string[]) =>
+    fetchJson<Record<string, BranchExternalLink[]>>(
+      `${API_BASE}/branch-resources/links/batch?repoId=${encodeURIComponent(repoId)}&branches=${encodeURIComponent(branches.join(","))}`
+    ),
+  createBranchExternalLink: (data: {
+    repoId: string;
+    branchName: string;
+    url: string;
+    title?: string;
+    description?: string;
+  }) =>
+    fetchJson<BranchExternalLink>(`${API_BASE}/branch-resources/links`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateBranchExternalLink: (id: number, data: { title?: string; description?: string }) =>
+    fetchJson<BranchExternalLink>(`${API_BASE}/branch-resources/links/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteBranchExternalLink: (id: number) =>
+    fetchJson<{ success: boolean }>(`${API_BASE}/branch-resources/links/${id}`, {
+      method: "DELETE",
+    }),
+
+  // Branch Resources - Files
+  getBranchFiles: (repoId: string, branchName: string) =>
+    fetchJson<BranchFile[]>(
+      `${API_BASE}/branch-resources/files?repoId=${encodeURIComponent(repoId)}&branchName=${encodeURIComponent(branchName)}`
+    ),
+  getBranchFilesBatch: (repoId: string, branches: string[]) =>
+    fetchJson<Record<string, BranchFile[]>>(
+      `${API_BASE}/branch-resources/files/batch?repoId=${encodeURIComponent(repoId)}&branches=${encodeURIComponent(branches.join(","))}`
+    ),
+  uploadBranchFile: async (data: {
+    repoId: string;
+    branchName: string;
+    file: File;
+    description?: string;
+    sourceType?: string;
+    sourceUrl?: string;
+  }) => {
+    const formData = new FormData();
+    formData.append("file", data.file);
+    formData.append("repoId", data.repoId);
+    formData.append("branchName", data.branchName);
+    if (data.description) formData.append("description", data.description);
+    if (data.sourceType) formData.append("sourceType", data.sourceType);
+    if (data.sourceUrl) formData.append("sourceUrl", data.sourceUrl);
+
+    const res = await fetch(`${API_BASE}/branch-resources/files`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.error || `HTTP error: ${res.status}`);
+    }
+    return res.json() as Promise<BranchFile>;
+  },
+  updateBranchFile: (id: number, data: { description?: string }) =>
+    fetchJson<BranchFile>(`${API_BASE}/branch-resources/files/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteBranchFile: (id: number) =>
+    fetchJson<{ success: boolean }>(`${API_BASE}/branch-resources/files/${id}`, {
+      method: "DELETE",
+    }),
+  getBranchFileUrl: (id: number) => `${API_BASE}/branch-resources/files/${id}/download`,
 };

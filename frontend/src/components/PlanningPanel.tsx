@@ -41,7 +41,7 @@ import ExecuteBranchTree from "./ExecuteBranchTree";
 import ExecuteTodoList from "./ExecuteTodoList";
 import PlanningQuestionsPanel from "./PlanningQuestionsPanel";
 import type { TaskSuggestion } from "../lib/task-parser";
-import { getResourceIcon } from "../lib/resourceIcons";
+import { getResourceIcon, figmaIcon, githubIcon, notionIcon, linkIcon } from "../lib/resourceIcons";
 import "./PlanningPanel.css";
 
 // Sortable task item component (for reordering)
@@ -336,7 +336,7 @@ export function PlanningPanel({
   const [planningBranchFiles, setPlanningBranchFiles] = useState<BranchFile[]>([]);
 
   // Planning branch resource counts for all branches (for tree badges)
-  const [planningResourceCounts, setPlanningResourceCounts] = useState<Map<string, { figma: number; githubIssue: number; other: number; files: number }>>(new Map());
+  const [planningResourceCounts, setPlanningResourceCounts] = useState<Map<string, { figma: number; githubIssue: number; notion: number; other: number; files: number }>>(new Map());
 
   // Planning branch counts (ToDo and Question counts per branch)
   const [branchTodoCounts, setBranchTodoCounts] = useState<Map<string, { total: number; completed: number }>>(new Map());
@@ -649,7 +649,7 @@ export function PlanningPanel({
     const unsubTasksUpdated = wsClient.on("planning.tasksUpdated", (msg) => {
       if (msg.data && typeof msg.data === "object" && "nodes" in msg.data && "edges" in msg.data) {
         const { nodes, edges } = msg.data as { nodes: TaskNode[]; edges: TaskEdge[] };
-        const sessionId = msg.planningSessionId as string;
+        const sessionId = (msg.data as { planningSessionId?: string }).planningSessionId;
         if (sessionId) {
           setSessions((prev) => prev.map((s) => {
             if (s.id === sessionId) {
@@ -972,14 +972,15 @@ export function PlanningPanel({
       api.getBranchExternalLinksBatch(repoId, planningBranches).catch(() => ({})),
       api.getBranchFilesBatch(repoId, planningBranches).catch(() => ({})),
     ]).then(([extLinksMap, filesMap]) => {
-      const countsMap = new Map<string, { figma: number; githubIssue: number; other: number; files: number }>();
+      const countsMap = new Map<string, { figma: number; githubIssue: number; notion: number; other: number; files: number }>();
       for (const branch of planningBranches) {
-        const extLinks = extLinksMap[branch] || [];
-        const files = filesMap[branch] || [];
+        const extLinks = (extLinksMap as Record<string, BranchExternalLink[]>)[branch] || [];
+        const files = (filesMap as Record<string, BranchFile[]>)[branch] || [];
         countsMap.set(branch, {
-          figma: extLinks.filter(l => l.linkType === "figma").length,
-          githubIssue: extLinks.filter(l => l.linkType === "github_issue").length,
-          other: extLinks.filter(l => l.linkType !== "figma" && l.linkType !== "github_issue").length,
+          figma: extLinks.filter((l: BranchExternalLink) => l.linkType === "figma").length,
+          githubIssue: extLinks.filter((l: BranchExternalLink) => l.linkType === "github_issue").length,
+          notion: extLinks.filter((l: BranchExternalLink) => l.linkType === "notion").length,
+          other: extLinks.filter((l: BranchExternalLink) => l.linkType !== "figma" && l.linkType !== "github_issue" && l.linkType !== "notion").length,
           files: files.length,
         });
       }
@@ -1174,7 +1175,7 @@ export function PlanningPanel({
       return;
     }
 
-    api.getBranchLinksBatch(repoId, branchNames)
+    api.getBranchExternalLinksBatch(repoId, branchNames)
       .then((links) => {
         setTaskBranchLinksMap(links);
       })

@@ -276,33 +276,28 @@
   color: #fbbf24;
 }
 
-/* Resource badges */
-.execute-branch-tree__badge--figma {
+/* External links group */
+.execute-branch-tree__links-group {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  color: #a855f7;
-  background: rgba(168, 85, 247, 0.15);
-}
-
-.execute-branch-tree__badge--github {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  color: #e5e7eb;
+  gap: 4px;
+  padding: 2px 6px;
   background: #374151;
+  border-radius: 4px;
+  font-size: 11px;
 }
 
-.execute-branch-tree__badge--resource {
-  color: #60a5fa;
-  background: #1e3a5f;
+.execute-branch-tree__link-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.9;
 }
 
-.execute-branch-tree__resource-icon {
-  width: 12px;
-  height: 12px;
-}
-
-.execute-branch-tree__resource-icon--github {
+.execute-branch-tree__link-icon--github {
   filter: brightness(0) invert(1);
+}
+
+.execute-branch-tree__link-icon--other {
+  font-size: 12px;
+  line-height: 1;
 }

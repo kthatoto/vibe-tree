@@ -44,7 +44,7 @@ export function ExecuteSidebar({
   const [allBranchLinks, setAllBranchLinks] = useState<Map<string, BranchLink[]>>(new Map());
 
   // All branch resource counts (for tree badges)
-  const [allResourceCounts, setAllResourceCounts] = useState<Map<string, { figma: number; githubIssue: number; other: number; files: number }>>(new Map());
+  const [allResourceCounts, setAllResourceCounts] = useState<Map<string, { figma: number; githubIssue: number; notion: number; other: number; files: number }>>(new Map());
 
   // Branch links and instruction for display branch
   const [branchLinks, setBranchLinks] = useState<BranchLink[]>([]);
@@ -180,14 +180,15 @@ export function ExecuteSidebar({
       api.getBranchExternalLinksBatch(repoId, executeBranches).catch(() => ({})),
       api.getBranchFilesBatch(repoId, executeBranches).catch(() => ({})),
     ]).then(([extLinksMap, filesMap]) => {
-      const countsMap = new Map<string, { figma: number; githubIssue: number; other: number; files: number }>();
+      const countsMap = new Map<string, { figma: number; githubIssue: number; notion: number; other: number; files: number }>();
       for (const branch of executeBranches) {
-        const extLinks = extLinksMap[branch] || [];
-        const files = filesMap[branch] || [];
+        const extLinks = (extLinksMap as Record<string, BranchExternalLink[]>)[branch] || [];
+        const files = (filesMap as Record<string, BranchFile[]>)[branch] || [];
         countsMap.set(branch, {
           figma: extLinks.filter((l: BranchExternalLink) => l.linkType === "figma").length,
           githubIssue: extLinks.filter((l: BranchExternalLink) => l.linkType === "github_issue").length,
-          other: extLinks.filter((l: BranchExternalLink) => l.linkType !== "figma" && l.linkType !== "github_issue").length,
+          notion: extLinks.filter((l: BranchExternalLink) => l.linkType === "notion").length,
+          other: extLinks.filter((l: BranchExternalLink) => l.linkType !== "figma" && l.linkType !== "github_issue" && l.linkType !== "notion").length,
           files: files.length,
         });
       }

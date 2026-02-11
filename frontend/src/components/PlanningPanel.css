@@ -822,35 +822,53 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 3px;
+  width: 22px;
+  height: 22px;
+  padding: 4px;
   border-radius: 4px;
-  background: #374151;
-  transition: background 0.15s;
+  background: rgba(255, 255, 255, 0.1);
+  transition: background 0.15s, transform 0.15s;
 }
 
 .planning-panel__task-link-icon:hover {
-  background: #4b5563;
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
 }
 
 .planning-panel__task-link-icon img {
   width: 100%;
   height: 100%;
-  filter: brightness(0) invert(1);
-  opacity: 0.8;
 }
 
+/* Notion - keep grayscale */
 .planning-panel__task-link-icon--notion {
-  background: #2d2d2d;
+  background: rgba(255, 255, 255, 0.15);
 }
 
+.planning-panel__task-link-icon--notion img {
+  filter: brightness(0) invert(1);
+  opacity: 0.9;
+}
+
+/* Figma - show original colors (purple/pink gradient) */
 .planning-panel__task-link-icon--figma {
-  background: #1e1e1e;
+  background: rgba(162, 89, 255, 0.15);
 }
 
+/* GitHub - keep white on dark */
 .planning-panel__task-link-icon--github {
-  background: #161b22;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.planning-panel__task-link-icon--github img {
+  filter: brightness(0) invert(1);
+  opacity: 0.9;
+}
+
+/* Generic URL - muted */
+.planning-panel__task-link-icon--url img {
+  filter: brightness(0) invert(1);
+  opacity: 0.7;
 }
 
 .planning-panel__task-title {

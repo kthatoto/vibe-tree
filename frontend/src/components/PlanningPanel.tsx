@@ -738,10 +738,14 @@ export function PlanningPanel({
     };
   }, [selectedSession?.id, selectedSession?.chatSessionId, selectedSession?.title, selectedSession?.type, selectedSession?.executeBranches]);
 
+  // Track current runId to filter out streaming.end from old/cancelled runs
+  const claudeWorkingRunIdRef = useRef<number | null>(null);
+
   // Track Claude working state for planning and execute sessions
   useEffect(() => {
     if (!selectedSession?.chatSessionId || (selectedSession.type !== "planning" && selectedSession.type !== "execute")) {
       setClaudeWorking(false);
+      claudeWorkingRunIdRef.current = null;
       return;
     }
 
@@ -759,15 +763,23 @@ export function PlanningPanel({
     checkInitialState();
 
     const unsubStart = wsClient.on("chat.streaming.start", (msg) => {
-      const data = msg.data as { sessionId: string };
+      const data = msg.data as { sessionId: string; runId?: number };
       if (data.sessionId === selectedSession.chatSessionId) {
+        if (data.runId) {
+          claudeWorkingRunIdRef.current = data.runId;
+        }
         setClaudeWorking(true);
       }
     });
 
     const unsubEnd = wsClient.on("chat.streaming.end", (msg) => {
-      const data = msg.data as { sessionId: string };
+      const data = msg.data as { sessionId: string; runId?: number };
       if (data.sessionId === selectedSession.chatSessionId) {
+        // Ignore streaming.end from old runs (e.g., cancelled run that finished late)
+        if (data.runId && claudeWorkingRunIdRef.current && data.runId !== claudeWorkingRunIdRef.current) {
+          console.log(`[PlanningPanel] claudeWorking: ignoring old run (runId=${data.runId}, currentRunId=${claudeWorkingRunIdRef.current})`);
+          return;
+        }
         setClaudeWorking(false);
       }
     });

@@ -1319,6 +1319,60 @@
   white-space: nowrap;
 }
 
+.planning-panel__instruction-branch-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.planning-panel__branch-nav-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #374151;
+  color: #e5e7eb;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.planning-panel__branch-nav-btn:hover:not(:disabled) {
+  background: #4b5563;
+}
+
+.planning-panel__branch-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.planning-panel__branch-copy-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: #9ca3af;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.planning-panel__branch-copy-btn:hover {
+  background: #374151;
+  color: #e5e7eb;
+}
+
 .planning-panel__instruction-actions {
   display: flex;
   align-items: center;
@@ -1360,13 +1414,13 @@
 }
 
 .planning-panel__instruction-confirm-btn--unconfirmed {
-  background: #374151;
-  color: #9ca3af;
+  background: #166534;
+  color: #4ade80;
 }
 
 .planning-panel__instruction-confirm-btn--unconfirmed:hover:not(:disabled) {
-  background: #4b5563;
-  color: #e5e7eb;
+  background: #15803d;
+  color: #86efac;
 }
 
 .planning-panel__instruction-confirm-btn--confirmed {

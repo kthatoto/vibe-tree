@@ -19,6 +19,7 @@ interface ExecuteSidebarProps {
   workingBranch?: string | null;
   onExpandToggle?: () => void;
   isExpanded?: boolean;
+  sessionType?: "execute" | "planning";
 }
 
 export function ExecuteSidebar({
@@ -31,12 +32,16 @@ export function ExecuteSidebar({
   workingBranch,
   onExpandToggle,
   isExpanded = false,
+  sessionType = "execute",
 }: ExecuteSidebarProps) {
   // Preview branch (clicked but not switched to)
   const [previewBranch, setPreviewBranch] = useState<string | null>(null);
 
   // Active tab: "info", "instruction", "todo", or "questions"
-  const [activeTab, setActiveTab] = useState<"info" | "instruction" | "todo" | "questions">("info");
+  // Planning sessions default to "instruction", execute sessions default to "info"
+  const [activeTab, setActiveTab] = useState<"info" | "instruction" | "todo" | "questions">(
+    sessionType === "planning" ? "instruction" : "info"
+  );
 
   // All todos for all branches (for completion tracking)
   const [allTodos, setAllTodos] = useState<Map<string, TaskTodo[]>>(new Map());
@@ -589,33 +594,17 @@ export function ExecuteSidebar({
         />
       </div>
 
-      {/* Branch Header - simplified, details in Info tab */}
-      <div className="execute-sidebar__branch-header">
-        <div className="execute-sidebar__branch-name">
-          {displayBranch}
-          {isCurrent ? (
-            <span className="execute-sidebar__current-badge">Current</span>
-          ) : (
-            onManualBranchSwitch && (
-              <button
-                className="execute-sidebar__switch-btn"
-                onClick={handleSwitchToBranch}
-              >
-                Switch
-              </button>
-            )
-          )}
-        </div>
-      </div>
-
       {/* Tabs - using planning-panel classes for consistent styling */}
       <div className="planning-panel__sidebar-tabs">
-        <button
-          className={`planning-panel__sidebar-tab ${activeTab === "info" ? "planning-panel__sidebar-tab--active" : ""}`}
-          onClick={() => setActiveTab("info")}
-        >
-          Info
-        </button>
+        {/* Info tab only for execute sessions */}
+        {sessionType === "execute" && (
+          <button
+            className={`planning-panel__sidebar-tab ${activeTab === "info" ? "planning-panel__sidebar-tab--active" : ""}`}
+            onClick={() => setActiveTab("info")}
+          >
+            Info
+          </button>
+        )}
         <button
           className={`planning-panel__sidebar-tab ${activeTab === "instruction" ? "planning-panel__sidebar-tab--active" : ""}`}
           onClick={() => setActiveTab("instruction")}
@@ -867,28 +856,74 @@ export function ExecuteSidebar({
             ) : instruction?.instructionMd ? (
               <>
                 <div className="execute-sidebar__instruction-header">
-                  <button
-                    className={`execute-sidebar__confirm-btn execute-sidebar__confirm-btn--${instruction.confirmationStatus}`}
-                    onClick={handleConfirmToggle}
-                    disabled={confirming}
-                    title={
-                      instruction.confirmationStatus === "confirmed"
-                        ? "Click to unconfirm"
-                        : instruction.confirmationStatus === "changed"
-                        ? "Instruction changed since last confirmation - click to re-confirm"
-                        : "Click to confirm instruction"
-                    }
-                  >
-                    {confirming ? (
-                      "..."
-                    ) : instruction.confirmationStatus === "confirmed" ? (
-                      <>✓ Confirmed</>
-                    ) : instruction.confirmationStatus === "changed" ? (
-                      <>⚠ Changed</>
-                    ) : (
-                      "Confirm"
-                    )}
-                  </button>
+                  <div className="execute-sidebar__branch-nav">
+                    <span className="execute-sidebar__branch-label">{displayBranch}</span>
+                    <button
+                      className="execute-sidebar__branch-copy-btn"
+                      onClick={() => {
+                        if (displayBranch) {
+                          navigator.clipboard.writeText(displayBranch);
+                        }
+                      }}
+                      title="Copy branch name"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/>
+                        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/>
+                      </svg>
+                    </button>
+                    <button
+                      className="execute-sidebar__branch-nav-btn"
+                      onClick={() => {
+                        const currentIndex = executeBranches.indexOf(displayBranch || "");
+                        if (currentIndex > 0) {
+                          handlePreviewBranch(executeBranches[currentIndex - 1]);
+                        }
+                      }}
+                      disabled={executeBranches.indexOf(displayBranch || "") <= 0}
+                      title="Previous branch"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      className="execute-sidebar__branch-nav-btn"
+                      onClick={() => {
+                        const currentIndex = executeBranches.indexOf(displayBranch || "");
+                        if (currentIndex < executeBranches.length - 1) {
+                          handlePreviewBranch(executeBranches[currentIndex + 1]);
+                        }
+                      }}
+                      disabled={executeBranches.indexOf(displayBranch || "") >= executeBranches.length - 1}
+                      title="Next branch"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                  {/* Confirm button only for planning sessions */}
+                  {sessionType === "planning" && (
+                    <button
+                      className={`execute-sidebar__confirm-btn execute-sidebar__confirm-btn--${instruction.confirmationStatus}`}
+                      onClick={handleConfirmToggle}
+                      disabled={confirming}
+                      title={
+                        instruction.confirmationStatus === "confirmed"
+                          ? "Click to unconfirm"
+                          : instruction.confirmationStatus === "changed"
+                          ? "Instruction changed since last confirmation - click to re-confirm"
+                          : "Click to confirm instruction"
+                      }
+                    >
+                      {confirming ? (
+                        "..."
+                      ) : instruction.confirmationStatus === "confirmed" ? (
+                        <>✓ Confirmed</>
+                      ) : instruction.confirmationStatus === "changed" ? (
+                        <>⚠ Changed</>
+                      ) : (
+                        "Confirm"
+                      )}
+                    </button>
+                  )}
                 </div>
                 <div className="planning-panel__instruction-view">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>

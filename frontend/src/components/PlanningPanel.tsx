@@ -339,7 +339,7 @@ export function PlanningPanel({
   const [claudeWorking, setClaudeWorking] = useState(false);
 
   // Planning sidebar tabs (without branches - branches are always shown at top)
-  const [planningSidebarTab, setPlanningSidebarTab] = useState<"instruction" | "todo" | "questions" | "resources">("instruction");
+  const [planningSidebarTab, setPlanningSidebarTab] = useState<"info" | "instruction" | "todo" | "questions" | "resources">("instruction");
 
   // Planning branch links (PR/Issue) for all branches
   const [planningAllBranchLinks, setPlanningAllBranchLinks] = useState<Map<string, BranchLink[]>>(new Map());
@@ -2324,49 +2324,6 @@ export function PlanningPanel({
                   />
                 </div>
 
-                {/* Branch Header with PR/Issue links */}
-                {currentPlanningBranch && (() => {
-                  const currentBranchLinks = planningAllBranchLinks.get(currentPlanningBranch) || [];
-                  return (
-                  <div className="execute-sidebar__branch-header">
-                    <div className="execute-sidebar__branch-name">
-                      {currentPlanningBranch}
-                    </div>
-                    {currentBranchLinks.length > 0 && (
-                      <div className="execute-sidebar__links">
-                        {currentBranchLinks.filter(l => l.linkType === "pr").map((prLink) => (
-                          <a
-                            key={prLink.id}
-                            href={prLink.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="execute-sidebar__link execute-sidebar__link--pr"
-                          >
-                            PR #{prLink.number}
-                            {prLink.checksStatus && (
-                              <span className={`execute-sidebar__checks execute-sidebar__checks--${prLink.checksStatus}`}>
-                                {prLink.checksStatus === "success" ? "✓" : prLink.checksStatus === "failure" ? "✕" : "◌"}
-                              </span>
-                            )}
-                          </a>
-                        ))}
-                        {currentBranchLinks.filter(l => l.linkType === "issue").map((issueLink) => (
-                          <a
-                            key={issueLink.id}
-                            href={issueLink.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="execute-sidebar__link execute-sidebar__link--issue"
-                          >
-                            Issue #{issueLink.number}
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  );
-                })()}
-
                 {/* Tab Header */}
                 {(() => {
                   const todoCount = currentPlanningBranch ? branchTodoCounts.get(currentPlanningBranch) : null;
@@ -2377,6 +2334,12 @@ export function PlanningPanel({
                   const resourceCount = planningExternalLinks.length + planningBranchFiles.length;
                   return (
                 <div className="planning-panel__sidebar-tabs">
+                  <button
+                    className={`planning-panel__sidebar-tab ${planningSidebarTab === "info" ? "planning-panel__sidebar-tab--active" : ""}`}
+                    onClick={() => setPlanningSidebarTab("info")}
+                  >
+                    Info
+                  </button>
                   <button
                     className={`planning-panel__sidebar-tab ${planningSidebarTab === "instruction" ? "planning-panel__sidebar-tab--active" : ""}`}
                     onClick={() => setPlanningSidebarTab("instruction")}
@@ -2422,11 +2385,184 @@ export function PlanningPanel({
 
                 {/* Tab Content */}
                 <div className="planning-panel__sidebar-content">
+                  {/* Info Tab */}
+                  {planningSidebarTab === "info" && currentPlanningBranch && (
+                    <div className="execute-sidebar__info-tab">
+                      {/* Issue Section */}
+                      {(() => {
+                        const currentBranchLinks = planningAllBranchLinks.get(currentPlanningBranch) || [];
+                        const issueLink = currentBranchLinks.find((l) => l.linkType === "issue");
+                        const prLink = currentBranchLinks.find((l) => l.linkType === "pr");
+                        return (
+                          <>
+                            <div className="execute-sidebar__links-section">
+                              <div className="execute-sidebar__links-header">
+                                <h4>Issue</h4>
+                              </div>
+                              {issueLink ? (
+                                <div className="execute-sidebar__link-item">
+                                  <a
+                                    href={issueLink.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="execute-sidebar__link-url"
+                                  >
+                                    <span className="execute-sidebar__link-number">#{issueLink.number}</span>
+                                    {issueLink.title}
+                                  </a>
+                                </div>
+                              ) : (
+                                <div className="execute-sidebar__no-links">No issue linked</div>
+                              )}
+                            </div>
+
+                            <div className="execute-sidebar__links-section">
+                              <div className="execute-sidebar__links-header">
+                                <h4>PR</h4>
+                              </div>
+                              {prLink ? (
+                                <div className="execute-sidebar__link-item">
+                                  <a
+                                    href={prLink.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="execute-sidebar__link-url"
+                                  >
+                                    <span className="execute-sidebar__link-number">#{prLink.number}</span>
+                                    {prLink.title}
+                                  </a>
+                                  {prLink.checksStatus && (
+                                    <span className={`execute-sidebar__ci-badge execute-sidebar__ci-badge--${prLink.checksStatus}`}>
+                                      {prLink.checksStatus === "success" ? "✓" : prLink.checksStatus === "failure" ? "✗" : "●"}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="execute-sidebar__no-links">No PR linked</div>
+                              )}
+                            </div>
+
+                            {/* External Links */}
+                            {planningExternalLinks.length > 0 && (
+                              <div className="execute-sidebar__links-section">
+                                <div className="execute-sidebar__links-header">
+                                  <h4>Resources</h4>
+                                </div>
+                                <div className="execute-sidebar__external-links">
+                                  {planningExternalLinks.map((link) => {
+                                    const icon = getResourceIcon(link.linkType);
+                                    return (
+                                      <a
+                                        key={link.id}
+                                        href={link.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="execute-sidebar__external-link"
+                                      >
+                                        <img
+                                          src={icon.src}
+                                          alt={icon.alt}
+                                          className={`execute-sidebar__link-icon execute-sidebar__link-icon${icon.className}`}
+                                        />
+                                        <span className="execute-sidebar__external-link-text">
+                                          {link.title || link.url}
+                                        </span>
+                                      </a>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Files/Images */}
+                            {planningBranchFiles.length > 0 && (
+                              <div className="execute-sidebar__links-section">
+                                <div className="execute-sidebar__links-header">
+                                  <h4>Files</h4>
+                                </div>
+                                <div className="execute-sidebar__files">
+                                  {planningBranchFiles.map((file) => {
+                                    const isImage = file.mimeType?.startsWith("image/");
+                                    return (
+                                      <div key={file.id} className="execute-sidebar__file">
+                                        {isImage ? (
+                                          <a
+                                            href={api.getBranchFileUrl(file.id)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="execute-sidebar__file-image-link"
+                                          >
+                                            <img
+                                              src={api.getBranchFileUrl(file.id)}
+                                              alt={file.originalName || "Image"}
+                                              className="execute-sidebar__file-thumbnail"
+                                            />
+                                          </a>
+                                        ) : (
+                                          <a
+                                            href={api.getBranchFileUrl(file.id)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="execute-sidebar__file-link"
+                                          >
+                                            📄 {file.originalName || file.filePath}
+                                          </a>
+                                        )}
+                                        {file.description && (
+                                          <span className="execute-sidebar__file-description">{file.description}</span>
+                                        )}
+                                        {file.sourceType === "figma_mcp" && (
+                                          <span className="execute-sidebar__file-source">From Figma</span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+
                   {/* Instruction Tab */}
                   {planningSidebarTab === "instruction" && currentPlanningBranch && (
                     <div className="planning-panel__instruction">
                       <div className="planning-panel__instruction-header">
-                        <h4>{currentPlanningBranch}</h4>
+                        <div className="planning-panel__instruction-branch-nav">
+                          <h4>{currentPlanningBranch}</h4>
+                          <button
+                            className="planning-panel__branch-copy-btn"
+                            onClick={() => {
+                              if (currentPlanningBranch) {
+                                navigator.clipboard.writeText(currentPlanningBranch);
+                              }
+                            }}
+                            title="Copy branch name"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                              <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/>
+                              <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/>
+                            </svg>
+                          </button>
+                          <button
+                            className="planning-panel__branch-nav-btn"
+                            onClick={() => setUserViewBranchIndex(Math.max(0, userViewBranchIndex - 1))}
+                            disabled={userViewBranchIndex === 0}
+                            title="Previous branch"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            className="planning-panel__branch-nav-btn"
+                            onClick={() => setUserViewBranchIndex(Math.min(planningBranches.length - 1, userViewBranchIndex + 1))}
+                            disabled={userViewBranchIndex >= planningBranches.length - 1}
+                            title="Next branch"
+                          >
+                            ↓
+                          </button>
+                        </div>
                         <div className="planning-panel__instruction-actions">
                           {instructionDirty && (
                             <span className="planning-panel__instruction-dirty">unsaved</span>

@@ -8,7 +8,6 @@ import { BadRequestError, NotFoundError } from "../middleware/error-handler";
 import { broadcast } from "../ws";
 import { execSync } from "child_process";
 import { existsSync } from "fs";
-import Anthropic from "@anthropic-ai/sdk";
 
 export const planningSessionsRouter = new Hono();
 
@@ -828,17 +827,15 @@ ${conversationSnippet}
   }
 
   try {
-    const client = new Anthropic();
-    const response = await client.messages.create({
-      model: "claude-3-5-haiku-20241022",
-      max_tokens: 50,
-      messages: [
-        { role: "user", content: prompt }
-      ],
+    // Use Claude CLI (same as chat) to avoid needing separate API key
+    const escapedPrompt = prompt.replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`');
+    const result = execSync(`claude -p "${escapedPrompt}" --model haiku`, {
+      encoding: "utf-8",
+      maxBuffer: 1024 * 1024,
+      timeout: 30000,
     });
 
-    const textBlock = response.content.find((block) => block.type === "text");
-    let newTitle = textBlock?.text?.trim() || currentTitle;
+    let newTitle = result.trim() || currentTitle;
 
     // Clean up the title (remove quotes if present)
     newTitle = newTitle.replace(/^["「『]|["」』]$/g, "").trim();

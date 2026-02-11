@@ -281,6 +281,7 @@ export function PlanningPanel({
 
   // Resizable sidebar
   const [sidebarWidth, setSidebarWidth] = useState(420);
+  const [sidebarFullscreen, setSidebarFullscreen] = useState(false);
   const isResizing = useRef(false);
 
   // Ref to track the latest selected session for async operations
@@ -1235,7 +1236,9 @@ export function PlanningPanel({
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!isResizing.current) return;
       const delta = startX - moveEvent.clientX;
-      const newWidth = Math.max(200, Math.min(600, startWidth + delta));
+      // Allow wider sidebar - max 80% of window width or 1200px
+      const maxWidth = Math.min(1200, window.innerWidth * 0.8);
+      const newWidth = Math.max(200, Math.min(maxWidth, startWidth + delta));
       setSidebarWidth(newWidth);
     };
 
@@ -2084,51 +2087,66 @@ export function PlanningPanel({
 
           {/* Execution Mode */}
           {!executeEditMode && selectedSession.executeBranches && selectedSession.executeBranches.length > 0 && (
-            <div className="planning-panel__detail-main">
-              {/* Chat */}
-              <div className="planning-panel__chat">
-                {/* Current branch indicator */}
-                {selectedSession.executeBranches[selectedSession.currentExecuteIndex] && (
-                  <div className="planning-panel__branch-indicator">
-                    <span className="planning-panel__branch-indicator-label">
-                      {claudeWorking ? "🤖 Working on:" : "📍 Current:"}
-                    </span>
-                    <span className="planning-panel__branch-indicator-name">
-                      {selectedSession.executeBranches[selectedSession.currentExecuteIndex]}
-                    </span>
-                    <span className="planning-panel__branch-indicator-hint">
-                      Task {selectedSession.currentExecuteIndex + 1} of {selectedSession.executeBranches.length}
-                    </span>
-                  </div>
-                )}
-                {selectedSession.chatSessionId && (
-                  <ChatPanel
-                    sessionId={selectedSession.chatSessionId}
-                    onTaskSuggested={handleTaskSuggested}
-                    existingTaskLabels={selectedSession.nodes.map((n) => n.title)}
-                    disabled={false}
-                    executeMode={true}
-                    executeContext={{
-                      branchName: selectedSession.executeBranches[selectedSession.currentExecuteIndex],
-                      instruction: executeCurrentTaskInstruction?.instructionMd || null,
-                      taskIndex: selectedSession.currentExecuteIndex,
-                      totalTasks: selectedSession.executeBranches.length,
-                      allTasks: executeAllTasksInstructions.length > 0
-                        ? executeAllTasksInstructions
-                        : selectedSession.executeBranches.map(b => ({ branchName: b, instruction: null })),
-                    }}
-                  />
-                )}
-              </div>
+            <div className={`planning-panel__detail-main ${sidebarFullscreen ? "planning-panel__detail-main--fullscreen" : ""}`}>
+              {/* Chat - hidden when sidebar is fullscreen */}
+              {!sidebarFullscreen && (
+                <div className="planning-panel__chat">
+                  {/* Current branch indicator */}
+                  {selectedSession.executeBranches[selectedSession.currentExecuteIndex] && (
+                    <div className="planning-panel__branch-indicator">
+                      <span className="planning-panel__branch-indicator-label">
+                        {claudeWorking ? "🤖 Working on:" : "📍 Current:"}
+                      </span>
+                      <span className="planning-panel__branch-indicator-name">
+                        {selectedSession.executeBranches[selectedSession.currentExecuteIndex]}
+                      </span>
+                      <span className="planning-panel__branch-indicator-hint">
+                        Task {selectedSession.currentExecuteIndex + 1} of {selectedSession.executeBranches.length}
+                      </span>
+                    </div>
+                  )}
+                  {selectedSession.chatSessionId && (
+                    <ChatPanel
+                      sessionId={selectedSession.chatSessionId}
+                      onTaskSuggested={handleTaskSuggested}
+                      existingTaskLabels={selectedSession.nodes.map((n) => n.title)}
+                      disabled={false}
+                      executeMode={true}
+                      executeContext={{
+                        branchName: selectedSession.executeBranches[selectedSession.currentExecuteIndex],
+                        instruction: executeCurrentTaskInstruction?.instructionMd || null,
+                        taskIndex: selectedSession.currentExecuteIndex,
+                        totalTasks: selectedSession.executeBranches.length,
+                        allTasks: executeAllTasksInstructions.length > 0
+                          ? executeAllTasksInstructions
+                          : selectedSession.executeBranches.map(b => ({ branchName: b, instruction: null })),
+                      }}
+                    />
+                  )}
+                </div>
+              )}
 
-              {/* Resizer */}
-              <div
-                className="planning-panel__resizer"
-                onMouseDown={handleResizeStart}
-              />
+              {/* Resizer - hidden when fullscreen */}
+              {!sidebarFullscreen && (
+                <div
+                  className="planning-panel__resizer"
+                  onMouseDown={handleResizeStart}
+                />
+              )}
 
               {/* Sidebar */}
-              <div className="planning-panel__sidebar" style={{ width: sidebarWidth }}>
+              <div
+                className={`planning-panel__sidebar ${sidebarFullscreen ? "planning-panel__sidebar--fullscreen" : ""}`}
+                style={sidebarFullscreen ? undefined : { width: sidebarWidth }}
+              >
+                {/* Fullscreen toggle button */}
+                <button
+                  className="planning-panel__fullscreen-toggle"
+                  onClick={() => setSidebarFullscreen(!sidebarFullscreen)}
+                  title={sidebarFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                >
+                  {sidebarFullscreen ? "⤡" : "⤢"}
+                </button>
                 <ExecuteSidebar
                   repoId={repoId}
                   executeBranches={selectedSession.executeBranches}
@@ -2215,41 +2233,56 @@ export function PlanningPanel({
 
           {/* Planning Mode */}
           {hasBranches && (
-            <div className="planning-panel__detail-main">
-              {/* Chat */}
-              <div className="planning-panel__chat">
-                {/* Current branch indicator */}
-                {currentPlanningBranch && (
-                  <div className="planning-panel__branch-indicator">
-                    <span className="planning-panel__branch-indicator-label">
-                      {claudeWorking ? "🤖 Working on:" : "📍 Focused:"}
-                    </span>
-                    <span className="planning-panel__branch-indicator-name">
-                      {currentPlanningBranch}
-                    </span>
-                    <span className="planning-panel__branch-indicator-hint">
-                      Chat messages will reference this branch
-                    </span>
-                  </div>
-                )}
-                {selectedSession.chatSessionId && (
-                  <ChatPanel
-                    sessionId={selectedSession.chatSessionId}
-                    onTaskSuggested={handleTaskSuggested}
-                    existingTaskLabels={selectedSession.nodes.map((n) => n.title)}
-                    disabled={false}
-                  />
-                )}
-              </div>
+            <div className={`planning-panel__detail-main ${sidebarFullscreen ? "planning-panel__detail-main--fullscreen" : ""}`}>
+              {/* Chat - hidden when sidebar is fullscreen */}
+              {!sidebarFullscreen && (
+                <div className="planning-panel__chat">
+                  {/* Current branch indicator */}
+                  {currentPlanningBranch && (
+                    <div className="planning-panel__branch-indicator">
+                      <span className="planning-panel__branch-indicator-label">
+                        {claudeWorking ? "🤖 Working on:" : "📍 Focused:"}
+                      </span>
+                      <span className="planning-panel__branch-indicator-name">
+                        {currentPlanningBranch}
+                      </span>
+                      <span className="planning-panel__branch-indicator-hint">
+                        Chat messages will reference this branch
+                      </span>
+                    </div>
+                  )}
+                  {selectedSession.chatSessionId && (
+                    <ChatPanel
+                      sessionId={selectedSession.chatSessionId}
+                      onTaskSuggested={handleTaskSuggested}
+                      existingTaskLabels={selectedSession.nodes.map((n) => n.title)}
+                      disabled={false}
+                    />
+                  )}
+                </div>
+              )}
 
-              {/* Resizer */}
-              <div
-                className="planning-panel__resizer"
-                onMouseDown={handleResizeStart}
-              />
+              {/* Resizer - hidden when fullscreen */}
+              {!sidebarFullscreen && (
+                <div
+                  className="planning-panel__resizer"
+                  onMouseDown={handleResizeStart}
+                />
+              )}
 
               {/* Sidebar: Branches at top, then tabbed content */}
-              <div className="planning-panel__sidebar" style={{ width: sidebarWidth }}>
+              <div
+                className={`planning-panel__sidebar ${sidebarFullscreen ? "planning-panel__sidebar--fullscreen" : ""}`}
+                style={sidebarFullscreen ? undefined : { width: sidebarWidth }}
+              >
+                {/* Fullscreen toggle button */}
+                <button
+                  className="planning-panel__fullscreen-toggle"
+                  onClick={() => setSidebarFullscreen(!sidebarFullscreen)}
+                  title={sidebarFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                >
+                  {sidebarFullscreen ? "⤡" : "⤢"}
+                </button>
                 {/* Branch Tree (always visible at top) */}
                 <div className="planning-panel__sidebar-branches">
                   <ExecuteBranchTree

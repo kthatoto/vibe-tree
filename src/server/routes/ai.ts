@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { db, schema } from "../../db";
 import { eq, and } from "drizzle-orm";
-import { spawn, type ChildProcess, execSync } from "child_process";
+import { spawn, type ChildProcess } from "child_process";
+import { execAsync } from "../utils";
 import { existsSync, writeFileSync, mkdirSync, unlinkSync } from "fs";
 import { join } from "path";
 import { randomUUID } from "crypto";
@@ -105,9 +106,7 @@ async function generatePrompt(
   let currentBranch = branch ?? "";
   if (!currentBranch) {
     try {
-      currentBranch = execSync(`cd "${localPath}" && git branch --show-current`, {
-        encoding: "utf-8",
-      }).trim();
+      currentBranch = (await execAsync(`cd "${localPath}" && git branch --show-current`)).trim();
     } catch {
       currentBranch = "unknown";
     }
@@ -116,9 +115,7 @@ async function generatePrompt(
   // Get git status
   let gitStatus = "";
   try {
-    gitStatus = execSync(`cd "${localPath}" && git status --short`, {
-      encoding: "utf-8",
-    }).trim();
+    gitStatus = (await execAsync(`cd "${localPath}" && git status --short`)).trim();
   } catch {
     gitStatus = "";
   }
@@ -208,7 +205,7 @@ aiRouter.post("/start", async (c) => {
   }
 
   // Get repo ID
-  const repoId = getRepoId(localPath);
+  const repoId = await getRepoId(localPath);
   if (!repoId) {
     throw new BadRequestError(`Could not detect GitHub repo at: ${localPath}`);
   }
@@ -233,9 +230,7 @@ aiRouter.post("/start", async (c) => {
   let branch: string | null = input.branch ?? null;
   if (!branch) {
     try {
-      branch = execSync(`cd "${localPath}" && git branch --show-current`, {
-        encoding: "utf-8",
-      }).trim() || null;
+      branch = (await execAsync(`cd "${localPath}" && git branch --show-current`)).trim() || null;
     } catch {
       branch = null;
     }

@@ -1,6 +1,6 @@
-import { execSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
+import { execAsync } from "../utils";
 import type {
   BranchNamingRule,
   TreeNode,
@@ -36,13 +36,12 @@ interface GhPR {
   changedFiles: number;
 }
 
-export function getDefaultBranch(repoPath: string, branchNames: string[]): string {
+export async function getDefaultBranch(repoPath: string, branchNames: string[]): Promise<string> {
   // 1. Try to get origin's HEAD (most reliable)
   try {
-    const output = execSync(
-      `cd "${repoPath}" && git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null`,
-      { encoding: "utf-8" }
-    ).trim();
+    const output = (await execAsync(
+      `cd "${repoPath}" && git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null`
+    )).trim();
     const match = output.match(/refs\/remotes\/origin\/(.+)$/);
     if (match && match[1] && branchNames.includes(match[1])) {
       return match[1];
@@ -53,10 +52,9 @@ export function getDefaultBranch(repoPath: string, branchNames: string[]): strin
 
   // 2. Try gh repo view to get default branch
   try {
-    const output = execSync(
-      `cd "${repoPath}" && gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`,
-      { encoding: "utf-8" }
-    ).trim();
+    const output = (await execAsync(
+      `cd "${repoPath}" && gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`
+    )).trim();
     if (output && branchNames.includes(output)) {
       return output;
     }
@@ -73,11 +71,10 @@ export function getDefaultBranch(repoPath: string, branchNames: string[]): strin
   return branchNames[0] ?? "main";
 }
 
-export function getBranches(repoPath: string): BranchInfo[] {
+export async function getBranches(repoPath: string): Promise<BranchInfo[]> {
   try {
-    const output = execSync(
-      `cd "${repoPath}" && git for-each-ref --sort=-committerdate --format='%(refname:short)|%(objectname:short)|%(committerdate:iso8601)' refs/heads/`,
-      { encoding: "utf-8" }
+    const output = await execAsync(
+      `cd "${repoPath}" && git for-each-ref --sort=-committerdate --format='%(refname:short)|%(objectname:short)|%(committerdate:iso8601)' refs/heads/`
     );
     return output
       .trim()
@@ -97,11 +94,10 @@ export function getBranches(repoPath: string): BranchInfo[] {
   }
 }
 
-export function getWorktrees(repoPath: string): WorktreeInfo[] {
+export async function getWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
   try {
-    const output = execSync(
-      `cd "${repoPath}" && git worktree list --porcelain`,
-      { encoding: "utf-8" }
+    const output = await execAsync(
+      `cd "${repoPath}" && git worktree list --porcelain`
     );
     const worktrees: WorktreeInfo[] = [];
     let current: Partial<WorktreeInfo> = {};
@@ -118,12 +114,10 @@ export function getWorktrees(repoPath: string): WorktreeInfo[] {
     }
     if (current.path) worktrees.push(current as WorktreeInfo);
 
-    // Check dirty status and heartbeat for each worktree
-    for (const wt of worktrees) {
+    // Check dirty status and heartbeat for each worktree (in parallel)
+    await Promise.all(worktrees.map(async (wt) => {
       try {
-        const status = execSync(`cd "${wt.path}" && git status --porcelain`, {
-          encoding: "utf-8",
-        });
+        const status = await execAsync(`cd "${wt.path}" && git status --porcelain`);
         wt.dirty = status.trim().length > 0;
       } catch {
         wt.dirty = false;
@@ -145,7 +139,7 @@ export function getWorktrees(repoPath: string): WorktreeInfo[] {
           // Ignore parse errors
         }
       }
-    }
+    }));
 
     return worktrees;
   } catch (err) {
@@ -154,11 +148,10 @@ export function getWorktrees(repoPath: string): WorktreeInfo[] {
   }
 }
 
-export function getPRs(repoPath: string): PRInfo[] {
+export async function getPRs(repoPath: string): Promise<PRInfo[]> {
   try {
-    const output = execSync(
-      `cd "${repoPath}" && gh pr list --state all --json number,title,state,url,headRefName,isDraft,labels,assignees,reviewDecision,reviewRequests,reviews,statusCheckRollup,additions,deletions,changedFiles --limit 50`,
-      { encoding: "utf-8" }
+    const output = await execAsync(
+      `cd "${repoPath}" && gh pr list --state all --json number,title,state,url,headRefName,isDraft,labels,assignees,reviewDecision,reviewRequests,reviews,statusCheckRollup,additions,deletions,changedFiles --limit 50`
     );
     const prs: GhPR[] = JSON.parse(output);
     return prs.map((pr) => {
@@ -217,12 +210,12 @@ export function getPRs(repoPath: string): PRInfo[] {
   }
 }
 
-export function findBestParent(
+export async function findBestParent(
   branchName: string,
   allBranches: string[],
   defaultBranch: string,
   repoPath?: string
-): { parent: string; confidence: "high" | "medium" | "low" } {
+): Promise<{ parent: string; confidence: "high" | "medium" | "low" }> {
   let bestMatch = defaultBranch;
   let bestMatchLength = 0;
 
@@ -258,10 +251,9 @@ export function findBestParent(
       // First, get the commit count from default branch to this branch
       try {
         const defaultCount = parseInt(
-          execSync(
-            `cd "${repoPath}" && git rev-list --count "${defaultBranch}..${branchName}" 2>/dev/null || echo "999999"`,
-            { encoding: "utf-8" }
-          ).trim(),
+          (await execAsync(
+            `cd "${repoPath}" && git rev-list --count "${defaultBranch}..${branchName}" 2>/dev/null || echo "999999"`
+          )).trim(),
           10
         );
         if (!isNaN(defaultCount) && defaultCount < minDistance) {
@@ -278,18 +270,16 @@ export function findBestParent(
 
         try {
           // Find merge-base between candidate and branchName
-          const mergeBase = execSync(
-            `cd "${repoPath}" && git merge-base "${candidate}" "${branchName}" 2>/dev/null`,
-            { encoding: "utf-8" }
-          ).trim();
+          const mergeBase = (await execAsync(
+            `cd "${repoPath}" && git merge-base "${candidate}" "${branchName}" 2>/dev/null`
+          )).trim();
 
           if (!mergeBase) continue;
 
           // Get merge-base with default branch
-          const defaultMergeBase = execSync(
-            `cd "${repoPath}" && git merge-base "${defaultBranch}" "${branchName}" 2>/dev/null`,
-            { encoding: "utf-8" }
-          ).trim();
+          const defaultMergeBase = (await execAsync(
+            `cd "${repoPath}" && git merge-base "${defaultBranch}" "${branchName}" 2>/dev/null`
+          )).trim();
 
           // If merge-base with candidate is same as merge-base with default,
           // then candidate is not a better parent than default
@@ -297,19 +287,17 @@ export function findBestParent(
 
           // Check if candidate's merge-base is a descendant of default's merge-base
           // (meaning candidate is "closer" to branchName in the tree)
-          const isDescendant = execSync(
-            `cd "${repoPath}" && git merge-base --is-ancestor "${defaultMergeBase}" "${mergeBase}" 2>/dev/null && echo "yes" || echo "no"`,
-            { encoding: "utf-8" }
-          ).trim();
+          const isDescendant = (await execAsync(
+            `cd "${repoPath}" && git merge-base --is-ancestor "${defaultMergeBase}" "${mergeBase}" 2>/dev/null && echo "yes" || echo "no"`
+          )).trim();
 
           if (isDescendant !== "yes") continue;
 
           // Count commits from merge-base to branchName
           const count = parseInt(
-            execSync(
-              `cd "${repoPath}" && git rev-list --count "${mergeBase}..${branchName}" 2>/dev/null`,
-              { encoding: "utf-8" }
-            ).trim(),
+            (await execAsync(
+              `cd "${repoPath}" && git rev-list --count "${mergeBase}..${branchName}" 2>/dev/null`
+            )).trim(),
             10
           );
 
@@ -335,13 +323,13 @@ export function findBestParent(
   return { parent: bestMatch, confidence: "low" };
 }
 
-export function buildTree(
+export async function buildTree(
   branches: BranchInfo[],
   worktrees: WorktreeInfo[],
   prs: PRInfo[],
   repoPath: string,
   defaultBranch: string
-): { nodes: TreeNode[]; edges: TreeEdge[] } {
+): Promise<{ nodes: TreeNode[]; edges: TreeEdge[] }> {
   const nodes: TreeNode[] = [];
   const edges: TreeEdge[] = [];
   const branchNames = branches.map((b) => b.name);
@@ -374,7 +362,7 @@ export function buildTree(
     nodes.push(node);
 
     if (baseBranch && branch.name !== defaultBranch) {
-      const { parent, confidence } = findBestParent(branch.name, branchNames, defaultBranch, repoPath);
+      const { parent, confidence } = await findBestParent(branch.name, branchNames, defaultBranch, repoPath);
       edges.push({
         parent,
         child: branch.name,
@@ -389,14 +377,14 @@ export function buildTree(
 /**
  * Calculate ahead/behind for each node based on its parent in the edges.
  * This should be called after edges are finalized (including planning session edges).
- * Uses parallel execution with concurrency limit for performance.
+ * Uses parallel execution for performance.
  */
-export function calculateAheadBehind(
+export async function calculateAheadBehind(
   nodes: TreeNode[],
   edges: TreeEdge[],
   repoPath: string,
   defaultBranch: string
-): void {
+): Promise<void> {
   // Build a map of child -> parent from edges
   const parentMap = new Map<string, string>();
   for (const edge of edges) {
@@ -406,93 +394,56 @@ export function calculateAheadBehind(
   // Filter nodes that need calculation
   const nodesToProcess = nodes.filter((node) => node.branchName !== defaultBranch);
 
-  // Process in parallel with concurrency limit
-  const CONCURRENCY = 5;
-  const chunks: TreeNode[][] = [];
-  for (let i = 0; i < nodesToProcess.length; i += CONCURRENCY) {
-    chunks.push(nodesToProcess.slice(i, i + CONCURRENCY));
-  }
-
-  for (const chunk of chunks) {
-    // Use execSync in parallel within each chunk (spawn separate processes)
-    const results = chunk.map((node) => {
-      const parentBranch = parentMap.get(node.branchName) || defaultBranch;
-      try {
-        const output = execSync(
-          `cd "${repoPath}" && git rev-list --left-right --count "${parentBranch}"..."${node.branchName}"`,
-          { encoding: "utf-8" }
-        );
-        const parts = output.trim().split(/\s+/);
-        const behind = parseInt(parts[0] ?? "0", 10);
-        const ahead = parseInt(parts[1] ?? "0", 10);
-        return { node, ahead, behind };
-      } catch {
-        return null;
-      }
-    });
-
-    // Apply results
-    for (const result of results) {
-      if (result) {
-        result.node.aheadBehind = { ahead: result.ahead, behind: result.behind };
-      }
+  // Process all in parallel
+  await Promise.all(nodesToProcess.map(async (node) => {
+    const parentBranch = parentMap.get(node.branchName) || defaultBranch;
+    try {
+      const output = await execAsync(
+        `cd "${repoPath}" && git rev-list --left-right --count "${parentBranch}"..."${node.branchName}"`
+      );
+      const parts = output.trim().split(/\s+/);
+      const behind = parseInt(parts[0] ?? "0", 10);
+      const ahead = parseInt(parts[1] ?? "0", 10);
+      node.aheadBehind = { ahead, behind };
+    } catch {
+      // Ignore errors
     }
-  }
+  }));
 }
 
 /**
  * Calculate ahead/behind for each node relative to its remote tracking branch (origin).
- * Uses parallel execution with concurrency limit for performance.
+ * Uses parallel execution for performance.
  */
-export function calculateRemoteAheadBehind(
+export async function calculateRemoteAheadBehind(
   nodes: TreeNode[],
   repoPath: string
-): void {
-  // Process in parallel with concurrency limit
-  const CONCURRENCY = 5;
-  const chunks: TreeNode[][] = [];
-  for (let i = 0; i < nodes.length; i += CONCURRENCY) {
-    chunks.push(nodes.slice(i, i + CONCURRENCY));
-  }
+): Promise<void> {
+  // Process all in parallel
+  await Promise.all(nodes.map(async (node) => {
+    try {
+      // Check if there's a remote tracking branch
+      const upstream = (await execAsync(
+        `cd "${repoPath}" && git rev-parse --abbrev-ref "${node.branchName}@{upstream}" 2>/dev/null`
+      )).trim();
 
-  for (const chunk of chunks) {
-    // Process each chunk
-    const results = chunk.map((node) => {
-      try {
-        // Check if there's a remote tracking branch
-        const upstream = execSync(
-          `cd "${repoPath}" && git rev-parse --abbrev-ref "${node.branchName}@{upstream}" 2>/dev/null`,
-          { encoding: "utf-8" }
-        ).trim();
+      if (!upstream) return;
 
-        if (!upstream) return null;
+      // Get ahead/behind count relative to upstream
+      const output = await execAsync(
+        `cd "${repoPath}" && git rev-list --left-right --count "${upstream}"..."${node.branchName}"`
+      );
+      const parts = output.trim().split(/\s+/);
+      const behind = parseInt(parts[0] ?? "0", 10);
+      const ahead = parseInt(parts[1] ?? "0", 10);
 
-        // Get ahead/behind count relative to upstream
-        const output = execSync(
-          `cd "${repoPath}" && git rev-list --left-right --count "${upstream}"..."${node.branchName}"`,
-          { encoding: "utf-8" }
-        );
-        const parts = output.trim().split(/\s+/);
-        const behind = parseInt(parts[0] ?? "0", 10);
-        const ahead = parseInt(parts[1] ?? "0", 10);
-
-        if (ahead > 0 || behind > 0) {
-          return { node, ahead, behind };
-        }
-        return null;
-      } catch {
-        // No upstream or error - skip
-        return null;
+      if (ahead > 0 || behind > 0) {
+        node.remoteAheadBehind = { ahead, behind };
       }
-    });
-
-    // Apply results
-    for (const result of results) {
-      if (result) {
-        result.node.remoteAheadBehind = { ahead: result.ahead, behind: result.behind };
-      }
+    } catch {
+      // No upstream or error - skip
     }
-  }
+  }));
 }
 
 export function calculateWarnings(

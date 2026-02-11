@@ -1,6 +1,23 @@
 import { homedir } from "os";
 import { join } from "path";
-import { execSync } from "child_process";
+import { exec, execSync } from "child_process";
+import { promisify } from "util";
+
+// Async exec for non-blocking command execution
+const execPromise = promisify(exec);
+
+export async function execAsync(
+  command: string,
+  options?: { encoding?: BufferEncoding; cwd?: string; shell?: string }
+): Promise<string> {
+  const { stdout } = await execPromise(command, {
+    encoding: options?.encoding ?? "utf-8",
+    cwd: options?.cwd,
+    shell: options?.shell,
+    maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+  });
+  return stdout;
+}
 
 // Expand ~ to home directory
 export function expandTilde(path: string): string {
@@ -14,12 +31,11 @@ export function expandTilde(path: string): string {
 }
 
 // Get repo ID from local path using gh CLI or git remote
-export function getRepoId(repoPath: string): string | null {
+export async function getRepoId(repoPath: string): Promise<string | null> {
   // 1. Try gh CLI first (works for GitHub repos)
   try {
-    const output = execSync(
-      `cd "${repoPath}" && gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null`,
-      { encoding: "utf-8" }
+    const output = await execAsync(
+      `cd "${repoPath}" && gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null`
     );
     const trimmed = output.trim();
     if (trimmed) return trimmed;
@@ -29,9 +45,8 @@ export function getRepoId(repoPath: string): string | null {
 
   // 2. Try git remote origin URL
   try {
-    const output = execSync(
-      `cd "${repoPath}" && git remote get-url origin 2>/dev/null`,
-      { encoding: "utf-8" }
+    const output = await execAsync(
+      `cd "${repoPath}" && git remote get-url origin 2>/dev/null`
     );
     const url = output.trim();
     // Parse GitHub URL: git@github.com:owner/repo.git or https://github.com/owner/repo.git

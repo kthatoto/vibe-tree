@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { execSync } from "child_process";
 import { NotFoundError } from "../middleware/error-handler";
+import { execAsync } from "../utils";
 
 interface GhRepo {
   name: string;
@@ -28,9 +28,8 @@ reposRouter.get("/", async (c) => {
   const limit = parseInt(c.req.query("limit") ?? "30");
 
   try {
-    const output = execSync(
-      `gh repo list --json name,nameWithOwner,url,description,isPrivate,defaultBranchRef --limit ${limit}`,
-      { encoding: "utf-8" }
+    const output = await execAsync(
+      `gh repo list --json name,nameWithOwner,url,description,isPrivate,defaultBranchRef --limit ${limit}`
     );
 
     const ghRepos: GhRepo[] = JSON.parse(output);
@@ -59,9 +58,8 @@ reposRouter.get("/:owner/:name", async (c) => {
   const fullName = `${owner}/${name}`;
 
   try {
-    const output = execSync(
-      `gh repo view ${fullName} --json name,nameWithOwner,url,description,isPrivate,defaultBranchRef`,
-      { encoding: "utf-8" }
+    const output = await execAsync(
+      `gh repo view ${fullName} --json name,nameWithOwner,url,description,isPrivate,defaultBranchRef`
     );
 
     const r: GhRepo = JSON.parse(output);

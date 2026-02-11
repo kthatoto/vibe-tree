@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { execSync } from "child_process";
 import { db, schema } from "../../db";
+import { execAsync } from "../utils";
 import { eq, and, desc } from "drizzle-orm";
 import { broadcast } from "../ws";
 import { z } from "zod";
@@ -18,13 +18,12 @@ interface GitHubIssueInfo {
   projectStatus?: string;
 }
 
-function fetchGitHubIssueInfo(repoId: string, issueNumber: number): GitHubIssueInfo | null {
+async function fetchGitHubIssueInfo(repoId: string, issueNumber: number): Promise<GitHubIssueInfo | null> {
   try {
     // Basic issue info
-    const result = execSync(
-      `gh issue view ${issueNumber} --repo "${repoId}" --json number,title,state,labels,projectItems`,
-      { encoding: "utf-8", timeout: 10000 }
-    ).trim();
+    const result = (await execAsync(
+      `gh issue view ${issueNumber} --repo "${repoId}" --json number,title,state,labels,projectItems`
+    )).trim();
     const data = JSON.parse(result);
 
     // Extract project status if available
@@ -74,12 +73,11 @@ interface GitHubPRInfo {
   projectStatus?: string;
 }
 
-function fetchGitHubPRInfo(repoId: string, prNumber: number): GitHubPRInfo | null {
+async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<GitHubPRInfo | null> {
   try {
-    const result = execSync(
-      `gh pr view ${prNumber} --repo "${repoId}" --json number,title,state,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems`,
-      { encoding: "utf-8", timeout: 10000 }
-    ).trim();
+    const result = (await execAsync(
+      `gh pr view ${prNumber} --repo "${repoId}" --json number,title,state,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems`
+    )).trim();
     const data = JSON.parse(result);
 
     // Extract individual checks - deduplicate by name, keeping only the latest
@@ -353,7 +351,7 @@ branchLinksRouter.post("/", async (c) => {
 
   if (input.number) {
     if (input.linkType === "issue") {
-      const issueInfo = fetchGitHubIssueInfo(input.repoId, input.number);
+      const issueInfo = await fetchGitHubIssueInfo(input.repoId, input.number);
       if (issueInfo) {
         title = issueInfo.title;
         status = issueInfo.status;
@@ -361,7 +359,7 @@ branchLinksRouter.post("/", async (c) => {
         projectStatus = issueInfo.projectStatus ?? null;
       }
     } else if (input.linkType === "pr") {
-      const prInfo = fetchGitHubPRInfo(input.repoId, input.number);
+      const prInfo = await fetchGitHubPRInfo(input.repoId, input.number);
       if (prInfo) {
         title = prInfo.title;
         status = prInfo.status;
@@ -514,7 +512,7 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
   let projectStatus = existing.projectStatus;
 
   if (existing.linkType === "issue") {
-    const issueInfo = fetchGitHubIssueInfo(existing.repoId, existing.number);
+    const issueInfo = await fetchGitHubIssueInfo(existing.repoId, existing.number);
     if (issueInfo) {
       title = issueInfo.title;
       status = issueInfo.status;
@@ -522,7 +520,7 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
       projectStatus = issueInfo.projectStatus ?? null;
     }
   } else if (existing.linkType === "pr") {
-    const prInfo = fetchGitHubPRInfo(existing.repoId, existing.number);
+    const prInfo = await fetchGitHubPRInfo(existing.repoId, existing.number);
     if (prInfo) {
       title = prInfo.title;
       status = prInfo.status;
@@ -577,10 +575,9 @@ branchLinksRouter.post("/detect", async (c) => {
 
   // Try to find PR for this branch
   try {
-    const result = execSync(
-      `gh pr view "${input.branchName}" --repo "${input.repoId}" --json number,title,state,url,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems`,
-      { encoding: "utf-8", timeout: 10000 }
-    ).trim();
+    const result = (await execAsync(
+      `gh pr view "${input.branchName}" --repo "${input.repoId}" --json number,title,state,url,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems`
+    )).trim();
 
     if (!result) {
       return c.json({ found: false });

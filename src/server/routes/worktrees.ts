@@ -1,10 +1,9 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { execSync } from "child_process";
 import { existsSync } from "fs";
 import { validateOrThrow } from "../../shared/validation";
 import { BadRequestError } from "../middleware/error-handler";
-import { expandTilde } from "../utils";
+import { expandTilde, execAsync } from "../utils";
 import { getWorktrees } from "../lib/git-helpers";
 import { db, schema } from "../../db";
 import { eq } from "drizzle-orm";
@@ -35,7 +34,7 @@ worktreesRouter.get("/", async (c) => {
   }
 
   try {
-    const worktrees = getWorktrees(expandedPath);
+    const worktrees = await getWorktrees(expandedPath);
     return c.json(worktrees);
   } catch (err) {
     console.error("[Worktrees] Failed to get worktrees:", err);
@@ -67,7 +66,7 @@ worktreesRouter.get("/by-repo", async (c) => {
   }
 
   try {
-    const worktrees = getWorktrees(localPath);
+    const worktrees = await getWorktrees(localPath);
     return c.json({
       localPath,
       worktrees,
@@ -96,23 +95,21 @@ worktreesRouter.post("/", async (c) => {
 
   try {
     // Check if branch exists
-    const branchExists = execSync(
-      `cd "${expandedLocalPath}" && git rev-parse --verify "${branchName}" 2>/dev/null || git rev-parse --verify "origin/${branchName}" 2>/dev/null || echo ""`,
-      { encoding: "utf-8" }
-    ).trim();
+    const branchExists = (await execAsync(
+      `cd "${expandedLocalPath}" && git rev-parse --verify "${branchName}" 2>/dev/null || git rev-parse --verify "origin/${branchName}" 2>/dev/null || echo ""`
+    )).trim();
 
     if (!branchExists) {
       throw new BadRequestError(`Branch does not exist: ${branchName}`);
     }
 
     // Create worktree
-    execSync(
-      `cd "${expandedLocalPath}" && git worktree add "${expandedWorktreePath}" "${branchName}"`,
-      { encoding: "utf-8" }
+    await execAsync(
+      `cd "${expandedLocalPath}" && git worktree add "${expandedWorktreePath}" "${branchName}"`
     );
 
     // Get updated worktree list
-    const worktrees = getWorktrees(expandedLocalPath);
+    const worktrees = await getWorktrees(expandedLocalPath);
     const newWorktree = worktrees.find((w) => w.path === expandedWorktreePath);
 
     return c.json({

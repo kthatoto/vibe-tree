@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { db, schema } from "../../db";
 import { eq, and, desc } from "drizzle-orm";
 import { broadcast } from "../ws";
-import { execSync } from "child_process";
+import { execAsync } from "../utils";
 import {
   repoIdQuerySchema,
   startPlanSchema,
@@ -136,9 +136,8 @@ planRouter.post("/commit", async (c) => {
   try {
     const escapedTitle = plan.title.replace(/"/g, '\\"');
     const escapedBody = issueBody.replace(/"/g, '\\"').replace(/\n/g, "\\n");
-    const result = execSync(
-      `cd "${input.localPath}" && gh issue create --title "${escapedTitle}" --body "${escapedBody}"`,
-      { encoding: "utf-8" }
+    const result = await execAsync(
+      `cd "${input.localPath}" && gh issue create --title "${escapedTitle}" --body "${escapedBody}"`
     );
     issueUrl = result.trim();
   } catch (error) {

@@ -1,12 +1,12 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { execSync } from "child_process";
 import { db } from "../../db";
 import { externalLinks } from "../../db/schema";
 import { z } from "zod";
 import { validateOrThrow } from "../../shared/validation";
 import { BadRequestError, NotFoundError } from "../middleware/error-handler";
 import { broadcast } from "../ws";
+import { execAsync } from "../utils";
 
 export const externalLinksRouter = new Hono();
 
@@ -43,16 +43,12 @@ interface SubIssue {
 }
 
 // Fetch a single GitHub issue/PR
-function fetchSingleGitHubItem(owner: string, repo: string, type: "issue" | "pr", number: string): GitHubItemData | null {
+async function fetchSingleGitHubItem(owner: string, repo: string, type: "issue" | "pr", number: string): Promise<GitHubItemData | null> {
   try {
     const ghType = type === "pr" ? "pr" : "issue";
     const cmd = `gh ${ghType} view ${number} --repo ${owner}/${repo} --json title,body,state,author`;
 
-    const output = execSync(cmd, {
-      encoding: "utf-8",
-      timeout: 30000,
-      env: { ...process.env, GH_PROMPT_DISABLED: "1" },
-    });
+    const output = await execAsync(cmd);
 
     const data = JSON.parse(output) as {
       title?: string;
@@ -74,7 +70,7 @@ function fetchSingleGitHubItem(owner: string, repo: string, type: "issue" | "pr"
 }
 
 // Fetch sub-issues using GraphQL trackedIssues
-function fetchTrackedSubIssues(owner: string, repo: string, issueNumber: string): SubIssue[] {
+async function fetchTrackedSubIssues(owner: string, repo: string, issueNumber: string): Promise<SubIssue[]> {
   try {
     // Try direct trackedIssues first
     const query = `
@@ -95,11 +91,7 @@ function fetchTrackedSubIssues(owner: string, repo: string, issueNumber: string)
     `;
 
     const cmd = `gh api graphql -f query='${query.replace(/'/g, "'\\''")}'`;
-    const output = execSync(cmd, {
-      encoding: "utf-8",
-      timeout: 30000,
-      env: { ...process.env, GH_PROMPT_DISABLED: "1" },
-    });
+    const output = await execAsync(cmd);
 
     const data = JSON.parse(output) as {
       data?: {
@@ -136,7 +128,7 @@ function fetchTrackedSubIssues(owner: string, repo: string, issueNumber: string)
 
     // If no trackedIssues found, try reverse lookup: find issues that track THIS issue
     console.log(`[GitHub] No direct trackedIssues, trying reverse lookup...`);
-    return fetchIssuesTrackingThis(owner, repo, issueNumber);
+    return await fetchIssuesTrackingThis(owner, repo, issueNumber);
   } catch (error) {
     console.error("Failed to fetch tracked sub-issues via GraphQL:", error);
     return [];
@@ -144,7 +136,7 @@ function fetchTrackedSubIssues(owner: string, repo: string, issueNumber: string)
 }
 
 // Fetch issues that are tracking the given issue (reverse lookup)
-function fetchIssuesTrackingThis(owner: string, repo: string, parentIssueNumber: string): SubIssue[] {
+async function fetchIssuesTrackingThis(owner: string, repo: string, parentIssueNumber: string): Promise<SubIssue[]> {
   try {
     // Get all open issues in the repo and check which ones track this issue
     const query = `
@@ -168,11 +160,7 @@ function fetchIssuesTrackingThis(owner: string, repo: string, parentIssueNumber:
     `;
 
     const cmd = `gh api graphql -f query='${query.replace(/'/g, "'\\''")}'`;
-    const output = execSync(cmd, {
-      encoding: "utf-8",
-      timeout: 30000,
-      env: { ...process.env, GH_PROMPT_DISABLED: "1" },
-    });
+    const output = await execAsync(cmd);
 
     const data = JSON.parse(output) as {
       data?: {
@@ -307,10 +295,10 @@ function extractSubIssueRefs(body: string, defaultOwner: string, defaultRepo: st
 }
 
 // Fetch GitHub content using gh command (with sub-issues support)
-function fetchGitHubContent(owner: string, repo: string, type: "issue" | "pr", number: string): { title?: string; content?: string } {
+async function fetchGitHubContent(owner: string, repo: string, type: "issue" | "pr", number: string): Promise<{ title?: string; content?: string }> {
   try {
     // Fetch main issue/PR
-    const mainItem = fetchSingleGitHubItem(owner, repo, type, number);
+    const mainItem = await fetchSingleGitHubItem(owner, repo, type, number);
     if (!mainItem) {
       console.log(`[GitHub] Failed to fetch ${type} #${number} from ${owner}/${repo}`);
       return {};
@@ -324,7 +312,7 @@ function fetchGitHubContent(owner: string, repo: string, type: "issue" | "pr", n
     if (type === "issue") {
       // First, try to get tracked sub-issues via GraphQL
       console.log(`[GitHub] Checking for tracked sub-issues...`);
-      const trackedSubIssues = fetchTrackedSubIssues(owner, repo, number);
+      const trackedSubIssues = await fetchTrackedSubIssues(owner, repo, number);
       console.log(`[GitHub] Found ${trackedSubIssues.length} tracked sub-issues via GraphQL`);
 
       if (trackedSubIssues.length > 0) {
@@ -351,7 +339,7 @@ function fetchGitHubContent(owner: string, repo: string, type: "issue" | "pr", n
           content += `\n\n---\n\n## Sub-Issues (${subIssueRefs.length}件)\n`;
 
           for (const ref of subIssueRefs) {
-            const subItem = fetchSingleGitHubItem(ref.owner, ref.repo, "issue", ref.number);
+            const subItem = await fetchSingleGitHubItem(ref.owner, ref.repo, "issue", ref.number);
             if (subItem) {
               const subRepo = (ref.owner === owner && ref.repo === repo) ? "" : `${ref.owner}/${ref.repo}`;
               const subState = subItem.state === "OPEN" ? "🔵" : "✅";

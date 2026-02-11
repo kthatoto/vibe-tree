@@ -144,19 +144,30 @@ export default function TreeDashboard() {
   // Get selected pin
   const selectedPin = repoPins.find((p) => p.id === selectedPinId) ?? null;
 
-  // Define handleScan before useEffects that use it
-  const handleScan = useCallback(async (localPath: string) => {
-    if (!localPath) return;
-    setLoading(true);
+  // Load cached snapshot immediately, then start background scan
+  const loadSnapshot = useCallback(async (pinId: number, localPath: string) => {
     setError(null);
     try {
-      const result = await api.scan(localPath);
-      setSnapshot(result);
+      // Immediately load cached snapshot from DB (fast)
+      const cachedSnapshot = await api.getSnapshot(pinId);
+      setSnapshot(cachedSnapshot);
+      setLoading(false);
+
+      // Start background scan (don't await - updates come via WebSocket)
+      api.startScan(localPath).catch((err) => {
+        console.warn("[TreeDashboard] Background scan failed:", err);
+      });
     } catch (err) {
       setError((err as Error).message);
-    } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Trigger background scan without loading state
+  const triggerScan = useCallback((localPath: string) => {
+    api.startScan(localPath).catch((err) => {
+      console.warn("[TreeDashboard] Background scan failed:", err);
+    });
   }, []);
 
   const handleFetch = useCallback(async (localPath: string) => {
@@ -165,9 +176,8 @@ export default function TreeDashboard() {
     setError(null);
     try {
       await api.fetch(localPath);
-      // Rescan after fetch to update the view
-      const result = await api.scan(localPath);
-      setSnapshot(result);
+      // Trigger background scan after fetch (don't await)
+      api.startScan(localPath).catch(console.warn);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -175,12 +185,13 @@ export default function TreeDashboard() {
     }
   }, []);
 
-  // Auto-scan when pin is selected
+  // Auto-load when pin is selected
   useEffect(() => {
     if (selectedPin && !snapshot) {
-      handleScan(selectedPin.localPath);
+      setLoading(true);
+      loadSnapshot(selectedPin.id, selectedPin.localPath);
     }
-  }, [selectedPin?.id, handleScan]);
+  }, [selectedPin?.id, loadSnapshot]);
 
   // Sync selectedNode with latest snapshot data
   useEffect(() => {
@@ -255,7 +266,7 @@ export default function TreeDashboard() {
     // Refetch branches when planning is confirmed
     const unsubBranches = wsClient.on("branches.changed", () => {
       if (selectedPin) {
-        handleScan(selectedPin.localPath);
+        triggerScan(selectedPin.localPath);
       }
     });
 
@@ -311,7 +322,7 @@ export default function TreeDashboard() {
       unsubFetchCompleted();
       unsubFetchError();
     };
-  }, [snapshot?.repoId, selectedPin, handleScan]);
+  }, [snapshot?.repoId, selectedPin, triggerScan]);
 
   // Load branchLinks when snapshot is available
   useEffect(() => {
@@ -482,7 +493,7 @@ export default function TreeDashboard() {
       });
 
       // Background rescan to get full node info (worktree, PR, etc.)
-      api.scan(selectedPin.localPath).then(setSnapshot).catch(() => {});
+      triggerScan(selectedPin.localPath);
 
       // Close dialog
       setCreateBranchBase(null);
@@ -659,7 +670,7 @@ export default function TreeDashboard() {
       );
 
       // Rescan in background to update branch graph (don't await)
-      handleScan(selectedPin.localPath);
+      triggerScan(selectedPin.localPath);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -1080,7 +1091,7 @@ export default function TreeDashboard() {
                           if (!confirm(`Delete worktree "${wt.path.split("/").pop()}"?`)) return;
                           try {
                             await api.deleteWorktree(selectedPin.localPath, wt.path);
-                            handleScan(selectedPin.localPath);
+                            triggerScan(selectedPin.localPath);
                           } catch (err) {
                             alert("Failed to delete worktree: " + (err as Error).message);
                           }
@@ -1203,7 +1214,7 @@ export default function TreeDashboard() {
                                   edges: originalTreeSpecEdges,
                                 }).then(() => {
                                   // Background rescan to ensure consistency
-                                  api.scan(selectedPin.localPath).then(setSnapshot).catch(() => {});
+                                  triggerScan(selectedPin.localPath);
                                 }).catch((err) => {
                                   console.error("Failed to discard:", err);
                                 });
@@ -1302,11 +1313,11 @@ export default function TreeDashboard() {
                             edges: newTreeSpecEdges,
                           }).then(() => {
                             // Rescan after treeSpec is saved to ensure edges are applied
-                            api.scan(selectedPin.localPath).then(setSnapshot);
+                            triggerScan(selectedPin.localPath);
                           }).catch((err) => {
                             console.error("Failed to save edge:", err);
                             setError((err as Error).message);
-                            api.scan(selectedPin.localPath).then(setSnapshot);
+                            triggerScan(selectedPin.localPath);
                           });
 
                           return {
@@ -1354,7 +1365,7 @@ export default function TreeDashboard() {
                     defaultBranch={snapshot.defaultBranch}
                     parentBranch={snapshot.edges.find((e) => e.child === selectedNode.branchName)?.parent}
                     onClose={() => setSelectedNode(null)}
-                    onWorktreeCreated={() => handleScan(selectedPin.localPath)}
+                    onWorktreeCreated={() => triggerScan(selectedPin.localPath)}
                     onStartPlanning={(branchName, instruction) => {
                       setPendingPlanning({ branchName, instruction });
                     }}

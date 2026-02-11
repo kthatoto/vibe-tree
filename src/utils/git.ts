@@ -1,14 +1,13 @@
-import { execSync } from "child_process";
+import { execAsync } from "../server/utils";
 
 /**
  * Check if a branch exists in the repository.
  */
-export function branchExists(repoPath: string, branch: string): boolean {
+export async function branchExists(repoPath: string, branch: string): Promise<boolean> {
   try {
-    const output = execSync(
-      `cd "${repoPath}" && git branch --list "${branch}"`,
-      { encoding: "utf-8" }
-    ).trim();
+    const output = (await execAsync(
+      `cd "${repoPath}" && git branch --list "${branch}"`
+    )).trim();
     return output.length > 0;
   } catch {
     return false;
@@ -18,11 +17,10 @@ export function branchExists(repoPath: string, branch: string): boolean {
 /**
  * Check if a worktree exists for a given branch.
  */
-export function worktreeExists(repoPath: string, branch: string): boolean {
+export async function worktreeExists(repoPath: string, branch: string): Promise<boolean> {
   try {
-    const output = execSync(
-      `cd "${repoPath}" && git worktree list --porcelain`,
-      { encoding: "utf-8" }
+    const output = await execAsync(
+      `cd "${repoPath}" && git worktree list --porcelain`
     );
     // Parse worktree list output to find matching branch
     const lines = output.split("\n");
@@ -43,11 +41,10 @@ export function worktreeExists(repoPath: string, branch: string): boolean {
 /**
  * Get the worktree path for a given branch, or null if no worktree exists.
  */
-export function getWorktreePath(repoPath: string, branch: string): string | null {
+export async function getWorktreePath(repoPath: string, branch: string): Promise<string | null> {
   try {
-    const output = execSync(
-      `cd "${repoPath}" && git worktree list --porcelain`,
-      { encoding: "utf-8" }
+    const output = await execAsync(
+      `cd "${repoPath}" && git worktree list --porcelain`
     );
     const lines = output.split("\n");
     let currentPath: string | null = null;
@@ -72,13 +69,12 @@ export function getWorktreePath(repoPath: string, branch: string): string | null
  * Get the default branch of a repository.
  * Tries origin/HEAD, then gh repo view, then falls back to common defaults.
  */
-export function getDefaultBranch(repoPath: string): string {
+export async function getDefaultBranch(repoPath: string): Promise<string> {
   // 1. Try to get origin's HEAD (most reliable)
   try {
-    const output = execSync(
-      `cd "${repoPath}" && git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null`,
-      { encoding: "utf-8" }
-    ).trim();
+    const output = (await execAsync(
+      `cd "${repoPath}" && git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null`
+    )).trim();
     const match = output.match(/refs\/remotes\/origin\/(.+)$/);
     if (match && match[1]) {
       return match[1];
@@ -89,10 +85,9 @@ export function getDefaultBranch(repoPath: string): string {
 
   // 2. Try gh repo view to get default branch
   try {
-    const output = execSync(
-      `cd "${repoPath}" && gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`,
-      { encoding: "utf-8" }
-    ).trim();
+    const output = (await execAsync(
+      `cd "${repoPath}" && gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`
+    )).trim();
     if (output) {
       return output;
     }
@@ -101,9 +96,9 @@ export function getDefaultBranch(repoPath: string): string {
   }
 
   // 3. Check for common default branch names
-  if (branchExists(repoPath, "main")) return "main";
-  if (branchExists(repoPath, "master")) return "master";
-  if (branchExists(repoPath, "develop")) return "develop";
+  if (await branchExists(repoPath, "main")) return "main";
+  if (await branchExists(repoPath, "master")) return "master";
+  if (await branchExists(repoPath, "develop")) return "develop";
 
   // 4. Last resort
   return "main";
@@ -113,17 +108,16 @@ export function getDefaultBranch(repoPath: string): string {
  * Remove a worktree for a given branch.
  * Returns true if successful, false otherwise.
  */
-export function removeWorktree(repoPath: string, branch: string): boolean {
-  const worktreePath = getWorktreePath(repoPath, branch);
+export async function removeWorktree(repoPath: string, branch: string): Promise<boolean> {
+  const worktreePath = await getWorktreePath(repoPath, branch);
   if (!worktreePath) {
     return false;
   }
 
   try {
     // Use --force to handle dirty worktrees
-    execSync(
-      `cd "${repoPath}" && git worktree remove "${worktreePath}" --force`,
-      { encoding: "utf-8" }
+    await execAsync(
+      `cd "${repoPath}" && git worktree remove "${worktreePath}" --force`
     );
     return true;
   } catch {

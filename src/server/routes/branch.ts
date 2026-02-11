@@ -1,10 +1,10 @@
 import { Hono } from "hono";
-import { execSync, exec } from "child_process";
+import { exec } from "child_process";
 import { existsSync, mkdirSync } from "fs";
 import { dirname, basename, join } from "path";
 import { randomUUID } from "crypto";
 import { eq, and, ne } from "drizzle-orm";
-import { expandTilde, getRepoId } from "../utils";
+import { expandTilde, getRepoId, execAsync } from "../utils";
 import { createBranchSchema, createTreeSchema, validateOrThrow } from "../../shared/validation";
 import { BadRequestError } from "../middleware/error-handler";
 import { db, schema } from "../../db";
@@ -95,11 +95,10 @@ function runCustomCommand(
 }
 
 // Helper to find worktree path for a branch from git worktree list
-function findWorktreePathForBranch(localPath: string, branchName: string): string | null {
+async function findWorktreePathForBranch(localPath: string, branchName: string): Promise<string | null> {
   try {
-    const output = execSync(
-      `cd "${localPath}" && git worktree list --porcelain`,
-      { encoding: "utf-8" }
+    const output = await execAsync(
+      `cd "${localPath}" && git worktree list --porcelain`
     );
 
     // Parse porcelain output: worktree path, HEAD sha, branch name
@@ -124,12 +123,12 @@ function findWorktreePathForBranch(localPath: string, branchName: string): strin
 
 // Helper to create worktree with optional custom script
 // Returns the actual worktree path (may differ from input if custom script is used)
-function createWorktreeWithScript(
+async function createWorktreeWithScript(
   localPath: string,
   fallbackWorktreePath: string,
   branchName: string,
   createScript?: string
-): string {
+): Promise<string> {
   if (createScript && createScript.trim()) {
     // Replace placeholders in custom script
     const script = createScript
@@ -137,10 +136,10 @@ function createWorktreeWithScript(
       .replace(/\{branchName\}/g, branchName)
       .replace(/\{localPath\}/g, localPath);
 
-    execSync(`cd "${localPath}" && ${script}`, { encoding: "utf-8", shell: "/bin/bash" });
+    await execAsync(`cd "${localPath}" && ${script}`, { shell: "/bin/bash" });
 
     // After custom script, find actual worktree path from git
-    const actualPath = findWorktreePathForBranch(localPath, branchName);
+    const actualPath = await findWorktreePathForBranch(localPath, branchName);
     if (actualPath) {
       return actualPath;
     }
@@ -148,9 +147,8 @@ function createWorktreeWithScript(
     return fallbackWorktreePath;
   } else {
     // Default worktree creation
-    execSync(
-      `cd "${localPath}" && git worktree add "${fallbackWorktreePath}" "${branchName}"`,
-      { encoding: "utf-8" }
+    await execAsync(
+      `cd "${localPath}" && git worktree add "${fallbackWorktreePath}" "${branchName}"`
     );
     return fallbackWorktreePath;
   }
@@ -179,10 +177,9 @@ branchRouter.post("/create", async (c) => {
 
   // Check if branch already exists
   try {
-    const existingBranches = execSync(
-      `cd "${localPath}" && git branch --list "${input.branchName}"`,
-      { encoding: "utf-8" }
-    ).trim();
+    const existingBranches = (await execAsync(
+      `cd "${localPath}" && git branch --list "${input.branchName}"`
+    )).trim();
     if (existingBranches) {
       throw new BadRequestError(`Branch already exists: ${input.branchName}`);
     }
@@ -193,9 +190,8 @@ branchRouter.post("/create", async (c) => {
 
   // Create the branch
   try {
-    execSync(
-      `cd "${localPath}" && git branch "${input.branchName}" "${input.baseBranch}"`,
-      { encoding: "utf-8" }
+    await execAsync(
+      `cd "${localPath}" && git branch "${input.branchName}" "${input.baseBranch}"`
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -221,12 +217,11 @@ interface TaskResult {
 }
 
 // Check if PR already exists for branch
-function getExistingPr(localPath: string, branchName: string): { url: string; number: number } | null {
+async function getExistingPr(localPath: string, branchName: string): Promise<{ url: string; number: number } | null> {
   try {
-    const result = execSync(
-      `cd "${localPath}" && gh pr view "${branchName}" --json url,number 2>/dev/null || true`,
-      { encoding: "utf-8" }
-    ).trim();
+    const result = (await execAsync(
+      `cd "${localPath}" && gh pr view "${branchName}" --json url,number 2>/dev/null || true`
+    )).trim();
     if (result) {
       const pr = JSON.parse(result);
       return { url: pr.url, number: pr.number };
@@ -238,24 +233,20 @@ function getExistingPr(localPath: string, branchName: string): { url: string; nu
 }
 
 // Create PR for branch
-function createPr(
+async function createPr(
   localPath: string,
   branchName: string,
   baseBranch: string,
   title: string,
   body: string
-): { url: string; number: number } {
+): Promise<{ url: string; number: number }> {
   // First push the branch
-  execSync(`cd "${localPath}" && git push -u origin "${branchName}"`, {
-    encoding: "utf-8",
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  await execAsync(`cd "${localPath}" && git push -u origin "${branchName}"`);
 
   // Create PR
-  const result = execSync(
-    `cd "${localPath}" && gh pr create --head "${branchName}" --base "${baseBranch}" --title "${title.replace(/"/g, '\\"')}" --body "${body.replace(/"/g, '\\"')}" --json url,number`,
-    { encoding: "utf-8" }
-  ).trim();
+  const result = (await execAsync(
+    `cd "${localPath}" && gh pr create --head "${branchName}" --base "${baseBranch}" --title "${title.replace(/"/g, '\\"')}" --body "${body.replace(/"/g, '\\"')}" --json url,number`
+  )).trim();
 
   const pr = JSON.parse(result);
   return { url: pr.url, number: pr.number };
@@ -302,21 +293,19 @@ branchRouter.post("/create-tree", async (c) => {
       }
 
       // Check if branch already exists
-      const existingBranches = execSync(
-        `cd "${localPath}" && git branch --list "${task.branchName}"`,
-        { encoding: "utf-8" }
-      ).trim();
+      const existingBranches = (await execAsync(
+        `cd "${localPath}" && git branch --list "${task.branchName}"`
+      )).trim();
 
       // Create branch if it doesn't exist
       if (!existingBranches) {
-        execSync(
-          `cd "${localPath}" && git branch "${task.branchName}" "${task.parentBranch}"`,
-          { encoding: "utf-8" }
+        await execAsync(
+          `cd "${localPath}" && git branch "${task.branchName}" "${task.parentBranch}"`
         );
       }
 
       // Check if worktree already exists for this branch
-      const existingWorktreePath = findWorktreePathForBranch(localPath, task.branchName);
+      const existingWorktreePath = await findWorktreePathForBranch(localPath, task.branchName);
       if (existingWorktreePath) {
         // Worktree already exists, use actual path
         result.worktreePath = existingWorktreePath;
@@ -324,7 +313,7 @@ branchRouter.post("/create-tree", async (c) => {
       } else {
         // Create worktree with optional custom script
         const wtSettings = await getWorktreeSettings(input.repoId);
-        const actualPath = createWorktreeWithScript(localPath, result.worktreePath, task.branchName, wtSettings.createScript);
+        const actualPath = await createWorktreeWithScript(localPath, result.worktreePath, task.branchName, wtSettings.createScript);
         result.worktreePath = actualPath;
 
         // Run post-creation script if configured
@@ -362,7 +351,7 @@ branchRouter.post("/create-tree", async (c) => {
       if (input.createPrs) {
         try {
           // Check for existing PR
-          const existingPr = getExistingPr(localPath, task.branchName);
+          const existingPr = await getExistingPr(localPath, task.branchName);
           if (existingPr) {
             result.prUrl = existingPr.url;
             result.prNumber = existingPr.number;
@@ -381,7 +370,7 @@ branchRouter.post("/create-tree", async (c) => {
               .filter(Boolean)
               .join("\n");
 
-            const pr = createPr(
+            const pr = await createPr(
               localPath,
               task.branchName,
               task.parentBranch,
@@ -463,10 +452,9 @@ branchRouter.post("/create-worktree", async (c) => {
 
   // Check if branch exists
   try {
-    const existingBranches = execSync(
-      `cd "${localPath}" && git branch --list "${branchName}"`,
-      { encoding: "utf-8" }
-    ).trim();
+    const existingBranches = (await execAsync(
+      `cd "${localPath}" && git branch --list "${branchName}"`
+    )).trim();
     if (!existingBranches) {
       throw new BadRequestError(`Branch does not exist: ${branchName}`);
     }
@@ -484,7 +472,7 @@ branchRouter.post("/create-worktree", async (c) => {
   }
 
   // Check if worktree already exists for this branch
-  const existingWorktreePath = findWorktreePathForBranch(localPath, branchName);
+  const existingWorktreePath = await findWorktreePathForBranch(localPath, branchName);
   if (existingWorktreePath) {
     // Worktree already exists, return actual path
     return c.json({
@@ -501,11 +489,11 @@ branchRouter.post("/create-worktree", async (c) => {
   let actualWorktreePath: string;
   try {
     // Get worktree settings
-    const repoId = getRepoId(localPath);
-    const wtSettings = await getWorktreeSettings(repoId);
+    const repoId = await getRepoId(localPath);
+    const wtSettings = await getWorktreeSettings(repoId ?? "");
 
     // Create worktree with optional custom script
-    actualWorktreePath = createWorktreeWithScript(localPath, fallbackWorktreePath, branchName, wtSettings.createScript);
+    actualWorktreePath = await createWorktreeWithScript(localPath, fallbackWorktreePath, branchName, wtSettings.createScript);
 
     // Run post-creation script if configured
     if (wtSettings.postCreateScript) {
@@ -513,7 +501,7 @@ branchRouter.post("/create-worktree", async (c) => {
     }
 
     // Run custom worktree create command if configured
-    if (wtSettings.worktreeCreateCommand) {
+    if (wtSettings.worktreeCreateCommand && repoId) {
       runCustomCommand(wtSettings.worktreeCreateCommand, {
         repoId,
         branchName,
@@ -549,10 +537,9 @@ branchRouter.post("/checkout", async (c) => {
 
   // Check if branch exists
   try {
-    const existingBranches = execSync(
-      `cd "${localPath}" && git branch --list "${branchName}"`,
-      { encoding: "utf-8" }
-    ).trim();
+    const existingBranches = (await execAsync(
+      `cd "${localPath}" && git branch --list "${branchName}"`
+    )).trim();
     if (!existingBranches) {
       throw new BadRequestError(`Branch does not exist: ${branchName}`);
     }
@@ -563,10 +550,9 @@ branchRouter.post("/checkout", async (c) => {
 
   // Check for uncommitted changes
   try {
-    const status = execSync(
-      `cd "${localPath}" && git status --porcelain`,
-      { encoding: "utf-8" }
-    ).trim();
+    const status = (await execAsync(
+      `cd "${localPath}" && git status --porcelain`
+    )).trim();
     if (status) {
       throw new BadRequestError("Cannot checkout: you have uncommitted changes. Please commit or stash them first.");
     }
@@ -577,9 +563,8 @@ branchRouter.post("/checkout", async (c) => {
 
   // Checkout
   try {
-    execSync(
-      `cd "${localPath}" && git checkout "${branchName}"`,
-      { encoding: "utf-8" }
+    await execAsync(
+      `cd "${localPath}" && git checkout "${branchName}"`
     );
   } catch (err) {
     throw new BadRequestError(`Failed to checkout: ${err instanceof Error ? err.message : String(err)}`);
@@ -617,10 +602,9 @@ branchRouter.post("/pull", async (c) => {
   } else {
     // Check if the main repo is on this branch
     try {
-      const currentBranch = execSync(
-        `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`,
-        { encoding: "utf-8" }
-      ).trim();
+      const currentBranch = (await execAsync(
+        `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`
+      )).trim();
       if (currentBranch === branchName) {
         pullPath = localPath;
       }
@@ -633,9 +617,8 @@ branchRouter.post("/pull", async (c) => {
   if (!pullPath) {
     try {
       // Use git fetch origin branchname:branchname for fast-forward update
-      const output = execSync(
-        `cd "${localPath}" && git fetch origin "${branchName}:${branchName}"`,
-        { encoding: "utf-8", timeout: 30000 }
+      const output = await execAsync(
+        `cd "${localPath}" && git fetch origin "${branchName}:${branchName}"`
       );
       return c.json({
         success: true,
@@ -657,10 +640,9 @@ branchRouter.post("/pull", async (c) => {
 
   // Check for uncommitted changes
   try {
-    const status = execSync(
-      `cd "${pullPath}" && git status --porcelain`,
-      { encoding: "utf-8" }
-    ).trim();
+    const status = (await execAsync(
+      `cd "${pullPath}" && git status --porcelain`
+    )).trim();
     if (status) {
       throw new BadRequestError(
         "Cannot pull: you have uncommitted changes. Please commit or stash them first."
@@ -673,9 +655,8 @@ branchRouter.post("/pull", async (c) => {
 
   // Pull
   try {
-    const output = execSync(
-      `cd "${pullPath}" && git pull`,
-      { encoding: "utf-8", timeout: 30000 }
+    const output = await execAsync(
+      `cd "${pullPath}" && git pull`
     );
     return c.json({
       success: true,
@@ -713,10 +694,9 @@ branchRouter.post("/rebase", async (c) => {
   } else {
     // Check if the main repo is on this branch
     try {
-      const currentBranch = execSync(
-        `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`,
-        { encoding: "utf-8" }
-      ).trim();
+      const currentBranch = (await execAsync(
+        `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`
+      )).trim();
       if (currentBranch === branchName) {
         rebasePath = localPath;
       }
@@ -731,10 +711,9 @@ branchRouter.post("/rebase", async (c) => {
 
   // Check for uncommitted changes
   try {
-    const status = execSync(
-      `cd "${rebasePath}" && git status --porcelain`,
-      { encoding: "utf-8" }
-    ).trim();
+    const status = (await execAsync(
+      `cd "${rebasePath}" && git status --porcelain`
+    )).trim();
     if (status) {
       throw new BadRequestError("Cannot rebase: you have uncommitted changes. Please commit or stash them first.");
     }
@@ -746,14 +725,9 @@ branchRouter.post("/rebase", async (c) => {
   // Check if remote branch exists
   let useRemote = false;
   try {
-    execSync(`cd "${rebasePath}" && git fetch origin "${parentBranch}"`, {
-      encoding: "utf-8",
-      timeout: 30000,
-    });
+    await execAsync(`cd "${rebasePath}" && git fetch origin "${parentBranch}"`);
     // Verify remote ref exists
-    execSync(`cd "${rebasePath}" && git rev-parse "origin/${parentBranch}" 2>/dev/null`, {
-      encoding: "utf-8",
-    });
+    await execAsync(`cd "${rebasePath}" && git rev-parse "origin/${parentBranch}" 2>/dev/null`);
     useRemote = true;
   } catch {
     // Remote doesn't exist, use local branch
@@ -762,9 +736,8 @@ branchRouter.post("/rebase", async (c) => {
   // Rebase onto remote or local parent
   const rebaseTarget = useRemote ? `origin/${parentBranch}` : parentBranch;
   try {
-    const output = execSync(
-      `cd "${rebasePath}" && git rebase "${rebaseTarget}"`,
-      { encoding: "utf-8", timeout: 60000 }
+    const output = await execAsync(
+      `cd "${rebasePath}" && git rebase "${rebaseTarget}"`
     );
     return c.json({
       success: true,
@@ -776,7 +749,7 @@ branchRouter.post("/rebase", async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     // Abort rebase if it failed
     try {
-      execSync(`cd "${rebasePath}" && git rebase --abort 2>/dev/null || true`, { encoding: "utf-8" });
+      await execAsync(`cd "${rebasePath}" && git rebase --abort 2>/dev/null || true`);
     } catch {
       // Ignore
     }
@@ -812,10 +785,9 @@ branchRouter.post("/merge-parent", async (c) => {
   } else {
     // Check if the main repo is on this branch
     try {
-      const currentBranch = execSync(
-        `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`,
-        { encoding: "utf-8" }
-      ).trim();
+      const currentBranch = (await execAsync(
+        `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`
+      )).trim();
       if (currentBranch === branchName) {
         mergePath = localPath;
       }
@@ -830,10 +802,9 @@ branchRouter.post("/merge-parent", async (c) => {
 
   // Check for uncommitted changes
   try {
-    const status = execSync(
-      `cd "${mergePath}" && git status --porcelain`,
-      { encoding: "utf-8" }
-    ).trim();
+    const status = (await execAsync(
+      `cd "${mergePath}" && git status --porcelain`
+    )).trim();
     if (status) {
       throw new BadRequestError("Cannot merge: you have uncommitted changes. Please commit or stash them first.");
     }
@@ -845,14 +816,9 @@ branchRouter.post("/merge-parent", async (c) => {
   // Check if remote branch exists
   let useRemote = false;
   try {
-    execSync(`cd "${mergePath}" && git fetch origin "${parentBranch}"`, {
-      encoding: "utf-8",
-      timeout: 30000,
-    });
+    await execAsync(`cd "${mergePath}" && git fetch origin "${parentBranch}"`);
     // Verify remote ref exists
-    execSync(`cd "${mergePath}" && git rev-parse "origin/${parentBranch}" 2>/dev/null`, {
-      encoding: "utf-8",
-    });
+    await execAsync(`cd "${mergePath}" && git rev-parse "origin/${parentBranch}" 2>/dev/null`);
     useRemote = true;
   } catch {
     // Remote doesn't exist, use local branch
@@ -861,9 +827,8 @@ branchRouter.post("/merge-parent", async (c) => {
   // Merge remote or local parent
   const mergeTarget = useRemote ? `origin/${parentBranch}` : parentBranch;
   try {
-    const output = execSync(
-      `cd "${mergePath}" && git merge "${mergeTarget}" --no-edit`,
-      { encoding: "utf-8", timeout: 60000 }
+    const output = await execAsync(
+      `cd "${mergePath}" && git merge "${mergeTarget}" --no-edit`
     );
     return c.json({
       success: true,
@@ -875,7 +840,7 @@ branchRouter.post("/merge-parent", async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     // Abort merge if it failed
     try {
-      execSync(`cd "${mergePath}" && git merge --abort 2>/dev/null || true`, { encoding: "utf-8" });
+      await execAsync(`cd "${mergePath}" && git merge --abort 2>/dev/null || true`);
     } catch {
       // Ignore
     }
@@ -911,10 +876,9 @@ branchRouter.post("/push", async (c) => {
   } else {
     // Check if the main repo is on this branch
     try {
-      const currentBranch = execSync(
-        `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`,
-        { encoding: "utf-8" }
-      ).trim();
+      const currentBranch = (await execAsync(
+        `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`
+      )).trim();
       if (currentBranch === branchName) {
         pushPath = localPath;
       }
@@ -930,9 +894,8 @@ branchRouter.post("/push", async (c) => {
   // Push
   try {
     const forceFlag = force ? "--force-with-lease" : "";
-    const output = execSync(
-      `cd "${pushPath}" && git push ${forceFlag} -u origin "${branchName}" 2>&1`,
-      { encoding: "utf-8", timeout: 60000 }
+    const output = await execAsync(
+      `cd "${pushPath}" && git push ${forceFlag} -u origin "${branchName}" 2>&1`
     );
     return c.json({
       success: true,
@@ -966,10 +929,9 @@ branchRouter.post("/check-deletable", async (c) => {
 
   // Check if branch exists
   try {
-    const existingBranches = execSync(
-      `cd "${localPath}" && git branch --list "${branchName}"`,
-      { encoding: "utf-8" }
-    ).trim();
+    const existingBranches = (await execAsync(
+      `cd "${localPath}" && git branch --list "${branchName}"`
+    )).trim();
     if (!existingBranches) {
       return c.json({ deletable: false, reason: "branch_not_found" });
     }
@@ -979,10 +941,9 @@ branchRouter.post("/check-deletable", async (c) => {
 
   // Check if currently on this branch
   try {
-    const currentBranch = execSync(
-      `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`,
-      { encoding: "utf-8" }
-    ).trim();
+    const currentBranch = (await execAsync(
+      `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`
+    )).trim();
     if (currentBranch === branchName) {
       return c.json({ deletable: false, reason: "currently_checked_out" });
     }
@@ -993,10 +954,9 @@ branchRouter.post("/check-deletable", async (c) => {
   // Check if branch exists on remote
   let existsOnRemote = false;
   try {
-    const remoteRef = execSync(
-      `cd "${localPath}" && git ls-remote --heads origin "${branchName}" 2>/dev/null`,
-      { encoding: "utf-8" }
-    ).trim();
+    const remoteRef = (await execAsync(
+      `cd "${localPath}" && git ls-remote --heads origin "${branchName}" 2>/dev/null`
+    )).trim();
     existsOnRemote = remoteRef.length > 0;
   } catch {
     // If command fails, assume not on remote
@@ -1011,7 +971,7 @@ branchRouter.post("/check-deletable", async (c) => {
   let actualParent = parentBranch;
   if (!actualParent) {
     // Try to find parent from tree spec edges
-    const repoId = getRepoId(localPath);
+    const repoId = await getRepoId(localPath);
     if (repoId) {
       try {
         const treeSpecs = await db
@@ -1044,10 +1004,9 @@ branchRouter.post("/check-deletable", async (c) => {
     if (!actualParent) {
       try {
         // Try main first
-        const mainExists = execSync(
-          `cd "${localPath}" && git rev-parse --verify main 2>/dev/null`,
-          { encoding: "utf-8" }
-        ).trim();
+        const mainExists = (await execAsync(
+          `cd "${localPath}" && git rev-parse --verify main 2>/dev/null`
+        )).trim();
         if (mainExists) {
           actualParent = "main";
         }
@@ -1059,20 +1018,18 @@ branchRouter.post("/check-deletable", async (c) => {
 
   // Check if there are any commits between parent and branch
   try {
-    const commits = execSync(
-      `cd "${localPath}" && git log "${actualParent}..${branchName}" --oneline 2>/dev/null`,
-      { encoding: "utf-8" }
-    ).trim();
+    const commits = (await execAsync(
+      `cd "${localPath}" && git log "${actualParent}..${branchName}" --oneline 2>/dev/null`
+    )).trim();
     if (commits.length > 0) {
       return c.json({ deletable: false, reason: "has_commits" });
     }
   } catch {
     // If command fails, check against origin version
     try {
-      const commits = execSync(
-        `cd "${localPath}" && git log "origin/${actualParent}..${branchName}" --oneline 2>/dev/null`,
-        { encoding: "utf-8" }
-      ).trim();
+      const commits = (await execAsync(
+        `cd "${localPath}" && git log "origin/${actualParent}..${branchName}" --oneline 2>/dev/null`
+      )).trim();
       if (commits.length > 0) {
         return c.json({ deletable: false, reason: "has_commits" });
       }
@@ -1104,10 +1061,9 @@ branchRouter.post("/delete", async (c) => {
 
   // Check if branch exists
   try {
-    const existingBranches = execSync(
-      `cd "${localPath}" && git branch --list "${branchName}"`,
-      { encoding: "utf-8" }
-    ).trim();
+    const existingBranches = (await execAsync(
+      `cd "${localPath}" && git branch --list "${branchName}"`
+    )).trim();
     if (!existingBranches) {
       throw new BadRequestError(`Branch does not exist: ${branchName}`);
     }
@@ -1118,10 +1074,9 @@ branchRouter.post("/delete", async (c) => {
 
   // Check if currently on this branch
   try {
-    const currentBranch = execSync(
-      `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`,
-      { encoding: "utf-8" }
-    ).trim();
+    const currentBranch = (await execAsync(
+      `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`
+    )).trim();
     if (currentBranch === branchName) {
       throw new BadRequestError("Cannot delete the currently checked out branch");
     }
@@ -1131,19 +1086,19 @@ branchRouter.post("/delete", async (c) => {
   }
 
   // Remove worktree if it exists for this branch
-  const worktreePath = getWorktreePath(localPath, branchName);
+  const worktreePath = await getWorktreePath(localPath, branchName);
   if (worktreePath) {
     // Get worktree settings before removal for custom command
-    const repoIdForWorktree = getRepoId(localPath);
-    const wtSettings = await getWorktreeSettings(repoIdForWorktree);
+    const repoIdForWorktree = await getRepoId(localPath);
+    const wtSettings = await getWorktreeSettings(repoIdForWorktree ?? "");
 
     try {
-      const removed = removeWorktree(localPath, branchName);
+      const removed = await removeWorktree(localPath, branchName);
       if (!removed) {
         console.warn(`Failed to remove worktree for branch ${branchName}`);
       } else {
         // Run custom worktree delete command if configured
-        if (wtSettings.worktreeDeleteCommand) {
+        if (wtSettings.worktreeDeleteCommand && repoIdForWorktree) {
           runCustomCommand(wtSettings.worktreeDeleteCommand, {
             repoId: repoIdForWorktree,
             branchName,
@@ -1165,23 +1120,21 @@ branchRouter.post("/delete", async (c) => {
   // Delete the branch
   try {
     const flag = force ? "-D" : "-d";
-    execSync(
-      `cd "${localPath}" && git branch ${flag} "${branchName}"`,
-      { encoding: "utf-8" }
+    await execAsync(
+      `cd "${localPath}" && git branch ${flag} "${branchName}"`
     );
 
     // Also delete remote branch if it exists
     try {
-      execSync(
-        `cd "${localPath}" && git push origin --delete "${branchName}" 2>/dev/null || true`,
-        { encoding: "utf-8", timeout: 30000 }
+      await execAsync(
+        `cd "${localPath}" && git push origin --delete "${branchName}" 2>/dev/null || true`
       );
     } catch {
       // Ignore errors deleting remote branch
     }
 
     // Reparent children of deleted branch in both treeSpecs and planningSessions
-    const repoId = getRepoId(localPath);
+    const repoId = await getRepoId(localPath);
     if (repoId) {
       // 1. Update treeSpecs (Branch Graph structure - highest priority)
       try {
@@ -1368,8 +1321,8 @@ branchRouter.post("/cleanup-orphaned", async (c) => {
     throw new BadRequestError("localPath is required");
   }
 
-  const localPath = normalizePath(rawLocalPath);
-  const repoId = getRepoId(localPath);
+  const localPath = expandTilde(rawLocalPath);
+  const repoId = await getRepoId(localPath);
   if (!repoId) {
     throw new BadRequestError("Could not determine repo ID");
   }
@@ -1377,9 +1330,8 @@ branchRouter.post("/cleanup-orphaned", async (c) => {
   // Get all existing branches
   let existingBranches: string[] = [];
   try {
-    const output = execSync(
-      `cd "${localPath}" && git for-each-ref --format='%(refname:short)' refs/heads/`,
-      { encoding: "utf-8" }
+    const output = await execAsync(
+      `cd "${localPath}" && git for-each-ref --format='%(refname:short)' refs/heads/`
     );
     existingBranches = output.trim().split("\n").filter(Boolean);
   } catch (err) {
@@ -1489,20 +1441,18 @@ branchRouter.post("/delete-worktree", async (c) => {
   // Get branch name from worktree
   let branchName: string | null = null;
   try {
-    branchName = execSync(
-      `cd "${worktreePath}" && git rev-parse --abbrev-ref HEAD`,
-      { encoding: "utf-8" }
-    ).trim();
+    branchName = (await execAsync(
+      `cd "${worktreePath}" && git rev-parse --abbrev-ref HEAD`
+    )).trim();
   } catch {
     // Could be detached HEAD
   }
 
   // Check for uncommitted changes
   try {
-    const status = execSync(
-      `cd "${worktreePath}" && git status --porcelain`,
-      { encoding: "utf-8" }
-    ).trim();
+    const status = (await execAsync(
+      `cd "${worktreePath}" && git status --porcelain`
+    )).trim();
     if (status) {
       throw new BadRequestError("Cannot delete worktree: you have uncommitted changes. Please commit, stash, or discard them first.");
     }
@@ -1513,9 +1463,8 @@ branchRouter.post("/delete-worktree", async (c) => {
 
   // Remove worktree
   try {
-    execSync(
-      `cd "${localPath}" && git worktree remove "${worktreePath}"`,
-      { encoding: "utf-8" }
+    await execAsync(
+      `cd "${localPath}" && git worktree remove "${worktreePath}"`
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -1527,8 +1476,8 @@ branchRouter.post("/delete-worktree", async (c) => {
   }
 
   // Run post-delete script if configured
-  const repoId = getRepoId(localPath);
-  const wtSettings = await getWorktreeSettings(repoId);
+  const repoId = await getRepoId(localPath);
+  const wtSettings = await getWorktreeSettings(repoId ?? "");
   if (wtSettings.postDeleteScript) {
     runPostDeleteScript(localPath, wtSettings.postDeleteScript);
   }

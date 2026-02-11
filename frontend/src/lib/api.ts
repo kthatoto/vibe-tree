@@ -509,8 +509,16 @@ export const api = {
     }),
 
   // Scan
+  getSnapshot: (pinId: number) =>
+    fetchJson<ScanSnapshot>(`${API_BASE}/scan/snapshot/${pinId}`),
+  startScan: (localPath: string) =>
+    fetchJson<{ started: boolean; repoId: string }>(`${API_BASE}/scan`, {
+      method: "POST",
+      body: JSON.stringify({ localPath }),
+    }),
+  // Legacy scan (for compatibility) - now just starts scan
   scan: (localPath: string) =>
-    fetchJson<ScanSnapshot>(`${API_BASE}/scan`, {
+    fetchJson<{ started: boolean; repoId: string }>(`${API_BASE}/scan`, {
       method: "POST",
       body: JSON.stringify({ localPath }),
     }),

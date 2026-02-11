@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { db, schema } from "../../db";
 import { eq, and, desc, gt, asc } from "drizzle-orm";
-import { execSync, spawn } from "child_process";
+import { spawn } from "child_process";
+import { execAsync } from "../utils";
 import { existsSync, writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { randomUUID, createHash } from "crypto";
@@ -1137,11 +1138,8 @@ Provide a concise markdown summary (max 500 words).`;
 
   let summaryContent = "";
   try {
-    summaryContent = execSync(`claude -p "${escapeShell(summaryPrompt)}"`, {
+    summaryContent = await execAsync(`claude -p "${escapeShell(summaryPrompt)}"`, {
       cwd: session.worktreePath,
-      encoding: "utf-8",
-      maxBuffer: 5 * 1024 * 1024,
-      timeout: 60000,
     });
   } catch {
     // Fallback: simple summary
@@ -1667,9 +1665,7 @@ ${instructions[0].instructionMd}
   if (!isClaudeCodeSession) {
     let gitStatus = "";
     try {
-      gitStatus = execSync(`cd "${actualPath}" && git status --short`, {
-        encoding: "utf-8",
-      }).trim();
+      gitStatus = (await execAsync(`cd "${actualPath}" && git status --short`)).trim();
     } catch {
       gitStatus = "";
     }
@@ -2087,7 +2083,7 @@ interface GitHubLabel {
   color: string;
 }
 
-function fetchGitHubPRInfo(repoId: string, prNumber: number): {
+async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<{
   title: string;
   status: string;
   checksStatus: string;
@@ -2095,12 +2091,11 @@ function fetchGitHubPRInfo(repoId: string, prNumber: number): {
   labels: GitHubLabel[];
   reviewers: string[];
   projectStatus?: string;
-} | null {
+} | null> {
   try {
-    const result = execSync(
-      `gh pr view ${prNumber} --repo "${repoId}" --json number,title,state,statusCheckRollup,labels,reviewRequests,reviews,projectItems`,
-      { encoding: "utf-8", timeout: 10000 }
-    ).trim();
+    const result = (await execAsync(
+      `gh pr view ${prNumber} --repo "${repoId}" --json number,title,state,statusCheckRollup,labels,reviewRequests,reviews,projectItems`
+    )).trim();
     const data = JSON.parse(result);
 
     // Extract individual checks - deduplicate by name, keeping only the latest
@@ -2191,7 +2186,7 @@ async function savePrLink(
 
   if (existing.length === 0) {
     // Fetch full PR info from GitHub
-    const prInfo = fetchGitHubPRInfo(repoId, prNumber);
+    const prInfo = await fetchGitHubPRInfo(repoId, prNumber);
 
     await db.insert(schema.branchLinks).values({
       repoId,

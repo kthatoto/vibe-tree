@@ -45,7 +45,7 @@ repoPinsRouter.post("/", async (c) => {
   }
 
   // Get repo ID from path
-  const repoId = getRepoId(localPath);
+  const repoId = await getRepoId(localPath);
   if (!repoId) {
     throw new BadRequestError(`Could not detect GitHub repo at: ${localPath}`);
   }

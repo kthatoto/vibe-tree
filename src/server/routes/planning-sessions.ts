@@ -6,7 +6,7 @@ import { z } from "zod";
 import { validateOrThrow } from "../../shared/validation";
 import { BadRequestError, NotFoundError } from "../middleware/error-handler";
 import { broadcast } from "../ws";
-import { execSync } from "child_process";
+import { execAsync } from "../utils";
 import { existsSync } from "fs";
 
 export const planningSessionsRouter = new Hono();
@@ -344,20 +344,18 @@ planningSessionsRouter.post("/:id/confirm", async (c) => {
 
     try {
       // Check if branch already exists
-      const existingBranches = execSync(
-        `cd "${localPath}" && git branch --list "${branchName}"`,
-        { encoding: "utf-8" }
-      ).trim();
+      const existingBranches = (await execAsync(
+        `cd "${localPath}" && git branch --list "${branchName}"`
+      )).trim();
 
       // Create branch if it doesn't exist
       if (!existingBranches) {
         // Check if parent branch exists locally, if not try remote
         let actualParent = parentBranch;
         try {
-          const localExists = execSync(
-            `cd "${localPath}" && git rev-parse --verify "${parentBranch}" 2>/dev/null`,
-            { encoding: "utf-8" }
-          ).trim();
+          const localExists = (await execAsync(
+            `cd "${localPath}" && git rev-parse --verify "${parentBranch}" 2>/dev/null`
+          )).trim();
           if (!localExists) {
             actualParent = `origin/${parentBranch}`;
           }
@@ -365,9 +363,8 @@ planningSessionsRouter.post("/:id/confirm", async (c) => {
           // Local branch doesn't exist, try with origin prefix
           actualParent = `origin/${parentBranch}`;
         }
-        execSync(
-          `cd "${localPath}" && git branch "${branchName}" "${actualParent}"`,
-          { encoding: "utf-8" }
+        await execAsync(
+          `cd "${localPath}" && git branch "${branchName}" "${actualParent}"`
         );
       }
 
@@ -412,10 +409,9 @@ planningSessionsRouter.post("/:id/confirm", async (c) => {
             let title: string | null = null;
             let status: string | null = null;
             try {
-              const issueResult = execSync(
-                `gh issue view ${issueNumber} --repo "${session.repoId}" --json title,state`,
-                { encoding: "utf-8", timeout: 10000 }
-              ).trim();
+              const issueResult = (await execAsync(
+                `gh issue view ${issueNumber} --repo "${session.repoId}" --json title,state`
+              )).trim();
               const issueData = JSON.parse(issueResult);
               title = issueData.title;
               status = issueData.state?.toLowerCase();
@@ -831,11 +827,7 @@ ${conversationSnippet}
   try {
     // Use Claude CLI (same as chat) to avoid needing separate API key
     const escapedPrompt = prompt.replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`');
-    const result = execSync(`claude -p "${escapedPrompt}" --model haiku`, {
-      encoding: "utf-8",
-      maxBuffer: 1024 * 1024,
-      timeout: 30000,
-    });
+    const result = await execAsync(`claude -p "${escapedPrompt}" --model haiku`);
 
     let newTitle = result.trim() || currentTitle;
 

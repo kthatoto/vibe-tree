@@ -1278,6 +1278,23 @@ Figma MCPで画像を取得した場合、関連するブランチに
 
 \`mcp__vibe-tree__save_image_to_branch\`:
 - パラメータ: \`repoId\`, \`branchName\`, \`imageData\`(base64), \`originalName\`, \`description\`(任意), \`sourceUrl\`(任意)
+
+## Notionページの参照と保存【重要】
+
+Notionのページを調べたり、内容を確認した場合は、**必ず**そのリンクを関連するブランチに紐づけてください。
+
+### ワークフロー：
+1. Notion MCPでページ内容を取得
+2. 内容を確認・理解
+3. **即座に** \`add_branch_link\` で関連ブランチに紐づける
+4. 複数ブランチに関連する場合は、全てのブランチに紐づける
+
+### 紐づけのタイミング：
+- Notionページをfetchした直後
+- ユーザーがNotionリンクを共有した時
+- 仕様確認のためにNotionを参照した時
+
+これにより、後でExecuteセッションでも参照できるようになります。
 `;
 
 // Instruction review system prompt (for Planning sessions)
@@ -1322,6 +1339,25 @@ vibe-treeのMCPツールを使用してください（ToolSearchは不要、直�
   - パラメータ: \`questionId\`
 - \`mcp__vibe-tree__update_session_title\`: 全完了後にタイトル更新
   - パラメータ: \`planningSessionId\`, \`title\`
+- \`mcp__vibe-tree__add_branch_link\`: 外部リンクをブランチに紐づけ
+  - パラメータ: \`repoId\`, \`branchName\`, \`url\`, \`title\`(任意), \`description\`(任意)
+
+## Notionページの参照と保存【重要】
+
+インストラクション詳細化の過程でNotionページを参照した場合は、**必ず**そのリンクを関連ブランチに紐づけてください。
+
+### 紐づけのタイミング：
+- Notionページの内容を確認した時
+- 仕様の詳細をNotionから読み取った時
+- ユーザーがNotionリンクを追加情報として共有した時
+
+### 紐づけ方法：
+1. Notionページを参照
+2. 内容を理解・インストラクションに反映
+3. **即座に** \`add_branch_link\` でそのブランチに紐づける
+4. 複数ブランチに関連する場合は、全てに紐づける
+
+これにより、Executeセッションでも参照資料として利用できます。
 
 ## 処理フロー【厳守・順番に1つずつ】
 
@@ -1387,6 +1423,11 @@ vibe-treeのMCPツールを直接呼び出せます（ToolSearch不要）。
   - パラメータ: \`planningSessionId\`, \`branchName\`
 - \`mcp__vibe-tree__mark_branch_complete\`: ブランチ完了を記録
   - パラメータ: \`planningSessionId\`, \`autoAdvance\` (true推奨)
+
+### リソース管理
+- \`mcp__vibe-tree__add_branch_link\`: 外部リンクをブランチに紐づけ
+  - パラメータ: \`repoId\`, \`branchName\`, \`url\`, \`title\`(任意), \`description\`(任意)
+  - NotionやFigmaなどを参照した時に使用
 
 ---
 
@@ -1454,6 +1495,11 @@ get_current_context で現在のブランチ・ToDo・質問を確認
 7. **Figmaリンクは必ず参照**
    - 共有されたFigmaリンクがある場合は、デザインを確認して実装する
    - UI/UX関連のタスクでは特に重要
+
+8. **Notionリンクは必ず参照・保存**
+   - 共有されたNotionリンクがある場合は、仕様を確認して実装する
+   - 作業中に新たにNotionページを参照した場合は、\`add_branch_link\`でブランチに紐づける
+   - これにより後から参照資料を追跡できる
 
 ## 禁止事項
 - ❌ ToDoを更新せずに作業を終える

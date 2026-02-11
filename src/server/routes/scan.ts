@@ -47,12 +47,40 @@ scanRouter.post("/", async (c) => {
   const branches = getBranches(localPath);
   const branchNames = branches.map((b) => b.name);
 
-  // 2. Check if user has saved a preferred base branch in repo_pins
-  // Query by localPath (unique) instead of repoId (can change)
-  const repoPinRecords = await db
-    .select()
-    .from(schema.repoPins)
-    .where(eq(schema.repoPins.localPath, localPath));
+  // 2. Get worktrees with heartbeat (can run independently)
+  const worktrees = getWorktrees(localPath);
+
+  // 3. Run all DB queries in parallel
+  const [repoPinRecords, cachedPrLinks, rules, treeSpecs, confirmedSessions] = await Promise.all([
+    // Repo pins
+    db.select().from(schema.repoPins).where(eq(schema.repoPins.localPath, localPath)),
+    // Cached PR links
+    db.select().from(schema.branchLinks).where(
+      and(
+        eq(schema.branchLinks.repoId, repoId),
+        eq(schema.branchLinks.linkType, "pr")
+      )
+    ),
+    // Branch naming rules
+    db.select().from(schema.projectRules).where(
+      and(
+        eq(schema.projectRules.repoId, repoId),
+        eq(schema.projectRules.ruleType, "branch_naming"),
+        eq(schema.projectRules.isActive, true)
+      )
+    ),
+    // Tree specs
+    db.select().from(schema.treeSpecs).where(eq(schema.treeSpecs.repoId, repoId)),
+    // Confirmed sessions
+    db.select().from(schema.planningSessions).where(
+      and(
+        eq(schema.planningSessions.repoId, repoId),
+        eq(schema.planningSessions.status, "confirmed")
+      )
+    ),
+  ]);
+
+  // 4. Process repoPin and detect default branch
   const repoPin = repoPinRecords[0];
   const savedBaseBranch = repoPin?.baseBranch;
 
@@ -64,24 +92,10 @@ scanRouter.post("/", async (c) => {
       .where(eq(schema.repoPins.id, repoPin.id));
   }
 
-  // 3. Detect default branch dynamically (use saved if available and valid)
+  // 5. Detect default branch dynamically (use saved if available and valid)
   const defaultBranch = savedBaseBranch && branchNames.includes(savedBaseBranch)
     ? savedBaseBranch
     : getDefaultBranch(localPath, branchNames);
-
-  // 3. Get worktrees with heartbeat
-  const worktrees = getWorktrees(localPath);
-
-  // 4. Load cached PR info from branchLinks first (for immediate display stability)
-  const cachedPrLinks = await db
-    .select()
-    .from(schema.branchLinks)
-    .where(
-      and(
-        eq(schema.branchLinks.repoId, repoId),
-        eq(schema.branchLinks.linkType, "pr")
-      )
-    );
 
   // Convert cached data to PRInfo format
   const cachedPrs: import("../../shared/types").PRInfo[] = cachedPrLinks.map((link) => ({
@@ -176,29 +190,13 @@ scanRouter.post("/", async (c) => {
   // 5. Build tree (infer parent-child relationships)
   const { nodes, edges } = buildTree(branches, worktrees, prs, localPath, defaultBranch);
 
-  // 6. Get branch naming rule
-  const rules = await db
-    .select()
-    .from(schema.projectRules)
-    .where(
-      and(
-        eq(schema.projectRules.repoId, repoId),
-        eq(schema.projectRules.ruleType, "branch_naming"),
-        eq(schema.projectRules.isActive, true)
-      )
-    );
-
+  // 6. Process branch naming rule (already fetched in parallel)
   const ruleRecord = rules[0];
   const branchNaming = ruleRecord
     ? (JSON.parse(ruleRecord.ruleJson) as BranchNamingRule)
     : null;
 
-  // 7. Get tree spec (タスクツリー)
-  const treeSpecs = await db
-    .select()
-    .from(schema.treeSpecs)
-    .where(eq(schema.treeSpecs.repoId, repoId));
-
+  // 7. Process tree spec (already fetched in parallel)
   const treeSpec: TreeSpec | undefined = treeSpecs[0]
     ? {
         id: treeSpecs[0].id,
@@ -211,17 +209,7 @@ scanRouter.post("/", async (c) => {
       }
     : undefined;
 
-  // 8. Merge confirmed planning session edges
-  const confirmedSessions = await db
-    .select()
-    .from(schema.planningSessions)
-    .where(
-      and(
-        eq(schema.planningSessions.repoId, repoId),
-        eq(schema.planningSessions.status, "confirmed")
-      )
-    );
-
+  // 8. Merge confirmed planning session edges (already fetched in parallel)
   for (const session of confirmedSessions) {
     console.log(`[Scan] Processing confirmed session: ${session.id}, title: ${session.title || "Untitled"}`);
     const sessionNodes = JSON.parse(session.nodesJson) as Array<{

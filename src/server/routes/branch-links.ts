@@ -155,6 +155,11 @@ const getBranchLinksSchema = z.object({
   branchName: z.string().min(1),
 });
 
+const getBranchLinksBatchSchema = z.object({
+  repoId: z.string().min(1),
+  branches: z.string().min(1), // comma-separated branch names
+});
+
 const createBranchLinkSchema = z.object({
   repoId: z.string().min(1),
   branchName: z.string().min(1),
@@ -189,6 +194,45 @@ branchLinksRouter.get("/", async (c) => {
     .orderBy(desc(schema.branchLinks.createdAt));
 
   return c.json(links);
+});
+
+// GET /api/branch-links/batch?repoId=...&branches=a,b,c
+branchLinksRouter.get("/batch", async (c) => {
+  const query = validateOrThrow(getBranchLinksBatchSchema, {
+    repoId: c.req.query("repoId"),
+    branches: c.req.query("branches"),
+  });
+
+  const branchNames = query.branches.split(",").filter(Boolean);
+  if (branchNames.length === 0) {
+    return c.json({});
+  }
+
+  // Single query with IN clause to fetch all branch links
+  const { inArray } = await import("drizzle-orm");
+  const links = await db
+    .select()
+    .from(schema.branchLinks)
+    .where(
+      and(
+        eq(schema.branchLinks.repoId, query.repoId),
+        inArray(schema.branchLinks.branchName, branchNames)
+      )
+    )
+    .orderBy(desc(schema.branchLinks.createdAt));
+
+  // Group by branch name
+  const result: Record<string, typeof links> = {};
+  for (const branchName of branchNames) {
+    result[branchName] = [];
+  }
+  for (const link of links) {
+    if (result[link.branchName]) {
+      result[link.branchName].push(link);
+    }
+  }
+
+  return c.json(result);
 });
 
 // POST /api/branch-links

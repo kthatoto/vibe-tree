@@ -389,6 +389,7 @@ export function buildTree(
 /**
  * Calculate ahead/behind for each node based on its parent in the edges.
  * This should be called after edges are finalized (including planning session edges).
+ * Uses parallel execution with concurrency limit for performance.
  */
 export function calculateAheadBehind(
   nodes: TreeNode[],
@@ -402,57 +403,94 @@ export function calculateAheadBehind(
     parentMap.set(edge.child, edge.parent);
   }
 
-  for (const node of nodes) {
-    if (node.branchName === defaultBranch) continue;
+  // Filter nodes that need calculation
+  const nodesToProcess = nodes.filter((node) => node.branchName !== defaultBranch);
 
-    const parentBranch = parentMap.get(node.branchName) || defaultBranch;
+  // Process in parallel with concurrency limit
+  const CONCURRENCY = 5;
+  const chunks: TreeNode[][] = [];
+  for (let i = 0; i < nodesToProcess.length; i += CONCURRENCY) {
+    chunks.push(nodesToProcess.slice(i, i + CONCURRENCY));
+  }
 
-    try {
-      const output = execSync(
-        `cd "${repoPath}" && git rev-list --left-right --count "${parentBranch}"..."${node.branchName}"`,
-        { encoding: "utf-8" }
-      );
-      const parts = output.trim().split(/\s+/);
-      const behind = parseInt(parts[0] ?? "0", 10);
-      const ahead = parseInt(parts[1] ?? "0", 10);
-      node.aheadBehind = { ahead, behind };
-    } catch {
-      // Ignore errors (branch might not exist, etc.)
+  for (const chunk of chunks) {
+    // Use execSync in parallel within each chunk (spawn separate processes)
+    const results = chunk.map((node) => {
+      const parentBranch = parentMap.get(node.branchName) || defaultBranch;
+      try {
+        const output = execSync(
+          `cd "${repoPath}" && git rev-list --left-right --count "${parentBranch}"..."${node.branchName}"`,
+          { encoding: "utf-8" }
+        );
+        const parts = output.trim().split(/\s+/);
+        const behind = parseInt(parts[0] ?? "0", 10);
+        const ahead = parseInt(parts[1] ?? "0", 10);
+        return { node, ahead, behind };
+      } catch {
+        return null;
+      }
+    });
+
+    // Apply results
+    for (const result of results) {
+      if (result) {
+        result.node.aheadBehind = { ahead: result.ahead, behind: result.behind };
+      }
     }
   }
 }
 
 /**
  * Calculate ahead/behind for each node relative to its remote tracking branch (origin).
+ * Uses parallel execution with concurrency limit for performance.
  */
 export function calculateRemoteAheadBehind(
   nodes: TreeNode[],
   repoPath: string
 ): void {
-  for (const node of nodes) {
-    try {
-      // Check if there's a remote tracking branch
-      const upstream = execSync(
-        `cd "${repoPath}" && git rev-parse --abbrev-ref "${node.branchName}@{upstream}" 2>/dev/null`,
-        { encoding: "utf-8" }
-      ).trim();
+  // Process in parallel with concurrency limit
+  const CONCURRENCY = 5;
+  const chunks: TreeNode[][] = [];
+  for (let i = 0; i < nodes.length; i += CONCURRENCY) {
+    chunks.push(nodes.slice(i, i + CONCURRENCY));
+  }
 
-      if (!upstream) continue;
+  for (const chunk of chunks) {
+    // Process each chunk
+    const results = chunk.map((node) => {
+      try {
+        // Check if there's a remote tracking branch
+        const upstream = execSync(
+          `cd "${repoPath}" && git rev-parse --abbrev-ref "${node.branchName}@{upstream}" 2>/dev/null`,
+          { encoding: "utf-8" }
+        ).trim();
 
-      // Get ahead/behind count relative to upstream
-      const output = execSync(
-        `cd "${repoPath}" && git rev-list --left-right --count "${upstream}"..."${node.branchName}"`,
-        { encoding: "utf-8" }
-      );
-      const parts = output.trim().split(/\s+/);
-      const behind = parseInt(parts[0] ?? "0", 10);
-      const ahead = parseInt(parts[1] ?? "0", 10);
+        if (!upstream) return null;
 
-      if (ahead > 0 || behind > 0) {
-        node.remoteAheadBehind = { ahead, behind };
+        // Get ahead/behind count relative to upstream
+        const output = execSync(
+          `cd "${repoPath}" && git rev-list --left-right --count "${upstream}"..."${node.branchName}"`,
+          { encoding: "utf-8" }
+        );
+        const parts = output.trim().split(/\s+/);
+        const behind = parseInt(parts[0] ?? "0", 10);
+        const ahead = parseInt(parts[1] ?? "0", 10);
+
+        if (ahead > 0 || behind > 0) {
+          return { node, ahead, behind };
+        }
+        return null;
+      } catch {
+        // No upstream or error - skip
+        return null;
       }
-    } catch {
-      // No upstream or error - skip
+    });
+
+    // Apply results
+    for (const result of results) {
+      if (result) {
+        result.node.remoteAheadBehind = { ahead: result.ahead, behind: result.behind };
+      }
     }
   }
 }

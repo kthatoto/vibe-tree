@@ -115,29 +115,43 @@ export function ExecuteSidebar({
     if (!repoId || executeBranches.length === 0) return;
 
     const loadAllBranchLinks = async () => {
-      const linksMap = new Map<string, BranchLink[]>();
-      await Promise.all(
-        executeBranches.map(async (branch) => {
-          try {
-            let links = await api.getBranchLinks(repoId, branch);
-            // If no PR link found, try to detect one
-            if (!links.some((l) => l.linkType === "pr")) {
-              try {
-                const result = await api.detectPr(repoId, branch);
-                if (result.found && result.link) {
-                  links = [result.link, ...links];
-                }
-              } catch {
-                // Ignore detection errors
-              }
-            }
-            linksMap.set(branch, links);
-          } catch {
-            linksMap.set(branch, []);
+      try {
+        // Use batch API for single request
+        const batchResult = await api.getBranchLinksBatch(repoId, executeBranches);
+        const linksMap = new Map<string, BranchLink[]>();
+
+        // Find branches without PR links - detect in parallel
+        const branchesNeedingDetection: string[] = [];
+        for (const branch of executeBranches) {
+          const links = batchResult[branch] || [];
+          linksMap.set(branch, links);
+          if (!links.some((l) => l.linkType === "pr")) {
+            branchesNeedingDetection.push(branch);
           }
-        })
-      );
-      setAllBranchLinks(linksMap);
+        }
+
+        // Detect PRs in parallel for branches that need it
+        if (branchesNeedingDetection.length > 0) {
+          const detectionResults = await Promise.allSettled(
+            branchesNeedingDetection.map((branch) => api.detectPr(repoId, branch))
+          );
+
+          detectionResults.forEach((result, index) => {
+            if (result.status === "fulfilled" && result.value.found && result.value.link) {
+              const branch = branchesNeedingDetection[index];
+              const currentLinks = linksMap.get(branch) || [];
+              linksMap.set(branch, [result.value.link, ...currentLinks]);
+            }
+          });
+        }
+
+        setAllBranchLinks(linksMap);
+      } catch {
+        // Fallback: set empty map
+        const linksMap = new Map<string, BranchLink[]>();
+        executeBranches.forEach((branch) => linksMap.set(branch, []));
+        setAllBranchLinks(linksMap);
+      }
     };
 
     loadAllBranchLinks();

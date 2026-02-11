@@ -210,7 +210,9 @@ branchLinksRouter.get("/batch", async (c) => {
 
   // Single query with IN clause to fetch all branch links
   const { inArray } = await import("drizzle-orm");
-  const links = await db
+
+  // Fetch from branchLinks (PR/Issue)
+  const branchLinksData = await db
     .select()
     .from(schema.branchLinks)
     .where(
@@ -221,15 +223,75 @@ branchLinksRouter.get("/batch", async (c) => {
     )
     .orderBy(desc(schema.branchLinks.createdAt));
 
-  // Group by branch name
-  const result: Record<string, typeof links> = {};
+  // Also fetch from branchExternalLinks (Figma, Notion, etc.)
+  const externalLinksData = await db
+    .select()
+    .from(schema.branchExternalLinks)
+    .where(
+      and(
+        eq(schema.branchExternalLinks.repoId, query.repoId),
+        inArray(schema.branchExternalLinks.branchName, branchNames)
+      )
+    )
+    .orderBy(desc(schema.branchExternalLinks.createdAt));
+
+  // Group by branch name and merge both sources
+  // Use a unified type with all possible fields
+  type UnifiedLink = {
+    id: number;
+    repoId: string;
+    branchName: string;
+    linkType: string;
+    url: string;
+    title: string | null;
+    number?: number | null;
+    status?: string | null;
+    checksStatus?: string | null;
+    reviewDecision?: string | null;
+    reviewStatus?: string | null;
+    checks?: string | null;
+    labels?: string | null;
+    reviewers?: string | null;
+    projectStatus?: string | null;
+    description?: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+
+  const result: Record<string, UnifiedLink[]> = {};
   for (const branchName of branchNames) {
     result[branchName] = [];
   }
-  for (const link of links) {
+
+  // Add branchLinks data
+  for (const link of branchLinksData) {
     if (result[link.branchName]) {
       result[link.branchName].push(link);
     }
+  }
+
+  // Add branchExternalLinks data (with compatible shape)
+  for (const extLink of externalLinksData) {
+    if (result[extLink.branchName]) {
+      result[extLink.branchName].push({
+        id: extLink.id,
+        repoId: extLink.repoId,
+        branchName: extLink.branchName,
+        linkType: extLink.linkType,
+        url: extLink.url,
+        title: extLink.title,
+        description: extLink.description,
+        createdAt: extLink.createdAt,
+        updatedAt: extLink.updatedAt,
+      });
+    }
+  }
+
+  // Sort each branch's links by createdAt desc
+  for (const branchName of branchNames) {
+    result[branchName].sort((a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   }
 
   return c.json(result);

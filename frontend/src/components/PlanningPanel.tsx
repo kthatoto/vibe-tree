@@ -30,6 +30,7 @@ import {
   type TaskInstruction,
   type BranchLink,
   type BranchExternalLink,
+  type BranchFile,
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import { useSessionNotifications } from "../lib/useSessionNotifications";
@@ -338,10 +339,14 @@ export function PlanningPanel({
   const [claudeWorking, setClaudeWorking] = useState(false);
 
   // Planning sidebar tabs (without branches - branches are always shown at top)
-  const [planningSidebarTab, setPlanningSidebarTab] = useState<"instruction" | "todo" | "questions">("instruction");
+  const [planningSidebarTab, setPlanningSidebarTab] = useState<"instruction" | "todo" | "questions" | "resources">("instruction");
 
   // Planning branch links (PR/Issue) for all branches
   const [planningAllBranchLinks, setPlanningAllBranchLinks] = useState<Map<string, BranchLink[]>>(new Map());
+
+  // Planning branch external links and files for current branch
+  const [planningExternalLinks, setPlanningExternalLinks] = useState<BranchExternalLink[]>([]);
+  const [planningBranchFiles, setPlanningBranchFiles] = useState<BranchFile[]>([]);
 
   // Planning branch counts (ToDo and Question counts per branch)
   const [branchTodoCounts, setBranchTodoCounts] = useState<Map<string, { total: number; completed: number }>>(new Map());
@@ -936,6 +941,30 @@ export function PlanningPanel({
       unsubUpdated();
     };
   }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, repoId]);
+
+  // Load external links and files for the current planning branch
+  useEffect(() => {
+    if (!selectedSession || !repoId || selectedSession.type !== "planning") {
+      setPlanningExternalLinks([]);
+      setPlanningBranchFiles([]);
+      return;
+    }
+    const planningBranches = selectedSession.executeBranches || [];
+    const currentBranch = planningBranches[userViewBranchIndex];
+    if (!currentBranch) {
+      setPlanningExternalLinks([]);
+      setPlanningBranchFiles([]);
+      return;
+    }
+
+    Promise.all([
+      api.getBranchExternalLinks(repoId, currentBranch).catch(() => []),
+      api.getBranchFiles(repoId, currentBranch).catch(() => []),
+    ]).then(([extLinks, files]) => {
+      setPlanningExternalLinks(extLinks);
+      setPlanningBranchFiles(files);
+    });
+  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, repoId, userViewBranchIndex]);
 
   // Clear pending nodes when session changes
   useEffect(() => {
@@ -2226,6 +2255,17 @@ export function PlanningPanel({
                   >
                     Questions
                   </button>
+                  <button
+                    className={`planning-panel__sidebar-tab ${planningSidebarTab === "resources" ? "planning-panel__sidebar-tab--active" : ""}`}
+                    onClick={() => setPlanningSidebarTab("resources")}
+                  >
+                    Resources
+                    {(planningExternalLinks.length > 0 || planningBranchFiles.length > 0) && (
+                      <span className="execute-sidebar__tab-badge">
+                        {planningExternalLinks.length + planningBranchFiles.length}
+                      </span>
+                    )}
+                  </button>
                 </div>
 
                 {/* Tab Content */}
@@ -2326,6 +2366,101 @@ export function PlanningPanel({
                         planningSessionId={selectedSession.id}
                         branchName={currentPlanningBranch ?? undefined}
                       />
+                    </div>
+                  )}
+
+                  {/* Resources Tab */}
+                  {planningSidebarTab === "resources" && (
+                    <div className="planning-panel__resources-section">
+                      {/* External Links */}
+                      {planningExternalLinks.length > 0 && (
+                        <div className="execute-sidebar__links-section">
+                          <div className="execute-sidebar__links-header">
+                            <h4>Links</h4>
+                          </div>
+                          <div className="execute-sidebar__external-links">
+                            {planningExternalLinks.map((link) => {
+                              const { iconSrc } = getLinkTypeIconForTask(link.linkType);
+                              const iconClass = link.linkType === "figma" ? "execute-sidebar__link-icon--figma" :
+                                link.linkType === "notion" ? "execute-sidebar__link-icon--notion" :
+                                link.linkType === "github_issue" ? "execute-sidebar__link-icon--github" :
+                                "execute-sidebar__link-icon--url";
+                              return (
+                                <a
+                                  key={link.id}
+                                  href={link.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="execute-sidebar__external-link"
+                                >
+                                  <img
+                                    src={iconSrc}
+                                    alt={link.linkType}
+                                    className={`execute-sidebar__link-icon ${iconClass}`}
+                                  />
+                                  <span className="execute-sidebar__external-link-text">
+                                    {link.title || link.url}
+                                  </span>
+                                </a>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Files/Images */}
+                      {planningBranchFiles.length > 0 && (
+                        <div className="execute-sidebar__links-section">
+                          <div className="execute-sidebar__links-header">
+                            <h4>Files</h4>
+                          </div>
+                          <div className="execute-sidebar__files">
+                            {planningBranchFiles.map((file) => {
+                              const isImage = file.mimeType?.startsWith("image/");
+                              return (
+                                <div key={file.id} className="execute-sidebar__file">
+                                  {isImage ? (
+                                    <a
+                                      href={api.getBranchFileUrl(file.id)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="execute-sidebar__file-image-link"
+                                    >
+                                      <img
+                                        src={api.getBranchFileUrl(file.id)}
+                                        alt={file.originalName || "Image"}
+                                        className="execute-sidebar__file-thumbnail"
+                                      />
+                                    </a>
+                                  ) : (
+                                    <a
+                                      href={api.getBranchFileUrl(file.id)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="execute-sidebar__file-link"
+                                    >
+                                      📄 {file.originalName || file.filePath}
+                                    </a>
+                                  )}
+                                  {file.description && (
+                                    <span className="execute-sidebar__file-description">{file.description}</span>
+                                  )}
+                                  {file.sourceType === "figma_mcp" && (
+                                    <span className="execute-sidebar__file-source">From Figma</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Empty State */}
+                      {planningExternalLinks.length === 0 && planningBranchFiles.length === 0 && (
+                        <div className="execute-sidebar__no-links" style={{ padding: "12px" }}>
+                          No resources attached to this branch
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

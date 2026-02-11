@@ -364,3 +364,119 @@
   font-size: 11px;
   font-weight: 500;
 }
+
+/* External Links */
+.execute-sidebar__external-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.execute-sidebar__external-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #1f2937;
+  border-radius: 4px;
+  color: #60a5fa;
+  text-decoration: none;
+  font-size: 12px;
+  transition: background 0.15s;
+}
+
+.execute-sidebar__external-link:hover {
+  background: #374151;
+  text-decoration: underline;
+}
+
+.execute-sidebar__link-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* Figma - show original colors */
+.execute-sidebar__link-icon--figma {
+  filter: none;
+}
+
+/* Notion - invert for dark background */
+.execute-sidebar__link-icon--notion {
+  filter: brightness(0) invert(1);
+}
+
+/* GitHub - invert for dark background */
+.execute-sidebar__link-icon--github {
+  filter: brightness(0) invert(1);
+}
+
+/* URL - invert for dark background */
+.execute-sidebar__link-icon--url {
+  filter: brightness(0) invert(1);
+}
+
+.execute-sidebar__external-link-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Files/Images */
+.execute-sidebar__files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.execute-sidebar__file {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  background: #1f2937;
+  border-radius: 4px;
+}
+
+.execute-sidebar__file-image-link {
+  display: block;
+}
+
+.execute-sidebar__file-thumbnail {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.execute-sidebar__file-thumbnail:hover {
+  opacity: 0.8;
+}
+
+.execute-sidebar__file-link {
+  color: #60a5fa;
+  text-decoration: none;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.execute-sidebar__file-link:hover {
+  text-decoration: underline;
+}
+
+.execute-sidebar__file-description {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.execute-sidebar__file-source {
+  font-size: 10px;
+  color: #a855f7;
+  padding: 2px 6px;
+  background: rgba(168, 85, 247, 0.15);
+  border-radius: 3px;
+  align-self: flex-start;
+}

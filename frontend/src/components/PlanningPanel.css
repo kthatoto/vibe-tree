@@ -2196,6 +2196,10 @@
   overflow-y: auto;
 }
 
+.planning-panel__resources-section {
+  overflow-y: auto;
+}
+
 /* Branch indicator above chat */
 .planning-panel__branch-indicator {
   display: flex;

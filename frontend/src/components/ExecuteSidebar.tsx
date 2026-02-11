@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, type TaskTodo, type PlanningQuestion, type BranchLink, type TaskInstruction, type GitHubLabel, type GitHubCheck } from "../lib/api";
+import { api, type TaskTodo, type PlanningQuestion, type BranchLink, type BranchExternalLink, type BranchFile, type TaskInstruction, type GitHubLabel, type GitHubCheck } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import ExecuteBranchTree from "./ExecuteBranchTree";
 import ExecuteTodoList from "./ExecuteTodoList";
@@ -44,6 +44,8 @@ export function ExecuteSidebar({
 
   // Branch links and instruction for display branch
   const [branchLinks, setBranchLinks] = useState<BranchLink[]>([]);
+  const [externalLinks, setExternalLinks] = useState<BranchExternalLink[]>([]);
+  const [branchFiles, setBranchFiles] = useState<BranchFile[]>([]);
   const [instruction, setInstruction] = useState<TaskInstruction | null>(null);
   const [instructionLoading, setInstructionLoading] = useState(false);
 
@@ -61,19 +63,23 @@ export function ExecuteSidebar({
     setPreviewBranch(null);
   }, [currentExecuteIndex]);
 
-  // Load branch links and instruction for display branch
+  // Load branch links, external links, files, and instruction for display branch
   useEffect(() => {
     if (!repoId || !displayBranch) {
       setBranchLinks([]);
+      setExternalLinks([]);
+      setBranchFiles([]);
       setInstruction(null);
       return;
     }
     setInstructionLoading(true);
     Promise.all([
       api.getBranchLinks(repoId, displayBranch).catch(() => []),
+      api.getBranchExternalLinks(repoId, displayBranch).catch(() => []),
+      api.getBranchFiles(repoId, displayBranch).catch(() => []),
       api.getTaskInstruction(repoId, displayBranch).catch(() => null),
     ])
-      .then(async ([links, inst]) => {
+      .then(async ([links, extLinks, files, inst]) => {
         // If no PR link found, try to detect one
         if (!links.some((l) => l.linkType === "pr")) {
           try {
@@ -86,6 +92,8 @@ export function ExecuteSidebar({
           }
         }
         setBranchLinks(links);
+        setExternalLinks(extLinks);
+        setBranchFiles(files);
         setInstruction(inst);
       })
       .finally(() => setInstructionLoading(false));
@@ -637,6 +645,100 @@ export function ExecuteSidebar({
                 <div className="execute-sidebar__no-links">No PR linked</div>
               )}
             </div>
+
+            {/* External Links Section */}
+            {externalLinks.length > 0 && (
+              <div className="execute-sidebar__links-section">
+                <div className="execute-sidebar__links-header">
+                  <h4>Resources</h4>
+                </div>
+                <div className="execute-sidebar__external-links">
+                  {externalLinks.map((link) => {
+                    const getIconClass = (linkType: string) => {
+                      switch (linkType) {
+                        case "figma": return "execute-sidebar__link-icon--figma";
+                        case "notion": return "execute-sidebar__link-icon--notion";
+                        case "github_issue": return "execute-sidebar__link-icon--github";
+                        default: return "execute-sidebar__link-icon--url";
+                      }
+                    };
+                    const getIconSrc = (linkType: string) => {
+                      switch (linkType) {
+                        case "figma": return "https://cdn.simpleicons.org/figma";
+                        case "notion": return "https://cdn.simpleicons.org/notion";
+                        case "github_issue": return "https://cdn.simpleicons.org/github";
+                        default: return "https://cdn.simpleicons.org/link";
+                      }
+                    };
+                    return (
+                      <a
+                        key={link.id}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="execute-sidebar__external-link"
+                      >
+                        <img
+                          src={getIconSrc(link.linkType)}
+                          alt={link.linkType}
+                          className={`execute-sidebar__link-icon ${getIconClass(link.linkType)}`}
+                        />
+                        <span className="execute-sidebar__external-link-text">
+                          {link.title || link.url}
+                        </span>
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Files/Images Section */}
+            {branchFiles.length > 0 && (
+              <div className="execute-sidebar__links-section">
+                <div className="execute-sidebar__links-header">
+                  <h4>Files</h4>
+                </div>
+                <div className="execute-sidebar__files">
+                  {branchFiles.map((file) => {
+                    const isImage = file.mimeType?.startsWith("image/");
+                    return (
+                      <div key={file.id} className="execute-sidebar__file">
+                        {isImage ? (
+                          <a
+                            href={api.getBranchFileUrl(file.id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="execute-sidebar__file-image-link"
+                          >
+                            <img
+                              src={api.getBranchFileUrl(file.id)}
+                              alt={file.originalName || "Image"}
+                              className="execute-sidebar__file-thumbnail"
+                            />
+                          </a>
+                        ) : (
+                          <a
+                            href={api.getBranchFileUrl(file.id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="execute-sidebar__file-link"
+                          >
+                            📄 {file.originalName || file.filePath}
+                          </a>
+                        )}
+                        {file.description && (
+                          <span className="execute-sidebar__file-description">{file.description}</span>
+                        )}
+                        {file.sourceType === "figma_mcp" && (
+                          <span className="execute-sidebar__file-source">From Figma</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

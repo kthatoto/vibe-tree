@@ -302,6 +302,34 @@ export default function TreeDashboard() {
       setFetchProgress(null);
     });
 
+    // Listen for ahead/behind updates (Phase 2 of 2-stage loading)
+    const unsubAheadBehind = wsClient.on("scan.aheadBehindUpdated", (msg) => {
+      if (msg.repoId !== snapshot.repoId) return;
+      const data = msg.data as { nodes: TreeNode[]; warnings: typeof snapshot.warnings };
+      if (data?.nodes && data?.warnings) {
+        setSnapshot((prev) => {
+          if (!prev) return prev;
+          // Merge ahead/behind data into existing nodes
+          const updatedNodes = prev.nodes.map((existingNode) => {
+            const updatedNode = data.nodes.find((n) => n.branchName === existingNode.branchName);
+            if (updatedNode) {
+              return {
+                ...existingNode,
+                aheadBehind: updatedNode.aheadBehind,
+                remoteAheadBehind: updatedNode.remoteAheadBehind,
+              };
+            }
+            return existingNode;
+          });
+          return {
+            ...prev,
+            nodes: updatedNodes,
+            warnings: data.warnings,
+          };
+        });
+      }
+    });
+
     return () => {
       unsubScan();
       unsubBranches();
@@ -310,6 +338,7 @@ export default function TreeDashboard() {
       unsubFetchProgress();
       unsubFetchCompleted();
       unsubFetchError();
+      unsubAheadBehind();
     };
   }, [snapshot?.repoId, selectedPin, handleScan]);
 

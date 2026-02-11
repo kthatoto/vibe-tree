@@ -2198,29 +2198,71 @@ export function PlanningPanel({
                 ↻
               </button>
             </span>
-            {hasBranches && selectedSession.status !== "confirmed" && (
-              <button
-                className="planning-panel__finalize-btn"
-                onClick={() => handleFinalizePlanning()}
-                title="Finalize planning session"
-              >
-                Finalize
-              </button>
+            {executeEditMode ? (
+              <>
+                <button
+                  className="planning-panel__cancel-btn"
+                  onClick={handleCancelExecuteEdit}
+                  disabled={planningLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="planning-panel__save-btn"
+                  onClick={handleSaveExecuteEdit}
+                  disabled={planningLoading}
+                >
+                  {planningLoading ? "Saving..." : "Save"}
+                </button>
+              </>
+            ) : (
+              <>
+                {hasBranches && selectedSession.status !== "confirmed" && (
+                  <button
+                    className="planning-panel__finalize-btn"
+                    onClick={() => handleFinalizePlanning()}
+                    title="Finalize planning session"
+                  >
+                    Finalize
+                  </button>
+                )}
+                {selectedSession.status === "confirmed" && (
+                  <span className="planning-panel__finalized-badge">Finalized</span>
+                )}
+                {hasBranches && (
+                  <button
+                    className="planning-panel__edit-btn"
+                    onClick={handleStartExecuteEdit}
+                  >
+                    Edit
+                  </button>
+                )}
+                <button
+                  className="planning-panel__delete-btn"
+                  onClick={handleDelete}
+                  title="Delete this session"
+                >
+                  Delete
+                </button>
+              </>
             )}
-            {selectedSession.status === "confirmed" && (
-              <span className="planning-panel__finalized-badge">Finalized</span>
-            )}
-            <button
-              className="planning-panel__delete-btn"
-              onClick={handleDelete}
-              title="Delete this session"
-            >
-              Delete
-            </button>
           </div>
 
+          {/* Edit Mode - Target Branches */}
+          {executeEditMode && (
+            <div className="planning-panel__execute-edit">
+              <ExecuteBranchSelector
+                nodes={graphNodes}
+                edges={graphEdges}
+                defaultBranch={defaultBranch}
+                selectedBranches={executeEditBranches}
+                onSelectionChange={setExecuteEditBranches}
+              />
+            </div>
+          )}
+
           {/* Branch Selection Mode (initial setup) */}
-          {!hasBranches && (
+          {!executeEditMode && !hasBranches && (
             <div className="planning-panel__execute-selection">
               <ExecuteBranchSelector
                 nodes={graphNodes}
@@ -2235,7 +2277,7 @@ export function PlanningPanel({
           )}
 
           {/* Planning Mode */}
-          {hasBranches && (
+          {!executeEditMode && hasBranches && (
             <div className={`planning-panel__detail-main ${sidebarFullscreen ? "planning-panel__detail-main--fullscreen" : ""}`}>
               {/* Chat - hidden when sidebar is fullscreen */}
               {!sidebarFullscreen && (

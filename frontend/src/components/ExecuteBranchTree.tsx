@@ -1,4 +1,5 @@
 import type { BranchLink } from "../lib/api";
+import { getResourceIcon } from "../lib/resourceIcons";
 import "./ExecuteBranchTree.css";
 
 interface QuestionCounts {
@@ -6,6 +7,13 @@ interface QuestionCounts {
   pending: number;      // Unanswered
   answered: number;     // Answered but not acknowledged
   acknowledged: number; // Answered and acknowledged
+}
+
+interface ResourceCounts {
+  figma: number;
+  githubIssue: number;
+  other: number;  // notion, url, etc.
+  files: number;
 }
 
 interface ExecuteBranchTreeProps {
@@ -17,6 +25,7 @@ interface ExecuteBranchTreeProps {
   branchTodoCounts?: Map<string, { total: number; completed: number }>;
   branchQuestionCounts?: Map<string, QuestionCounts>;
   branchLinks?: Map<string, BranchLink[]>;
+  branchResourceCounts?: Map<string, ResourceCounts>;
   showCompletionCount?: boolean;
   onRefresh?: () => void;
   isRefreshing?: boolean;
@@ -31,6 +40,7 @@ export function ExecuteBranchTree({
   branchTodoCounts = new Map(),
   branchQuestionCounts = new Map(),
   branchLinks = new Map(),
+  branchResourceCounts = new Map(),
   showCompletionCount = true,
   onRefresh,
   isRefreshing = false,
@@ -67,10 +77,14 @@ export function ExecuteBranchTree({
           const isAiWorking = aiBranchIndex !== null && index === aiBranchIndex;
           const todoCount = branchTodoCounts.get(branch);
           const questionCount = branchQuestionCounts.get(branch);
+          const resourceCount = branchResourceCounts.get(branch);
           const links = branchLinks.get(branch) || [];
           const prLink = links.find(l => l.linkType === "pr");
           const hasTodos = todoCount && todoCount.total > 0;
           const hasQuestions = questionCount && questionCount.total > 0;
+          const hasFigma = resourceCount && resourceCount.figma > 0;
+          const hasGithubIssue = resourceCount && resourceCount.githubIssue > 0;
+          const hasOtherResources = resourceCount && (resourceCount.other > 0 || resourceCount.files > 0);
           const hasPR = !!prLink;
 
           return (
@@ -93,8 +107,8 @@ export function ExecuteBranchTree({
                   </span>
                 )}
               </div>
-              {/* Row 2: All badges (PR, Issue, ToDo, Question) */}
-              {(hasPR || hasTodos || hasQuestions) && (
+              {/* Row 2: All badges (PR, Issue, ToDo, Question, Resources) */}
+              {(hasPR || hasTodos || hasQuestions || hasFigma || hasGithubIssue || hasOtherResources) && (
                 <div className="execute-branch-tree__badges-row">
                   {/* PR badge */}
                   {hasPR && (
@@ -150,6 +164,32 @@ export function ExecuteBranchTree({
                       ) : (
                         <>✅ {questionCount.acknowledged}</>
                       )}
+                    </span>
+                  )}
+                  {/* Resource badges - Figma */}
+                  {hasFigma && (() => {
+                    const icon = getResourceIcon("figma");
+                    return (
+                      <span className="execute-branch-tree__badge execute-branch-tree__badge--figma">
+                        <img src={icon.src} alt={icon.alt} className={`execute-branch-tree__resource-icon execute-branch-tree__resource-icon${icon.className}`} />
+                        {resourceCount!.figma}
+                      </span>
+                    );
+                  })()}
+                  {/* Resource badges - GitHub Issue */}
+                  {hasGithubIssue && (() => {
+                    const icon = getResourceIcon("github_issue");
+                    return (
+                      <span className="execute-branch-tree__badge execute-branch-tree__badge--github">
+                        <img src={icon.src} alt={icon.alt} className={`execute-branch-tree__resource-icon execute-branch-tree__resource-icon${icon.className}`} />
+                        {resourceCount!.githubIssue}
+                      </span>
+                    );
+                  })()}
+                  {/* Resource badges - Other (files, links) */}
+                  {hasOtherResources && (
+                    <span className="execute-branch-tree__badge execute-branch-tree__badge--resource">
+                      📎 {(resourceCount?.other || 0) + (resourceCount?.files || 0)}
                     </span>
                   )}
                 </div>

@@ -41,21 +41,8 @@ import ExecuteBranchTree from "./ExecuteBranchTree";
 import ExecuteTodoList from "./ExecuteTodoList";
 import PlanningQuestionsPanel from "./PlanningQuestionsPanel";
 import type { TaskSuggestion } from "../lib/task-parser";
-import githubIcon from "../assets/github.svg";
-import notionIcon from "../assets/notion.svg";
-import figmaIcon from "../assets/figma.svg";
-import linkIcon from "../assets/link.svg";
+import { getResourceIcon } from "../lib/resourceIcons";
 import "./PlanningPanel.css";
-
-// Get link type icon helper
-function getLinkTypeIconForTask(type: string): { iconSrc: string; className: string } {
-  switch (type) {
-    case "notion": return { iconSrc: notionIcon, className: "planning-panel__task-link-icon--notion" };
-    case "figma": return { iconSrc: figmaIcon, className: "planning-panel__task-link-icon--figma" };
-    case "github_issue": return { iconSrc: githubIcon, className: "planning-panel__task-link-icon--github" };
-    default: return { iconSrc: linkIcon, className: "planning-panel__task-link-icon--url" };
-  }
-}
 
 // Sortable task item component (for reordering)
 function SortableTaskItem({
@@ -186,18 +173,18 @@ function SortableTaskItem({
         {links.length > 0 && (
           <div className="planning-panel__task-links">
             {links.map((link) => {
-              const { iconSrc, className } = getLinkTypeIconForTask(link.linkType);
+              const icon = getResourceIcon(link.linkType);
               return (
                 <a
                   key={link.id}
                   href={link.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`planning-panel__task-link-icon ${className}`}
+                  className={`planning-panel__task-link-icon planning-panel__task-link-icon${icon.className}`}
                   onClick={(e) => e.stopPropagation()}
                   title={link.title || link.url}
                 >
-                  <img src={iconSrc} alt={link.linkType} />
+                  <img src={icon.src} alt={icon.alt} />
                 </a>
               );
             })}
@@ -347,6 +334,9 @@ export function PlanningPanel({
   // Planning branch external links and files for current branch
   const [planningExternalLinks, setPlanningExternalLinks] = useState<BranchExternalLink[]>([]);
   const [planningBranchFiles, setPlanningBranchFiles] = useState<BranchFile[]>([]);
+
+  // Planning branch resource counts for all branches (for tree badges)
+  const [planningResourceCounts, setPlanningResourceCounts] = useState<Map<string, { figma: number; githubIssue: number; other: number; files: number }>>(new Map());
 
   // Planning branch counts (ToDo and Question counts per branch)
   const [branchTodoCounts, setBranchTodoCounts] = useState<Map<string, { total: number; completed: number }>>(new Map());
@@ -965,6 +955,37 @@ export function PlanningPanel({
       setPlanningBranchFiles(files);
     });
   }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, repoId, userViewBranchIndex]);
+
+  // Load resource counts for all planning branches (for tree badges)
+  useEffect(() => {
+    if (!selectedSession || !repoId || selectedSession.type !== "planning") {
+      setPlanningResourceCounts(new Map());
+      return;
+    }
+    const planningBranches = selectedSession.executeBranches || [];
+    if (planningBranches.length === 0) {
+      setPlanningResourceCounts(new Map());
+      return;
+    }
+
+    Promise.all([
+      api.getBranchExternalLinksBatch(repoId, planningBranches).catch(() => ({})),
+      api.getBranchFilesBatch(repoId, planningBranches).catch(() => ({})),
+    ]).then(([extLinksMap, filesMap]) => {
+      const countsMap = new Map<string, { figma: number; githubIssue: number; other: number; files: number }>();
+      for (const branch of planningBranches) {
+        const extLinks = extLinksMap[branch] || [];
+        const files = filesMap[branch] || [];
+        countsMap.set(branch, {
+          figma: extLinks.filter(l => l.linkType === "figma").length,
+          githubIssue: extLinks.filter(l => l.linkType === "github_issue").length,
+          other: extLinks.filter(l => l.linkType !== "figma" && l.linkType !== "github_issue").length,
+          files: files.length,
+        });
+      }
+      setPlanningResourceCounts(countsMap);
+    });
+  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, repoId]);
 
   // Clear pending nodes when session changes
   useEffect(() => {
@@ -2188,6 +2209,7 @@ export function PlanningPanel({
                     branchTodoCounts={branchTodoCounts}
                     branchQuestionCounts={branchQuestionCounts}
                     branchLinks={planningAllBranchLinks}
+                    branchResourceCounts={planningResourceCounts}
                     showCompletionCount={false}
                   />
                 </div>
@@ -2236,6 +2258,14 @@ export function PlanningPanel({
                 })()}
 
                 {/* Tab Header */}
+                {(() => {
+                  const todoCount = currentPlanningBranch ? branchTodoCounts.get(currentPlanningBranch) : null;
+                  const questionCount = currentPlanningBranch ? branchQuestionCounts.get(currentPlanningBranch) : null;
+                  const hasTodos = todoCount && todoCount.total > 0;
+                  const hasQuestions = questionCount && questionCount.total > 0;
+                  const pendingQuestions = questionCount ? questionCount.pending + questionCount.answered : 0;
+                  const resourceCount = planningExternalLinks.length + planningBranchFiles.length;
+                  return (
                 <div className="planning-panel__sidebar-tabs">
                   <button
                     className={`planning-panel__sidebar-tab ${planningSidebarTab === "instruction" ? "planning-panel__sidebar-tab--active" : ""}`}
@@ -2248,25 +2278,37 @@ export function PlanningPanel({
                     onClick={() => setPlanningSidebarTab("todo")}
                   >
                     ToDo
+                    {hasTodos && (
+                      <span className="planning-panel__tab-badge planning-panel__tab-badge--todo">
+                        {todoCount.completed}/{todoCount.total}
+                      </span>
+                    )}
                   </button>
                   <button
                     className={`planning-panel__sidebar-tab ${planningSidebarTab === "questions" ? "planning-panel__sidebar-tab--active" : ""}`}
                     onClick={() => setPlanningSidebarTab("questions")}
                   >
                     Questions
+                    {hasQuestions && pendingQuestions > 0 && (
+                      <span className="planning-panel__tab-badge planning-panel__tab-badge--question">
+                        {pendingQuestions}
+                      </span>
+                    )}
                   </button>
                   <button
                     className={`planning-panel__sidebar-tab ${planningSidebarTab === "resources" ? "planning-panel__sidebar-tab--active" : ""}`}
                     onClick={() => setPlanningSidebarTab("resources")}
                   >
                     Resources
-                    {(planningExternalLinks.length > 0 || planningBranchFiles.length > 0) && (
-                      <span className="execute-sidebar__tab-badge">
-                        {planningExternalLinks.length + planningBranchFiles.length}
+                    {resourceCount > 0 && (
+                      <span className="planning-panel__tab-badge planning-panel__tab-badge--resource">
+                        {resourceCount}
                       </span>
                     )}
                   </button>
                 </div>
+                  );
+                })()}
 
                 {/* Tab Content */}
                 <div className="planning-panel__sidebar-content">
@@ -2380,11 +2422,7 @@ export function PlanningPanel({
                           </div>
                           <div className="execute-sidebar__external-links">
                             {planningExternalLinks.map((link) => {
-                              const { iconSrc } = getLinkTypeIconForTask(link.linkType);
-                              const iconClass = link.linkType === "figma" ? "execute-sidebar__link-icon--figma" :
-                                link.linkType === "notion" ? "execute-sidebar__link-icon--notion" :
-                                link.linkType === "github_issue" ? "execute-sidebar__link-icon--github" :
-                                "execute-sidebar__link-icon--url";
+                              const icon = getResourceIcon(link.linkType);
                               return (
                                 <a
                                   key={link.id}
@@ -2394,9 +2432,9 @@ export function PlanningPanel({
                                   className="execute-sidebar__external-link"
                                 >
                                   <img
-                                    src={iconSrc}
-                                    alt={link.linkType}
-                                    className={`execute-sidebar__link-icon ${iconClass}`}
+                                    src={icon.src}
+                                    alt={icon.alt}
+                                    className={`execute-sidebar__link-icon execute-sidebar__link-icon${icon.className}`}
                                   />
                                   <span className="execute-sidebar__external-link-text">
                                     {link.title || link.url}

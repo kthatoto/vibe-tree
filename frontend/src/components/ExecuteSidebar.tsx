@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, type TaskTodo, type PlanningQuestion, type BranchLink, type BranchExternalLink, type BranchFile, type TaskInstruction, type GitHubLabel, type GitHubCheck } from "../lib/api";
 import { wsClient } from "../lib/ws";
+import { getResourceIcon } from "../lib/resourceIcons";
 import ExecuteBranchTree from "./ExecuteBranchTree";
 import ExecuteTodoList from "./ExecuteTodoList";
 import PlanningQuestionsPanel from "./PlanningQuestionsPanel";
@@ -41,6 +42,9 @@ export function ExecuteSidebar({
 
   // All branch links for all branches (for PR status in tree)
   const [allBranchLinks, setAllBranchLinks] = useState<Map<string, BranchLink[]>>(new Map());
+
+  // All branch resource counts (for tree badges)
+  const [allResourceCounts, setAllResourceCounts] = useState<Map<string, { figma: number; githubIssue: number; other: number; files: number }>>(new Map());
 
   // Branch links and instruction for display branch
   const [branchLinks, setBranchLinks] = useState<BranchLink[]>([]);
@@ -166,6 +170,29 @@ export function ExecuteSidebar({
     };
 
     loadAllBranchLinks();
+  }, [repoId, executeBranches]);
+
+  // Load all resource counts for all branches (for tree badges)
+  useEffect(() => {
+    if (!repoId || executeBranches.length === 0) return;
+
+    Promise.all([
+      api.getBranchExternalLinksBatch(repoId, executeBranches).catch(() => ({})),
+      api.getBranchFilesBatch(repoId, executeBranches).catch(() => ({})),
+    ]).then(([extLinksMap, filesMap]) => {
+      const countsMap = new Map<string, { figma: number; githubIssue: number; other: number; files: number }>();
+      for (const branch of executeBranches) {
+        const extLinks = extLinksMap[branch] || [];
+        const files = filesMap[branch] || [];
+        countsMap.set(branch, {
+          figma: extLinks.filter((l: BranchExternalLink) => l.linkType === "figma").length,
+          githubIssue: extLinks.filter((l: BranchExternalLink) => l.linkType === "github_issue").length,
+          other: extLinks.filter((l: BranchExternalLink) => l.linkType !== "figma" && l.linkType !== "github_issue").length,
+          files: files.length,
+        });
+      }
+      setAllResourceCounts(countsMap);
+    });
   }, [repoId, executeBranches]);
 
   // WebSocket updates for branch links
@@ -451,6 +478,7 @@ export function ExecuteSidebar({
           branchTodoCounts={branchTodoCounts}
           branchQuestionCounts={branchQuestionCounts}
           branchLinks={allBranchLinks}
+          branchResourceCounts={allResourceCounts}
           onRefresh={handleRefreshAll}
           isRefreshing={isRefreshing}
         />
@@ -654,22 +682,7 @@ export function ExecuteSidebar({
                 </div>
                 <div className="execute-sidebar__external-links">
                   {externalLinks.map((link) => {
-                    const getIconClass = (linkType: string) => {
-                      switch (linkType) {
-                        case "figma": return "execute-sidebar__link-icon--figma";
-                        case "notion": return "execute-sidebar__link-icon--notion";
-                        case "github_issue": return "execute-sidebar__link-icon--github";
-                        default: return "execute-sidebar__link-icon--url";
-                      }
-                    };
-                    const getIconSrc = (linkType: string) => {
-                      switch (linkType) {
-                        case "figma": return "https://cdn.simpleicons.org/figma";
-                        case "notion": return "https://cdn.simpleicons.org/notion";
-                        case "github_issue": return "https://cdn.simpleicons.org/github";
-                        default: return "https://cdn.simpleicons.org/link";
-                      }
-                    };
+                    const icon = getResourceIcon(link.linkType);
                     return (
                       <a
                         key={link.id}
@@ -679,9 +692,9 @@ export function ExecuteSidebar({
                         className="execute-sidebar__external-link"
                       >
                         <img
-                          src={getIconSrc(link.linkType)}
-                          alt={link.linkType}
-                          className={`execute-sidebar__link-icon ${getIconClass(link.linkType)}`}
+                          src={icon.src}
+                          alt={icon.alt}
+                          className={`execute-sidebar__link-icon execute-sidebar__link-icon${icon.className}`}
                         />
                         <span className="execute-sidebar__external-link-text">
                           {link.title || link.url}

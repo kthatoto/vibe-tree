@@ -540,32 +540,6 @@
   display: flex;
 }
 
-.planning-panel__fullscreen-toggle {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 10;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #374151;
-  border: 1px solid #4b5563;
-  border-radius: 4px;
-  color: #9ca3af;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.planning-panel__fullscreen-toggle:hover {
-  background: #4b5563;
-  color: #e5e7eb;
-  border-color: #6b7280;
-}
-
 .planning-panel__links,
 .planning-panel__tasks {
   padding: 12px;
@@ -2144,7 +2118,7 @@
   cursor: not-allowed;
 }
 
-/* Fullscreen Toggle Button */
+/* Fullscreen Toggle Button (in tab bar) */
 .planning-panel__fullscreen-toggle {
   display: flex;
   align-items: center;
@@ -2167,6 +2141,36 @@
   background: #4b5563;
   color: #e5e7eb;
   border-color: #6b7280;
+}
+
+/* Sidebar expand/collapse button */
+.planning-panel__sidebar-expand {
+  position: absolute;
+  top: 8px;
+  left: -11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 4px;
+  color: #9ca3af;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  z-index: 10;
+}
+
+.planning-panel__sidebar-expand:hover {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #3b82f6;
+}
+
+.planning-panel__sidebar-expand--expanded {
+  left: 8px;
 }
 
 /* Planning Sidebar - Branches section at top */

@@ -2134,7 +2134,7 @@ export function PlanningPanel({
                 </div>
               )}
 
-              {/* Resizer - hidden when fullscreen */}
+              {/* Resizer */}
               {!sidebarFullscreen && (
                 <div
                   className="planning-panel__resizer"
@@ -2147,13 +2147,13 @@ export function PlanningPanel({
                 className={`planning-panel__sidebar ${sidebarFullscreen ? "planning-panel__sidebar--fullscreen" : ""}`}
                 style={sidebarFullscreen ? undefined : { width: sidebarWidth }}
               >
-                {/* Fullscreen toggle button */}
+                {/* Expand/Collapse button */}
                 <button
-                  className="planning-panel__fullscreen-toggle"
+                  className={`planning-panel__sidebar-expand${sidebarFullscreen ? " planning-panel__sidebar-expand--expanded" : ""}`}
                   onClick={() => setSidebarFullscreen(!sidebarFullscreen)}
-                  title={sidebarFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                  title={sidebarFullscreen ? "Collapse sidebar" : "Expand sidebar"}
                 >
-                  {sidebarFullscreen ? "⤡" : "⤢"}
+                  {sidebarFullscreen ? "→" : "←"}
                 </button>
                 <ExecuteSidebar
                   repoId={repoId}
@@ -2270,7 +2270,7 @@ export function PlanningPanel({
                 </div>
               )}
 
-              {/* Resizer - hidden when fullscreen */}
+              {/* Resizer */}
               {!sidebarFullscreen && (
                 <div
                   className="planning-panel__resizer"
@@ -2283,13 +2283,13 @@ export function PlanningPanel({
                 className={`planning-panel__sidebar ${sidebarFullscreen ? "planning-panel__sidebar--fullscreen" : ""}`}
                 style={sidebarFullscreen ? undefined : { width: sidebarWidth }}
               >
-                {/* Fullscreen toggle button */}
+                {/* Expand/Collapse button */}
                 <button
-                  className="planning-panel__fullscreen-toggle"
+                  className={`planning-panel__sidebar-expand${sidebarFullscreen ? " planning-panel__sidebar-expand--expanded" : ""}`}
                   onClick={() => setSidebarFullscreen(!sidebarFullscreen)}
-                  title={sidebarFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                  title={sidebarFullscreen ? "Collapse sidebar" : "Expand sidebar"}
                 >
-                  {sidebarFullscreen ? "⤡" : "⤢"}
+                  {sidebarFullscreen ? "→" : "←"}
                 </button>
                 {/* Branch Tree (always visible at top) */}
                 <div className="planning-panel__sidebar-branches">

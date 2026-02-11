@@ -16,6 +16,8 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState<string | null>(null);
 
   // Load pins
   useEffect(() => {
@@ -104,6 +106,29 @@ export default function SettingsPage() {
     }
   };
 
+  const handleCleanup = async () => {
+    if (!selectedPin) return;
+    setCleanupLoading(true);
+    setCleanupResult(null);
+    setError(null);
+    try {
+      const result = await api.cleanupStaleData(selectedPin.localPath);
+      if (result.totalDeleted === 0) {
+        setCleanupResult("No stale data found.");
+      } else {
+        const details = Object.entries(result.cleanupResults)
+          .map(([table, count]) => `${table}: ${count}`)
+          .join(", ");
+        setCleanupResult(`Cleaned up ${result.totalDeleted} entries (${details})`);
+      }
+      setTimeout(() => setCleanupResult(null), 5000);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+
   return (
     <div style={{ padding: "20px", maxWidth: "600px", margin: "0 auto", minHeight: "100vh", background: "#0f172a" }}>
       <h1 style={{ color: "#e5e7eb", marginBottom: "20px" }}>Settings</h1>
@@ -121,6 +146,12 @@ export default function SettingsPage() {
       {saved && (
         <div style={{ background: "#14532d", color: "#4ade80", padding: "10px", marginBottom: "20px", borderRadius: "4px" }}>
           Saved!
+        </div>
+      )}
+
+      {cleanupResult && (
+        <div style={{ background: "#14532d", color: "#4ade80", padding: "10px", marginBottom: "20px", borderRadius: "4px" }}>
+          {cleanupResult}
         </div>
       )}
 
@@ -237,6 +268,31 @@ export default function SettingsPage() {
           >
             {loading ? "Saving..." : "Save"}
           </button>
+
+          {/* Cleanup Section */}
+          <div style={{ marginTop: "30px", paddingTop: "20px", borderTop: "1px solid #374151" }}>
+            <h3 style={{ color: "#e5e7eb", marginBottom: "12px", fontSize: "14px" }}>Data Cleanup</h3>
+            <p style={{ color: "#6b7280", fontSize: "12px", marginBottom: "12px" }}>
+              Remove cached data for branches that no longer exist in git.
+            </p>
+            <button
+              onClick={handleCleanup}
+              disabled={cleanupLoading}
+              style={{
+                width: "100%",
+                padding: "12px",
+                background: cleanupLoading ? "#4b5563" : "#dc2626",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: cleanupLoading ? "not-allowed" : "pointer",
+                fontSize: "14px",
+                fontWeight: "600",
+              }}
+            >
+              {cleanupLoading ? "Cleaning..." : "Clean Up Stale Data"}
+            </button>
+          </div>
         </>
       )}
     </div>

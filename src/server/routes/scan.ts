@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { db, schema } from "../../db";
-import { eq, and, notInArray } from "drizzle-orm";
+import { eq, and, notInArray, inArray } from "drizzle-orm";
 import { existsSync } from "fs";
 import { broadcast } from "../ws";
 import { expandTilde, getRepoId, execAsync } from "../utils";
@@ -91,6 +91,23 @@ scanRouter.get("/snapshot/:pinId", async (c) => {
     const sessionNodes = JSON.parse(session.nodesJson) as Array<{ branchName?: string }>;
     for (const node of sessionNodes) {
       if (node.branchName) cachedBranchNames.add(node.branchName);
+    }
+  }
+
+  // Add branches from tree specs (designed branches)
+  if (treeSpecs[0]) {
+    const specJson = JSON.parse(treeSpecs[0].specJson) as { nodes?: Array<{ branchName: string }>; edges?: Array<{ parent: string; child: string }> };
+    if (specJson.nodes) {
+      for (const node of specJson.nodes) {
+        if (node.branchName) cachedBranchNames.add(node.branchName);
+      }
+    }
+    // Also add branches from edges (parent and child)
+    if (specJson.edges) {
+      for (const edge of specJson.edges) {
+        if (edge.parent) cachedBranchNames.add(edge.parent);
+        if (edge.child) cachedBranchNames.add(edge.child);
+      }
     }
   }
 
@@ -649,4 +666,136 @@ scanRouter.post("/fetch", async (c) => {
     });
     throw new BadRequestError(`Fetch failed: ${err instanceof Error ? err.message : String(err)}`);
   }
+});
+
+// POST /api/scan/cleanup-stale - Remove DB entries for branches that no longer exist in git
+scanRouter.post("/cleanup-stale", async (c) => {
+  const body = await c.req.json();
+  const { localPath: rawLocalPath }: { localPath: string } = body;
+
+  if (!rawLocalPath) {
+    throw new BadRequestError("localPath is required");
+  }
+
+  const localPath = expandTilde(rawLocalPath);
+  if (!existsSync(localPath)) {
+    throw new BadRequestError(`Local path does not exist: ${localPath}`);
+  }
+
+  const repoId = await getRepoId(localPath);
+  if (!repoId) {
+    throw new BadRequestError(`Could not detect GitHub repo at: ${localPath}`);
+  }
+
+  // Get actual branches from git
+  const branches = await getBranches(localPath);
+  const actualBranchNames = new Set(branches.map((b) => b.name));
+
+  const cleanupResults: Record<string, number> = {};
+
+  // 1. Clean up task_instructions
+  const taskInstructionsToDelete = await db
+    .select()
+    .from(schema.taskInstructions)
+    .where(eq(schema.taskInstructions.repoId, repoId));
+
+  const staleTasks = taskInstructionsToDelete.filter(
+    (t) => t.branchName && !actualBranchNames.has(t.branchName)
+  );
+  if (staleTasks.length > 0) {
+    await db
+      .delete(schema.taskInstructions)
+      .where(
+        and(
+          eq(schema.taskInstructions.repoId, repoId),
+          inArray(
+            schema.taskInstructions.branchName,
+            staleTasks.map((t) => t.branchName).filter((b): b is string => b !== null)
+          )
+        )
+      );
+    cleanupResults.taskInstructions = staleTasks.length;
+  }
+
+  // 2. Clean up worktree_activity
+  const worktreeActivities = await db
+    .select()
+    .from(schema.worktreeActivity)
+    .where(eq(schema.worktreeActivity.repoId, repoId));
+
+  const staleWorktrees = worktreeActivities.filter(
+    (w) => w.branchName && !actualBranchNames.has(w.branchName)
+  );
+  if (staleWorktrees.length > 0) {
+    await db
+      .delete(schema.worktreeActivity)
+      .where(
+        and(
+          eq(schema.worktreeActivity.repoId, repoId),
+          inArray(
+            schema.worktreeActivity.branchName,
+            staleWorktrees.map((w) => w.branchName).filter((b): b is string => b !== null)
+          )
+        )
+      );
+    cleanupResults.worktreeActivity = staleWorktrees.length;
+  }
+
+  // 3. Clean up branch_links
+  const branchLinks = await db
+    .select()
+    .from(schema.branchLinks)
+    .where(eq(schema.branchLinks.repoId, repoId));
+
+  const staleBranchLinks = branchLinks.filter(
+    (l) => !actualBranchNames.has(l.branchName)
+  );
+  if (staleBranchLinks.length > 0) {
+    await db
+      .delete(schema.branchLinks)
+      .where(
+        and(
+          eq(schema.branchLinks.repoId, repoId),
+          inArray(
+            schema.branchLinks.branchName,
+            staleBranchLinks.map((l) => l.branchName)
+          )
+        )
+      );
+    cleanupResults.branchLinks = staleBranchLinks.length;
+  }
+
+  // 4. Clean up task_todos
+  const taskTodos = await db
+    .select()
+    .from(schema.taskTodos)
+    .where(eq(schema.taskTodos.repoId, repoId));
+
+  const staleTodos = taskTodos.filter(
+    (t) => !actualBranchNames.has(t.branchName)
+  );
+  if (staleTodos.length > 0) {
+    await db
+      .delete(schema.taskTodos)
+      .where(
+        and(
+          eq(schema.taskTodos.repoId, repoId),
+          inArray(
+            schema.taskTodos.branchName,
+            staleTodos.map((t) => t.branchName)
+          )
+        )
+      );
+    cleanupResults.taskTodos = staleTodos.length;
+  }
+
+  const totalDeleted = Object.values(cleanupResults).reduce((a, b) => a + b, 0);
+
+  return c.json({
+    success: true,
+    repoId,
+    cleanupResults,
+    totalDeleted,
+    actualBranchCount: actualBranchNames.size,
+  });
 });

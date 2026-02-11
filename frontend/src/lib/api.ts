@@ -543,6 +543,17 @@ export const api = {
       `${API_BASE}/scan/restart-prompt?${params}`
     );
   },
+  cleanupStaleData: (localPath: string) =>
+    fetchJson<{
+      success: boolean;
+      repoId: string;
+      cleanupResults: Record<string, number>;
+      totalDeleted: number;
+      actualBranchCount: number;
+    }>(`${API_BASE}/scan/cleanup-stale`, {
+      method: "POST",
+      body: JSON.stringify({ localPath }),
+    }),
 
   // Tree Spec
   getTreeSpec: (repoId: string) =>

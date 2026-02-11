@@ -350,7 +350,24 @@ scanRouter.post("/", async (c) => {
         badges: [],
         lastCommitAt: "",
       }));
+
+      // Initialize edges from treeSpec (designed edges) to preserve hierarchy during scan
+      const branchSet = new Set(branchNames);
       let currentEdges: import("../../shared/types").TreeEdge[] = [];
+      if (treeSpec) {
+        for (const designedEdge of treeSpec.specJson.edges as Array<{ parent: string; child: string }>) {
+          const parentBranch = branchSet.has(designedEdge.parent) ? designedEdge.parent : currentDefaultBranch;
+          if (branchSet.has(designedEdge.child)) {
+            currentEdges.push({
+              parent: parentBranch,
+              child: designedEdge.child,
+              confidence: "high" as const,
+              isDesigned: true,
+            });
+          }
+        }
+      }
+
       let currentWorktrees: import("../../shared/types").WorktreeInfo[] = [];
       let currentWarnings: import("../../shared/types").Warning[] = [];
 
@@ -389,7 +406,6 @@ scanRouter.post("/", async (c) => {
       currentEdges = treeEdges;
 
       // Merge planning session edges
-      const branchSet = new Set(branchNames);
       const confirmedSessions = await db.select().from(schema.planningSessions).where(
         and(eq(schema.planningSessions.repoId, repoId), eq(schema.planningSessions.status, "confirmed"))
       );

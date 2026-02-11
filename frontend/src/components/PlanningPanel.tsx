@@ -299,7 +299,8 @@ export function PlanningPanel({
 
   // Planning Session state (similar to Execute but for planning multiple branches)
   const [planningSelectedBranches, setPlanningSelectedBranches] = useState<string[]>([]);
-  const [planningCurrentBranchIndex, setPlanningCurrentBranchIndex] = useState(0);
+  const [planningCurrentBranchIndex, setPlanningCurrentBranchIndex] = useState(0); // AI's working branch
+  const [userViewBranchIndex, setUserViewBranchIndex] = useState(0); // User's viewing branch (separate from AI)
   const [planningLoading, setPlanningLoading] = useState(false);
   const [claudeWorking, setClaudeWorking] = useState(false);
 
@@ -731,13 +732,13 @@ export function PlanningPanel({
     }
 
     const planningBranches = selectedSession.executeBranches || [];
-    const currentBranch = planningBranches[planningCurrentBranchIndex];
-    if (!currentBranch) return;
+    const viewingBranch = planningBranches[userViewBranchIndex];
+    if (!viewingBranch) return;
 
     const unsubInstructionUpdated = wsClient.on("taskInstruction.updated", (msg) => {
       const data = msg.data as { branchName: string; instructionMd: string };
-      // Only update if this is the currently displayed branch
-      if (data.branchName === currentBranch && !instructionDirty) {
+      // Only update if this is the currently displayed (user's viewing) branch
+      if (data.branchName === viewingBranch && !instructionDirty) {
         setCurrentInstruction(data.instructionMd || "");
       }
     });
@@ -745,7 +746,7 @@ export function PlanningPanel({
     return () => {
       unsubInstructionUpdated();
     };
-  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, planningCurrentBranchIndex, instructionDirty]);
+  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, userViewBranchIndex, instructionDirty]);
 
   // Load external links when session or current branch changes
   useEffect(() => {
@@ -795,9 +796,9 @@ export function PlanningPanel({
       setInstructionDirty(false);
       return;
     }
-    // For planning sessions with branches, use the current branch; otherwise use baseBranch
+    // For planning sessions with branches, use the user's viewing branch; otherwise use baseBranch
     const branchToLoad = selectedSession.executeBranches && selectedSession.executeBranches.length > 0
-      ? selectedSession.executeBranches[planningCurrentBranchIndex] || selectedSession.baseBranch
+      ? selectedSession.executeBranches[userViewBranchIndex] || selectedSession.baseBranch
       : selectedSession.baseBranch;
 
     setInstructionLoading(true);
@@ -808,7 +809,7 @@ export function PlanningPanel({
       })
       .catch(console.error)
       .finally(() => setInstructionLoading(false));
-  }, [selectedSession?.id, selectedSession?.executeBranches, planningCurrentBranchIndex, repoId]);
+  }, [selectedSession?.id, selectedSession?.executeBranches, userViewBranchIndex, repoId]);
 
   // Load branch links (PR/Issue) for all Planning session branches
   useEffect(() => {
@@ -1205,7 +1206,8 @@ export function PlanningPanel({
   };
 
   const handlePlanningBranchSwitch = (branchIndex: number) => {
-    setPlanningCurrentBranchIndex(branchIndex);
+    // Only change user's view, not AI's working branch
+    setUserViewBranchIndex(branchIndex);
   };
 
   // Execute Session edit mode handlers
@@ -1914,7 +1916,12 @@ export function PlanningPanel({
       const hasBranches = planningBranches.length > 0;
       const planningStatus = hasBranches ? "in_progress" : "draft";
       const planningStatusLabel = hasBranches ? "In Progress" : "Draft";
+      // User's viewing branch (separate from AI's working branch)
       const currentPlanningBranch = hasBranches
+        ? planningBranches[userViewBranchIndex]
+        : null;
+      // AI's working branch
+      const aiWorkingBranch = hasBranches
         ? planningBranches[planningCurrentBranchIndex]
         : null;
 
@@ -2008,7 +2015,7 @@ export function PlanningPanel({
                 <div className="planning-panel__sidebar-branches">
                   <ExecuteBranchTree
                     branches={planningBranches}
-                    currentBranchIndex={planningCurrentBranchIndex}
+                    currentBranchIndex={userViewBranchIndex}
                     previewBranch={null}
                     onPreviewBranch={(branch) => {
                       const index = planningBranches.indexOf(branch);
@@ -2018,7 +2025,7 @@ export function PlanningPanel({
                     branchTodoCounts={branchTodoCounts}
                     branchQuestionCounts={branchQuestionCounts}
                     branchLinks={planningAllBranchLinks}
-                    workingBranch={claudeWorking ? planningBranches[planningCurrentBranchIndex] : null}
+                    workingBranch={claudeWorking ? aiWorkingBranch : null}
                     showCompletionCount={false}
                   />
                 </div>

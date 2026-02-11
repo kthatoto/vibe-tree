@@ -480,9 +480,7 @@ externalLinksRouter.post("/", async (c) => {
   const linkType = detectLinkType(url);
   const now = new Date().toISOString();
 
-  // Fetch content
-  const { title: fetchedTitle, content } = await fetchLinkContent(url, linkType);
-
+  // Insert immediately without fetching content (for fast UX)
   const [inserted] = await db
     .insert(externalLinks)
     .values({
@@ -490,9 +488,9 @@ externalLinksRouter.post("/", async (c) => {
       branchName: branchName || null,
       url,
       linkType,
-      title: title || fetchedTitle || null,
-      contentCache: content || null,
-      lastFetchedAt: content ? now : null,
+      title: title || null,
+      contentCache: null,
+      lastFetchedAt: null,
       createdAt: now,
       updatedAt: now,
     })
@@ -503,6 +501,31 @@ externalLinksRouter.post("/", async (c) => {
     planningSessionId,
     branchName: branchName || null,
     data: inserted,
+  });
+
+  // Fetch content in background and update
+  fetchLinkContent(url, linkType).then(async ({ title: fetchedTitle, content }) => {
+    if (fetchedTitle || content) {
+      const updateNow = new Date().toISOString();
+      const [updated] = await db
+        .update(externalLinks)
+        .set({
+          title: inserted.title || fetchedTitle || null,
+          contentCache: content || null,
+          lastFetchedAt: updateNow,
+          updatedAt: updateNow,
+        })
+        .where(eq(externalLinks.id, inserted.id))
+        .returning();
+
+      broadcast({
+        type: "external-link.updated",
+        planningSessionId,
+        data: updated,
+      });
+    }
+  }).catch((err) => {
+    console.error("Background fetch failed for link:", url, err);
   });
 
   return c.json(inserted, 201);

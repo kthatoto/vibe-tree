@@ -5,3 +5,4 @@ export * from "./instruction";
 export * from "./todo";
 export * from "./question";
 export * from "./branch";
+export * from "./branchResource";

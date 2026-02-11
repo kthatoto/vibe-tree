@@ -1219,6 +1219,39 @@ const REFINEMENT_SYSTEM_PROMPT = `あなたはプロジェクト計画のアシ�
 - パラメータ: \`planningSessionId\`, \`title\`
 - タイトルは議論の主題を簡潔に表す（例：「ユーザー認証機能の追加」「ダッシュボードUI改善」）
 - タスク提案のたびに、内容に応じてタイトルを更新する
+
+## 外部リンクとブランチの紐づけ【必須】
+
+**タスクを提案したら、必ず共有されたリンクを各ブランチに紐づけること。**
+
+### ワークフロー：
+1. \`get_session_links\` でセッションのリンク一覧を取得
+2. タスクを提案（<<TASK>>形式）
+3. **提案直後に**、各リンクを関連するブランチに \`add_branch_link\` で紐づける
+
+### 紐づけの指針：
+- Figmaのデザインリンク → UIを実装するブランチに紐づけ
+- GitHub Issue → 該当機能のブランチに紐づけ
+- Notion仕様書 → 関連する全ブランチに紐づけ（複数可）
+- その他のURL → 内容を判断して適切なブランチに紐づけ
+- **1つのリンクを複数ブランチに紐づけてOK**
+
+### 使用するツール：
+\`mcp__vibe-tree__get_session_links\`:
+- パラメータ: \`planningSessionId\`
+- セッションに共有されたリンク一覧を取得
+
+\`mcp__vibe-tree__add_branch_link\`:
+- パラメータ: \`repoId\`, \`branchName\`, \`url\`, \`title\`(任意), \`description\`(任意)
+- 取得したリンクのURLを使って、各ブランチに紐づける
+
+## Figma画像の保存
+
+Figma MCPで画像を取得した場合、関連するブランチに
+\`save_image_to_branch\` で保存してください。
+
+\`mcp__vibe-tree__save_image_to_branch\`:
+- パラメータ: \`repoId\`, \`branchName\`, \`imageData\`(base64), \`originalName\`, \`description\`(任意), \`sourceUrl\`(任意)
 `;
 
 // Instruction review system prompt (for Planning sessions)

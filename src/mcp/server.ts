@@ -41,6 +41,19 @@ import {
   switchBranch,
   markBranchCompleteSchema,
   markBranchComplete,
+  // Branch resource tools
+  getSessionLinksSchema,
+  getSessionLinks,
+  addBranchLinkSchema,
+  addBranchLink,
+  listBranchLinksSchema,
+  listBranchLinks,
+  removeBranchLinkSchema,
+  removeBranchLink,
+  saveImageToBranchSchema,
+  saveImageToBranch,
+  listBranchFilesSchema,
+  listBranchFiles,
 } from "./tools";
 
 // Create MCP server
@@ -396,6 +409,139 @@ export function createServer() {
             required: ["planningSessionId"],
           },
         },
+        // Branch resource tools
+        {
+          name: "get_session_links",
+          description:
+            "Get all external links (Figma, Notion, GitHub, etc.) attached to a planning session. Use this to see what links are available to attach to branches.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              planningSessionId: {
+                type: "string",
+                description: "Planning session ID",
+              },
+            },
+            required: ["planningSessionId"],
+          },
+        },
+        {
+          name: "add_branch_link",
+          description:
+            "Add an external link (Figma, Notion, GitHub, etc.) to a branch. Use this to associate reference materials with specific tasks.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              repoId: {
+                type: "string",
+                description: "Repository ID (owner/repo format)",
+              },
+              branchName: {
+                type: "string",
+                description: "Branch name to attach the link to",
+              },
+              url: {
+                type: "string",
+                description: "URL of the external link",
+              },
+              title: {
+                type: "string",
+                description: "Title of the link (optional)",
+              },
+              description: {
+                type: "string",
+                description: "Description or note about the link (optional)",
+              },
+            },
+            required: ["repoId", "branchName", "url"],
+          },
+        },
+        {
+          name: "list_branch_links",
+          description: "List all external links attached to a branch",
+          inputSchema: {
+            type: "object",
+            properties: {
+              repoId: {
+                type: "string",
+                description: "Repository ID (owner/repo format)",
+              },
+              branchName: {
+                type: "string",
+                description: "Branch name",
+              },
+            },
+            required: ["repoId", "branchName"],
+          },
+        },
+        {
+          name: "remove_branch_link",
+          description: "Remove an external link from a branch",
+          inputSchema: {
+            type: "object",
+            properties: {
+              linkId: {
+                type: "number",
+                description: "Link ID to remove",
+              },
+            },
+            required: ["linkId"],
+          },
+        },
+        {
+          name: "save_image_to_branch",
+          description:
+            "Save a base64 encoded image to a branch. Use this to attach screenshots, Figma exports, or other images to specific tasks.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              repoId: {
+                type: "string",
+                description: "Repository ID (owner/repo format)",
+              },
+              branchName: {
+                type: "string",
+                description: "Branch name to attach the image to",
+              },
+              imageData: {
+                type: "string",
+                description: "Base64 encoded image data",
+              },
+              originalName: {
+                type: "string",
+                description: "Original file name (e.g., 'design.png')",
+              },
+              description: {
+                type: "string",
+                description: "Description of the image (optional)",
+              },
+              sourceUrl: {
+                type: "string",
+                description:
+                  "Original URL if from external source like Figma (optional)",
+              },
+            },
+            required: ["repoId", "branchName", "imageData", "originalName"],
+          },
+        },
+        {
+          name: "list_branch_files",
+          description: "List all files (images, etc.) attached to a branch",
+          inputSchema: {
+            type: "object",
+            properties: {
+              repoId: {
+                type: "string",
+                description: "Repository ID (owner/repo format)",
+              },
+              branchName: {
+                type: "string",
+                description: "Branch name",
+              },
+            },
+            required: ["repoId", "branchName"],
+          },
+        },
       ],
     };
   });
@@ -537,6 +683,55 @@ export function createServer() {
         case "mark_branch_complete": {
           const input = markBranchCompleteSchema.parse(args);
           const result = markBranchComplete(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        // Branch resource tools
+        case "get_session_links": {
+          const input = getSessionLinksSchema.parse(args);
+          const result = getSessionLinks(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "add_branch_link": {
+          const input = addBranchLinkSchema.parse(args);
+          const result = addBranchLink(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "list_branch_links": {
+          const input = listBranchLinksSchema.parse(args);
+          const result = listBranchLinks(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "remove_branch_link": {
+          const input = removeBranchLinkSchema.parse(args);
+          const result = removeBranchLink(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "save_image_to_branch": {
+          const input = saveImageToBranchSchema.parse(args);
+          const result = saveImageToBranch(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "list_branch_files": {
+          const input = listBranchFilesSchema.parse(args);
+          const result = listBranchFiles(input);
           return {
             content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
           };

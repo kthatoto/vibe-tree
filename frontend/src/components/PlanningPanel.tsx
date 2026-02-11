@@ -241,9 +241,11 @@ export function PlanningPanel({
   // newBaseBranch removed - all session types now use defaultBranch
 
   // External links for selected session
-  const [externalLinks, setExternalLinks] = useState<ExternalLink[]>([]);
+  const [externalLinksMap, setExternalLinksMap] = useState<Record<string, ExternalLink[]>>({});
+  const externalLinks = selectedSession ? (externalLinksMap[selectedSession.id] || []) : [];
   const [newLinkUrl, setNewLinkUrl] = useState("");
-  const [addingLink, setAddingLink] = useState(false);
+  const [addingLinkCountMap, setAddingLinkCountMap] = useState<Record<string, number>>({});
+  const addingLinkCount = selectedSession ? (addingLinkCountMap[selectedSession.id] || 0) : 0;
 
   // Chat messages for selected session (used internally in useEffect)
   const [, setMessages] = useState<ChatMessage[]>([]);
@@ -750,16 +752,16 @@ export function PlanningPanel({
 
   // Load external links when session or current branch changes
   useEffect(() => {
-    if (!selectedSession) {
-      setExternalLinks([]);
-      return;
-    }
+    if (!selectedSession) return;
+    const sessionId = selectedSession.id;
     // For Planning/Execute sessions, filter by current branch
     const branchName = (selectedSession.type === "planning" || selectedSession.type === "execute")
       ? (selectedSession.executeBranches || [])[selectedSession.currentExecuteIndex ?? 0]
       : undefined;
-    api.getExternalLinks(selectedSession.id, branchName)
-      .then(setExternalLinks)
+    api.getExternalLinks(sessionId, branchName)
+      .then((links) => {
+        setExternalLinksMap((prev) => ({ ...prev, [sessionId]: links }));
+      })
       .catch(console.error);
   }, [selectedSession?.id, selectedSession?.type, selectedSession?.currentExecuteIndex]);
 
@@ -1294,24 +1296,68 @@ export function PlanningPanel({
 
   // External link handlers
   const handleAddLink = async () => {
-    if (!newLinkUrl.trim() || !selectedSession || addingLink) return;
-    setAddingLink(true);
-    try {
-      const branchName = getCurrentBranchName();
-      const link = await api.addExternalLink(selectedSession.id, newLinkUrl.trim(), undefined, branchName);
-      setExternalLinks((prev) => [...prev, link]);
-      setNewLinkUrl("");
-    } catch (err) {
-      console.error("Failed to add link:", err);
-    } finally {
-      setAddingLink(false);
-    }
+    if (!newLinkUrl.trim() || !selectedSession || addingLinkCount > 0) return;
+
+    // Capture session ID at start to handle session switching during async
+    const sessionId = selectedSession.id;
+    const branchName = getCurrentBranchName();
+    // Split by newlines and filter valid URLs
+    const urls = newLinkUrl
+      .split(/[\n\r]+/)
+      .map((u) => u.trim())
+      .filter((u) => u && (u.startsWith("http://") || u.startsWith("https://")));
+
+    if (urls.length === 0) return;
+
+    const updateCount = (countOrFn: number | ((prev: number) => number)) => {
+      setAddingLinkCountMap((prev) => ({
+        ...prev,
+        [sessionId]: typeof countOrFn === 'function' ? countOrFn(prev[sessionId] || 0) : countOrFn,
+      }));
+    };
+
+    updateCount(urls.length);
+    setNewLinkUrl("");
+
+    // Process all URLs in parallel, update UI as each completes
+    const promises = urls.map(async (url) => {
+      try {
+        const link = await api.addExternalLink(sessionId, url, undefined, branchName);
+        updateCount((prev) => Math.max(0, prev - 1));
+        setExternalLinksMap((prev) => ({
+          ...prev,
+          [sessionId]: [...(prev[sessionId] || []), link],
+        }));
+        return link;
+      } catch (err) {
+        console.error("Failed to add link:", url, err);
+        updateCount((prev) => Math.max(0, prev - 1));
+        return null;
+      }
+    });
+
+    await Promise.all(promises);
+    updateCount(0);
+  };
+
+  const [linksCopied, setLinksCopied] = useState(false);
+
+  const handleCopyAllLinks = () => {
+    const urls = externalLinks.map((link) => link.url).join("\n");
+    navigator.clipboard.writeText(urls);
+    setLinksCopied(true);
+    setTimeout(() => setLinksCopied(false), 2000);
   };
 
   const handleRemoveLink = async (id: number) => {
+    if (!selectedSession) return;
+    const sessionId = selectedSession.id;
     try {
       await api.deleteExternalLink(id);
-      setExternalLinks((prev) => prev.filter((l) => l.id !== id));
+      setExternalLinksMap((prev) => ({
+        ...prev,
+        [sessionId]: (prev[sessionId] || []).filter((l) => l.id !== id),
+      }));
     } catch (err) {
       console.error("Failed to remove link:", err);
     }
@@ -2290,7 +2336,18 @@ export function PlanningPanel({
         <div className="planning-panel__sidebar" style={{ width: sidebarWidth }}>
           {/* External Links */}
           <div className="planning-panel__links">
-            <h4>Links</h4>
+            <div className="planning-panel__links-header">
+              <h4>Links</h4>
+              {externalLinks.length > 0 && (
+                <button
+                  className={`planning-panel__links-copy-btn${linksCopied ? ' planning-panel__links-copy-btn--copied' : ''}`}
+                  onClick={handleCopyAllLinks}
+                  title="Copy all links"
+                >
+                  {linksCopied ? 'Copied!' : 'Copy All'}
+                </button>
+              )}
+            </div>
             <div className="planning-panel__links-list">
               {externalLinks.map((link) => {
                 const { iconSrc, className } = getLinkTypeIcon(link.linkType);
@@ -2323,12 +2380,14 @@ export function PlanningPanel({
                   </a>
                 );
               })}
-              {addingLink && (
-                <div className="planning-panel__link-icon planning-panel__link-icon--loading">
-                  <div className="planning-panel__link-skeleton" />
-                </div>
+              {addingLinkCount > 0 && (
+                Array.from({ length: addingLinkCount }).map((_, i) => (
+                  <div key={`skeleton-${i}`} className="planning-panel__link-icon planning-panel__link-icon--loading">
+                    <div className="planning-panel__link-skeleton" />
+                  </div>
+                ))
               )}
-              {selectedSession.status === "draft" && !addingLink && (
+              {selectedSession.status === "draft" && addingLinkCount === 0 && (
                 <button
                   className="planning-panel__link-add-icon"
                   onClick={() => setShowLinkInput(!showLinkInput)}
@@ -2339,23 +2398,35 @@ export function PlanningPanel({
               )}
             </div>
             {showLinkInput && selectedSession.status === "draft" && (
-              <input
-                type="text"
-                className="planning-panel__link-add-input"
-                placeholder="Paste URL and press Enter..."
-                value={newLinkUrl}
-                onChange={(e) => setNewLinkUrl(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+              <div className="planning-panel__link-add-container">
+                <textarea
+                  className="planning-panel__link-add-input"
+                  placeholder="Paste URLs (one per line)..."
+                  value={newLinkUrl}
+                  onChange={(e) => setNewLinkUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      handleAddLink();
+                      setShowLinkInput(false);
+                    } else if (e.key === "Escape") {
+                      setShowLinkInput(false);
+                      setNewLinkUrl("");
+                    }
+                  }}
+                  autoFocus
+                />
+                <button
+                  className="planning-panel__link-add-submit"
+                  onClick={() => {
                     handleAddLink();
                     setShowLinkInput(false);
-                  } else if (e.key === "Escape") {
-                    setShowLinkInput(false);
-                    setNewLinkUrl("");
-                  }
-                }}
-                autoFocus
-              />
+                  }}
+                  disabled={!newLinkUrl.trim()}
+                >
+                  Add (⌘+Enter)
+                </button>
+              </div>
             )}
           </div>
 

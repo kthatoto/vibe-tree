@@ -36,6 +36,13 @@ export function getDb(): Database.Database {
   return db;
 }
 
+// Get the base storage path (same directory as the DB)
+export function getStorageBasePath(): string {
+  const dbPath = getDbPath();
+  // DB is at .vibetree/vibetree.sqlite, so storage is at .vibetree/storage/
+  return path.join(path.dirname(dbPath), "storage");
+}
+
 // Helper functions for common operations
 
 export function getSession(sessionId: string) {

@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
-import type { TreeNode, TreeEdge, TaskNode, TaskEdge } from "../lib/api";
+import type { TreeNode, TreeEdge, TaskNode, TaskEdge, BranchLink } from "../lib/api";
 
 interface BranchGraphProps {
   nodes: TreeNode[];
@@ -16,6 +16,8 @@ interface BranchGraphProps {
   onEdgeCreate?: (parentBranch: string, childBranch: string) => void;
   // Branch creation
   onBranchCreate?: (baseBranch: string) => void;
+  // Branch links for PR info (single source of truth)
+  branchLinks?: Map<string, BranchLink[]>;
 }
 
 interface DragState {
@@ -66,6 +68,7 @@ export default function BranchGraph({
   editMode = false,
   onEdgeCreate,
   onBranchCreate,
+  branchLinks = new Map(),
 }: BranchGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -481,8 +484,10 @@ export default function BranchGraph({
     const isSelected = selectedBranch === id;
     const isDefault = id === defaultBranch;
     const hasWorktree = !!node.worktree;
-    const hasPR = !!node.pr;
-    const isMerged = node.pr?.state === "MERGED";
+    // Use branchLinks as single source of truth for PR info
+    const prLink = branchLinks.get(id)?.find(l => l.linkType === "pr");
+    const hasPR = !!prLink;
+    const isMerged = prLink?.status === "merged";
     const isDragging = dragState?.fromBranch === id;
     const isDropTarget = dropTarget === id && dragState && dragState.fromBranch !== id;
     const canDrag = editMode && !isTentative && !isDefault && onEdgeCreate;
@@ -506,7 +511,7 @@ export default function BranchGraph({
       fillColor = "#14532d";
       strokeColor = "#22c55e";
     } else if (hasPR) {
-      if (node.pr?.state === "OPEN") {
+      if (prLink?.status === "open") {
         fillColor = "#14532d";
         strokeColor = "#22c55e";
       }
@@ -594,8 +599,8 @@ export default function BranchGraph({
             {/* Line 1: Status labels - right aligned */}
             {hasPR && (
               <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", justifyContent: "flex-end" }}>
-                {/* Review status - based on reviewStatus */}
-                {node.pr?.reviewStatus === "approved" && (
+                {/* Review status - based on reviewDecision from branchLinks */}
+                {prLink?.reviewDecision === "APPROVED" && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",
@@ -606,7 +611,7 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>Approved ✔</span>
                 )}
-                {node.pr?.reviewDecision === "CHANGES_REQUESTED" && (
+                {prLink?.reviewDecision === "CHANGES_REQUESTED" && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",
@@ -617,18 +622,23 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>Changes ✗</span>
                 )}
-                {node.pr?.reviewStatus === "reviewed" && node.pr?.reviewDecision !== "CHANGES_REQUESTED" && (
+                {prLink?.reviewDecision === "REVIEW_REQUIRED" && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",
                     borderRadius: 3,
                     background: "transparent",
-                    border: "1px solid #6b7280",
-                    color: "#9ca3af",
+                    border: "1px solid #f59e0b",
+                    color: "#fbbf24",
                     whiteSpace: "nowrap",
-                  }}>Reviewed</span>
+                  }}>Review</span>
                 )}
-                {node.pr?.reviewStatus === "requested" && (
+                {/* Reviewers requested but no decision yet */}
+                {!prLink?.reviewDecision && prLink?.reviewers && (() => {
+                  const reviewers = JSON.parse(prLink.reviewers) as string[];
+                  const humanReviewers = reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]"));
+                  return humanReviewers.length > 0;
+                })() && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",
@@ -640,7 +650,7 @@ export default function BranchGraph({
                   }}>Review</span>
                 )}
                 {/* CI status */}
-                {node.pr?.checks === "SUCCESS" && (
+                {prLink?.checksStatus === "success" && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",
@@ -651,7 +661,7 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>CI ✔</span>
                 )}
-                {node.pr?.checks === "FAILURE" && (
+                {prLink?.checksStatus === "failure" && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",
@@ -662,7 +672,7 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>CI ✗</span>
                 )}
-                {node.pr?.checks === "PENDING" && (
+                {prLink?.checksStatus === "pending" && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",
@@ -678,9 +688,9 @@ export default function BranchGraph({
                   fontSize: 10,
                   padding: "1px 5px",
                   borderRadius: 3,
-                  background: node.pr?.state === "MERGED" ? "#3b0764" : "#374151",
-                  border: node.pr?.state === "MERGED" ? "1px solid #9333ea" : "1px solid #4b5563",
-                  color: node.pr?.state === "MERGED" ? "#c084fc" : "#e5e7eb",
+                  background: isMerged ? "#3b0764" : "#374151",
+                  border: isMerged ? "1px solid #9333ea" : "1px solid #4b5563",
+                  color: isMerged ? "#c084fc" : "#e5e7eb",
                   whiteSpace: "nowrap",
                 }}>PR</span>
               </div>

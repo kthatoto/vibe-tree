@@ -25,6 +25,34 @@
   resize: vertical;
 }
 
+.execute-sidebar__branches-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
+
+.execute-sidebar__refresh-btn {
+  background: transparent;
+  border: 1px solid #4b5563;
+  color: #9ca3af;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.execute-sidebar__refresh-btn:hover:not(:disabled) {
+  background: #374151;
+  color: #e5e7eb;
+  border-color: #6b7280;
+}
+
+.execute-sidebar__refresh-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* Branch header with name and links */
 .execute-sidebar__branch-header {
   flex-shrink: 0;

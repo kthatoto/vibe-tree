@@ -19,6 +19,7 @@ import {
   type TreeSpecStatus,
   type BranchNamingRule,
   type TaskInstruction,
+  type BranchLink,
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import BranchGraph from "../components/BranchGraph";
@@ -53,6 +54,9 @@ export default function TreeDashboard() {
   const [instructionCache, setInstructionCache] = useState<Map<string, TaskInstruction>>(new Map());
   const [currentInstruction, setCurrentInstruction] = useState<TaskInstruction | null>(null);
   const [instructionLoading, setInstructionLoading] = useState(false);
+
+  // Branch links (single source of truth for PR info)
+  const [branchLinks, setBranchLinks] = useState<Map<string, BranchLink[]>>(new Map());
 
 
   // Multi-session planning state
@@ -255,49 +259,33 @@ export default function TreeDashboard() {
       }
     });
 
-    // Update Branch Graph when PR info is refreshed
+    // Update branchLinks when PR info is refreshed (single source of truth)
     const unsubBranchLink = wsClient.on("branchLink.updated", (msg) => {
-      const data = msg.data as {
-        branchName: string;
-        linkType: string;
-        status: string | null;
-        checksStatus: string | null;
-        reviewDecision: string | null;
-        reviewStatus: string | null;
-      };
-      if (data.linkType === "pr") {
-        setSnapshot((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            nodes: prev.nodes.map((node) => {
-              if (node.branchName === data.branchName) {
-                const newPr = {
-                  branch: data.branchName,
-                  number: 0,
-                  title: "",
-                  url: "",
-                  state: (data.status?.toUpperCase() || "OPEN") as "OPEN" | "MERGED" | "CLOSED",
-                  reviewDecision: data.reviewDecision as "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | undefined,
-                  reviewStatus: (data.reviewStatus as "none" | "requested" | "reviewed" | "approved") || undefined,
-                  checks: data.checksStatus?.toUpperCase() as "PENDING" | "SUCCESS" | "FAILURE" | undefined,
-                };
-                return {
-                  ...node,
-                  pr: node.pr ? {
-                    ...node.pr,
-                    state: newPr.state,
-                    reviewDecision: newPr.reviewDecision || node.pr.reviewDecision,
-                    reviewStatus: newPr.reviewStatus || node.pr.reviewStatus,
-                    checks: newPr.checks || node.pr.checks,
-                  } : newPr,
-                };
-              }
-              return node;
-            }),
-          };
-        });
-      }
+      const data = msg.data as BranchLink;
+      setBranchLinks((prev) => {
+        const newMap = new Map(prev);
+        const current = newMap.get(data.branchName) || [];
+        const existingIndex = current.findIndex((l) => l.id === data.id);
+        if (existingIndex >= 0) {
+          current[existingIndex] = data;
+        } else {
+          current.unshift(data);
+        }
+        newMap.set(data.branchName, [...current]);
+        return newMap;
+      });
+    });
+
+    const unsubBranchLinkCreated = wsClient.on("branchLink.created", (msg) => {
+      const data = msg.data as BranchLink;
+      setBranchLinks((prev) => {
+        const newMap = new Map(prev);
+        const current = newMap.get(data.branchName) || [];
+        if (!current.some((l) => l.id === data.id)) {
+          newMap.set(data.branchName, [data, ...current]);
+        }
+        return newMap;
+      });
     });
 
     // Fetch progress updates
@@ -318,11 +306,27 @@ export default function TreeDashboard() {
       unsubScan();
       unsubBranches();
       unsubBranchLink();
+      unsubBranchLinkCreated();
       unsubFetchProgress();
       unsubFetchCompleted();
       unsubFetchError();
     };
   }, [snapshot?.repoId, selectedPin, handleScan]);
+
+  // Load branchLinks when snapshot is available
+  useEffect(() => {
+    if (!snapshot?.repoId || snapshot.nodes.length === 0) return;
+    const branchNames = snapshot.nodes.map((n) => n.branchName);
+    api.getBranchLinksBatch(snapshot.repoId, branchNames)
+      .then((result) => {
+        const linksMap = new Map<string, BranchLink[]>();
+        for (const branchName of branchNames) {
+          linksMap.set(branchName, result[branchName] || []);
+        }
+        setBranchLinks(linksMap);
+      })
+      .catch(console.error);
+  }, [snapshot?.repoId, snapshot?.nodes.length]);
 
   // Bottom panel resize handlers
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -1268,6 +1272,7 @@ export default function TreeDashboard() {
                       tentativeNodes={tentativeNodes}
                       tentativeEdges={tentativeEdges}
                       editMode={branchGraphEditMode}
+                      branchLinks={branchLinks}
                       onEdgeCreate={(parentBranch, childBranch) => {
                         // Create a new edge from parent to child (reparent operation)
                         if (!selectedPin || !snapshot?.repoId) return;

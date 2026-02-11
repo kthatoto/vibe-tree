@@ -47,6 +47,9 @@ export function ExecuteSidebar({
   const [instruction, setInstruction] = useState<TaskInstruction | null>(null);
   const [instructionLoading, setInstructionLoading] = useState(false);
 
+  // Refresh state
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   // Current branch (actual execution target)
   const currentBranch = executeBranches[currentExecuteIndex] || null;
 
@@ -382,6 +385,39 @@ export function ExecuteSidebar({
     }
   }, [previewBranch, executeBranches, onManualBranchSwitch]);
 
+  // Handle refresh all branch links
+  const handleRefreshAll = useCallback(async () => {
+    if (!repoId || executeBranches.length === 0 || isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      // Find all PR links that have IDs
+      const prLinksToRefresh: { branchName: string; linkId: number }[] = [];
+      allBranchLinks.forEach((links, branchName) => {
+        const prLink = links.find((l) => l.linkType === "pr" && l.id);
+        if (prLink) {
+          prLinksToRefresh.push({ branchName, linkId: prLink.id });
+        }
+      });
+
+      // Refresh all PR links in parallel
+      await Promise.allSettled(
+        prLinksToRefresh.map(({ linkId }) => api.refreshBranchLink(linkId))
+      );
+
+      // Reload all branch links
+      const batchResult = await api.getBranchLinksBatch(repoId, executeBranches);
+      const linksMap = new Map<string, BranchLink[]>();
+      for (const branch of executeBranches) {
+        linksMap.set(branch, batchResult[branch] || []);
+      }
+      setAllBranchLinks(linksMap);
+    } catch (err) {
+      console.error("Failed to refresh branch links:", err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [repoId, executeBranches, allBranchLinks, isRefreshing]);
+
   if (!displayBranch) {
     return (
       <div className="execute-sidebar execute-sidebar--empty">
@@ -396,8 +432,18 @@ export function ExecuteSidebar({
 
   return (
     <div className="execute-sidebar">
-      {/* Branch Tree (compact) */}
+      {/* Branch Tree (compact) with refresh button */}
       <div className="execute-sidebar__branches">
+        <div className="execute-sidebar__branches-header">
+          <button
+            className="execute-sidebar__refresh-btn"
+            onClick={handleRefreshAll}
+            disabled={isRefreshing}
+            title="Refresh all PR info from GitHub"
+          >
+            {isRefreshing ? "..." : "↻"}
+          </button>
+        </div>
         <ExecuteBranchTree
           branches={executeBranches}
           selectedBranchIndex={previewBranch ? executeBranches.indexOf(previewBranch) : currentExecuteIndex}

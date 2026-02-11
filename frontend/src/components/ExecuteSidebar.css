@@ -520,6 +520,12 @@
   color: #e5e7eb;
 }
 
+.execute-sidebar__branch-copy-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
 .execute-sidebar__branch-nav-btn {
   width: 22px;
   height: 22px;

@@ -639,3 +639,59 @@
   background: #4b5563;
   border-color: #6b7280;
 }
+
+/* Instruction content wrapper with pencil button */
+.execute-sidebar__instruction-content {
+  position: relative;
+}
+
+.execute-sidebar__instruction-pencil-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 4px;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  z-index: 1;
+}
+
+.execute-sidebar__instruction-pencil-btn:hover {
+  background: #4b5563;
+  border-color: #6b7280;
+  color: #e5e7eb;
+}
+
+.execute-sidebar__instruction-pencil-btn svg {
+  flex-shrink: 0;
+}
+
+/* Edit actions row */
+.execute-sidebar__instruction-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.execute-sidebar__instruction-done-btn {
+  font-size: 11px;
+  padding: 6px 12px;
+  background: #374151;
+  border: 1px solid #4b5563;
+  color: #e5e7eb;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.execute-sidebar__instruction-done-btn:hover {
+  background: #4b5563;
+  border-color: #6b7280;
+}

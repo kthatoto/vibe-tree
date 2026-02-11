@@ -59,6 +59,10 @@ export function ChatPanel({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [hasNewMessages, setHasNewMessages] = useState(false);
+  // Pagination state
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const MESSAGES_PER_PAGE = 20;
   // Quick mode (use haiku for faster responses)
   const [quickMode, setQuickMode] = useState(false);
   // Context stats
@@ -81,12 +85,13 @@ export function ChatPanel({
   const loadMessages = useCallback(async () => {
     try {
       const [msgs, streamingState, stats] = await Promise.all([
-        api.getChatMessages(sessionId),
+        api.getChatMessages(sessionId, { limit: MESSAGES_PER_PAGE }),
         api.getStreamingState(sessionId),
         api.getContextStats(sessionId).catch(() => null),
       ]);
       setContextStats(stats);
       setMessages(msgs);
+      setHasMoreMessages(msgs.length >= MESSAGES_PER_PAGE);
 
       // Check if last assistant message is still streaming
       const lastMsg = msgs[msgs.length - 1];
@@ -133,6 +138,45 @@ export function ChatPanel({
     }
   }, [sessionId]);
 
+  // Load older messages (for infinite scroll)
+  const loadOlderMessages = useCallback(async () => {
+    if (!hasMoreMessages || loadingOlder || messages.length === 0) return;
+
+    const oldestMessage = messages[0];
+    if (!oldestMessage) return;
+
+    setLoadingOlder(true);
+    try {
+      const container = messagesContainerRef.current;
+      const scrollHeightBefore = container?.scrollHeight || 0;
+
+      const olderMsgs = await api.getChatMessages(sessionId, {
+        limit: MESSAGES_PER_PAGE,
+        before: oldestMessage.id,
+      });
+
+      if (olderMsgs.length < MESSAGES_PER_PAGE) {
+        setHasMoreMessages(false);
+      }
+
+      if (olderMsgs.length > 0) {
+        setMessages((prev) => [...olderMsgs, ...prev]);
+
+        // Maintain scroll position after prepending messages
+        requestAnimationFrame(() => {
+          if (container) {
+            const scrollHeightAfter = container.scrollHeight;
+            container.scrollTop = scrollHeightAfter - scrollHeightBefore;
+          }
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load older messages:", err);
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [sessionId, messages, hasMoreMessages, loadingOlder]);
+
   // Clear state immediately when sessionId changes (before loading new data)
   useEffect(() => {
     setMessages([]);
@@ -140,6 +184,7 @@ export function ChatPanel({
     hasStreamingChunksRef.current = false;
     setLoading(false);
     setError(null);
+    setHasMoreMessages(true);
   }, [sessionId]);
 
   useEffect(() => {
@@ -295,12 +340,21 @@ export function ChatPanel({
 
   // Handle scroll events
   const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
     const atBottom = checkIfAtBottom();
     setIsAtBottom(atBottom);
     if (atBottom) {
       setHasNewMessages(false);
     }
-  }, [checkIfAtBottom]);
+
+    // Load older messages when scrolled near top
+    const scrollTop = container.scrollTop;
+    if (scrollTop < 100 && hasMoreMessages && !loadingOlder) {
+      loadOlderMessages();
+    }
+  }, [checkIfAtBottom, hasMoreMessages, loadingOlder, loadOlderMessages]);
 
   // Auto scroll to bottom only if already at bottom
   useEffect(() => {
@@ -685,6 +739,17 @@ export function ChatPanel({
           position: "relative",
         }}
       >
+        {/* Loading indicator for older messages */}
+        {loadingOlder && (
+          <div style={{ textAlign: "center", padding: 8, color: "#9ca3af", fontSize: 12 }}>
+            Loading older messages...
+          </div>
+        )}
+        {!hasMoreMessages && messages.length > 0 && (
+          <div style={{ textAlign: "center", padding: 8, color: "#6b7280", fontSize: 11 }}>
+            — Beginning of conversation —
+          </div>
+        )}
         {messages.map((msg) => {
           // Check if assistant message has chunks
           if (msg.role === "assistant") {

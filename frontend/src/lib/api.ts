@@ -707,8 +707,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ sessionId }),
     }),
-  getChatMessages: (sessionId: string) =>
-    fetchJson<ChatMessage[]>(`${API_BASE}/chat/messages?sessionId=${encodeURIComponent(sessionId)}`),
+  getChatMessages: (sessionId: string, options?: { limit?: number; before?: number }) => {
+    const params = new URLSearchParams({ sessionId });
+    if (options?.limit) params.append("limit", String(options.limit));
+    if (options?.before) params.append("before", String(options.before));
+    return fetchJson<ChatMessage[]>(`${API_BASE}/chat/messages?${params.toString()}`);
+  },
   checkChatRunning: (sessionId: string) =>
     fetchJson<{ isRunning: boolean }>(`${API_BASE}/chat/running?sessionId=${encodeURIComponent(sessionId)}`),
   cancelChat: (sessionId: string) =>

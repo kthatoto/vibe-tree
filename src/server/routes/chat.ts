@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { db, schema } from "../../db";
-import { eq, and, desc, gt, asc } from "drizzle-orm";
+import { eq, and, desc, gt, lt, asc } from "drizzle-orm";
 import { spawn } from "child_process";
 import { execAsync } from "../utils";
 import { existsSync, writeFileSync, mkdirSync } from "fs";
@@ -235,20 +235,40 @@ chatRouter.post("/sessions/archive", async (c) => {
   return c.json({ success: true });
 });
 
-// GET /api/chat/messages - Get messages for a session
+// GET /api/chat/messages - Get messages for a session (with pagination)
 chatRouter.get("/messages", async (c) => {
   const sessionId = c.req.query("sessionId");
   if (!sessionId) {
     throw new BadRequestError("sessionId is required");
   }
 
-  const messages = await db
+  const limitParam = c.req.query("limit");
+  const beforeParam = c.req.query("before"); // message ID to fetch messages before
+  const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+  const beforeId = beforeParam ? parseInt(beforeParam, 10) : undefined;
+
+  // Build query
+  let query = db
     .select()
     .from(schema.chatMessages)
-    .where(eq(schema.chatMessages.sessionId, sessionId))
-    .orderBy(asc(schema.chatMessages.createdAt));
+    .where(
+      beforeId
+        ? and(
+            eq(schema.chatMessages.sessionId, sessionId),
+            lt(schema.chatMessages.id, beforeId) // Get messages with ID less than beforeId
+          )
+        : eq(schema.chatMessages.sessionId, sessionId)
+    )
+    .orderBy(desc(schema.chatMessages.id)); // Order by desc to get most recent first
 
-  return c.json(messages.map(toMessage));
+  if (limit) {
+    query = query.limit(limit) as typeof query;
+  }
+
+  const messages = await query;
+
+  // Reverse to return in chronological order (oldest first)
+  return c.json(messages.reverse().map(toMessage));
 });
 
 // GET /api/chat/running - Check if there's a running agent for a session

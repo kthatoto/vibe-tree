@@ -273,10 +273,12 @@ export function PlanningPanel({
 
   // Task instruction editing for Planning sessions
   const [currentInstruction, setCurrentInstruction] = useState("");
+  const [currentInstructionData, setCurrentInstructionData] = useState<TaskInstruction | null>(null);
   const [instructionLoading, setInstructionLoading] = useState(false);
   const [instructionSaving, setInstructionSaving] = useState(false);
   const [instructionDirty, setInstructionDirty] = useState(false);
   const [instructionEditing, setInstructionEditing] = useState(false);
+  const [instructionConfirming, setInstructionConfirming] = useState(false);
 
 
   // Resizable sidebar - load initial width from localStorage
@@ -905,6 +907,7 @@ export function PlanningPanel({
     api.getTaskInstruction(repoId, branchToLoad)
       .then((instruction) => {
         setCurrentInstruction(instruction?.instructionMd || "");
+        setCurrentInstructionData(instruction);
         setInstructionDirty(false);
       })
       .catch(console.error)
@@ -1474,6 +1477,31 @@ export function PlanningPanel({
   const handleBranchCompleted = useCallback((branchName: string) => {
     console.log(`[PlanningPanel] Branch ${branchName} todos completed (MCP will handle advancement)`);
   }, []);
+
+  // Handle instruction confirm/unconfirm toggle
+  const handleInstructionConfirmToggle = useCallback(async () => {
+    if (!selectedSession || !currentInstructionData || instructionConfirming) return;
+    if (!currentInstructionData.instructionMd) return;
+
+    const planningBranches = selectedSession.executeBranches || [];
+    const branchName = planningBranches[userViewBranchIndex];
+    if (!branchName) return;
+
+    setInstructionConfirming(true);
+    try {
+      if (currentInstructionData.confirmationStatus === "confirmed") {
+        const updated = await api.unconfirmTaskInstruction(repoId, branchName);
+        setCurrentInstructionData(updated);
+      } else {
+        const updated = await api.confirmTaskInstruction(repoId, branchName);
+        setCurrentInstructionData(updated);
+      }
+    } catch (err) {
+      console.error("Failed to toggle instruction confirmation:", err);
+    } finally {
+      setInstructionConfirming(false);
+    }
+  }, [selectedSession, userViewBranchIndex, currentInstructionData, instructionConfirming, repoId]);
 
   // Get current branch for Planning/Execute sessions
   const getCurrentBranchName = (): string | undefined => {
@@ -2402,6 +2430,30 @@ export function PlanningPanel({
                         <div className="planning-panel__instruction-actions">
                           {instructionDirty && (
                             <span className="planning-panel__instruction-dirty">unsaved</span>
+                          )}
+                          {currentInstructionData?.instructionMd && !instructionEditing && (
+                            <button
+                              className={`planning-panel__instruction-confirm-btn planning-panel__instruction-confirm-btn--${currentInstructionData.confirmationStatus}`}
+                              onClick={handleInstructionConfirmToggle}
+                              disabled={instructionConfirming}
+                              title={
+                                currentInstructionData.confirmationStatus === "confirmed"
+                                  ? "Click to unconfirm"
+                                  : currentInstructionData.confirmationStatus === "changed"
+                                  ? "Instruction changed since confirmation"
+                                  : "Click to confirm instruction"
+                              }
+                            >
+                              {instructionConfirming ? (
+                                "..."
+                              ) : currentInstructionData.confirmationStatus === "confirmed" ? (
+                                <>✓ Confirmed</>
+                              ) : currentInstructionData.confirmationStatus === "changed" ? (
+                                <>⚠ Changed</>
+                              ) : (
+                                "Confirm"
+                              )}
+                            </button>
                           )}
                           {!instructionEditing ? (
                             <button

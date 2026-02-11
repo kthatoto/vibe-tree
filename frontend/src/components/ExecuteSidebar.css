@@ -647,8 +647,8 @@
 
 .execute-sidebar__instruction-pencil-btn {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: 8px;
+  right: 8px;
   width: 28px;
   height: 28px;
   display: flex;
@@ -681,7 +681,7 @@
 }
 
 .execute-sidebar__instruction-done-btn {
-  font-size: 11px;
+  font-size: 12px;
   padding: 6px 12px;
   background: #374151;
   border: 1px solid #4b5563;

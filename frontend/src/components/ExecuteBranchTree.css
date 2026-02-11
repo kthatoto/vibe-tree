@@ -107,16 +107,31 @@
   background: #1e3a5f;
 }
 
+.execute-branch-tree__item--selected:hover {
+  border-color: #60a5fa;
+  background: #234e7a;
+}
+
 /* AI working branch - purple */
 .execute-branch-tree__item--ai-working {
   border-color: #8b5cf6;
   background: #2e1065;
 }
 
+.execute-branch-tree__item--ai-working:hover {
+  border-color: #a78bfa;
+  background: #3b1a7a;
+}
+
 /* Both selected and AI working */
 .execute-branch-tree__item--selected.execute-branch-tree__item--ai-working {
   border-color: #3b82f6;
   background: linear-gradient(135deg, #1e3a5f 50%, #2e1065 50%);
+}
+
+.execute-branch-tree__item--selected.execute-branch-tree__item--ai-working:hover {
+  border-color: #60a5fa;
+  background: linear-gradient(135deg, #234e7a 50%, #3b1a7a 50%);
 }
 
 .execute-branch-tree__item--completed {
@@ -322,6 +337,10 @@
 }
 
 .execute-branch-tree__link-icon--github {
+  filter: brightness(0) invert(1);
+}
+
+.execute-branch-tree__link-icon--notion {
   filter: brightness(0) invert(1);
 }
 

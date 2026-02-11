@@ -1,0 +1,8 @@
+[ 1101918ms] [ERROR] WebSocket connection to 'ws://localhost:5173/ws' failed: Connection closed before receiving a handshake response @ http://localhost:5173/src/lib/ws.ts:13
+[ 1101918ms] [ERROR] WebSocket error: Event @ http://localhost:5173/src/lib/ws.ts:33
+[ 1104923ms] [ERROR] WebSocket connection to 'ws://localhost:5173/ws' failed: Connection closed before receiving a handshake response @ http://localhost:5173/src/lib/ws.ts:13
+[ 1104923ms] [ERROR] WebSocket error: Event @ http://localhost:5173/src/lib/ws.ts:33
+[ 1107928ms] [ERROR] WebSocket connection to 'ws://localhost:5173/ws' failed: Connection closed before receiving a handshake response @ http://localhost:5173/src/lib/ws.ts:13
+[ 1107928ms] [ERROR] WebSocket error: Event @ http://localhost:5173/src/lib/ws.ts:33
+[ 1110932ms] [ERROR] WebSocket connection to 'ws://localhost:5173/ws' failed: Connection closed before receiving a handshake response @ http://localhost:5173/src/lib/ws.ts:13
+[ 1110932ms] [ERROR] WebSocket error: Event @ http://localhost:5173/src/lib/ws.ts:33

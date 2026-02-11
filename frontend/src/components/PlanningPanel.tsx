@@ -1319,14 +1319,21 @@ export function PlanningPanel({
     updateCount(urls.length);
     setNewLinkUrl("");
 
-    // Process all URLs in parallel, update UI as each completes
-    const promises = urls.map(async (url) => {
+    // Process all URLs in parallel, preserve original order
+    const results: (ExternalLink | null)[] = new Array(urls.length).fill(null);
+
+    const promises = urls.map(async (url, index) => {
       try {
         const link = await api.addExternalLink(sessionId, url, undefined, branchName);
+        results[index] = link;
         updateCount((prev) => Math.max(0, prev - 1));
+        // Update with all completed links so far, in order
         setExternalLinksMap((prev) => ({
           ...prev,
-          [sessionId]: [...(prev[sessionId] || []), link],
+          [sessionId]: [
+            ...(prev[sessionId] || []),
+            ...results.filter((r): r is ExternalLink => r !== null && !(prev[sessionId] || []).some(l => l.id === r.id)),
+          ],
         }));
         return link;
       } catch (err) {
@@ -2352,9 +2359,12 @@ export function PlanningPanel({
               {externalLinks.map((link) => {
                 const { iconSrc, className } = getLinkTypeIcon(link.linkType);
                 const isSessionLevel = link.branchName === null;
+                // Extract sub-issue count from contentCache
+                const subIssueMatch = link.contentCache?.match(/## Sub-Issues \((\d+)件\)/);
+                const subIssueCount = subIssueMatch ? parseInt(subIssueMatch[1], 10) : 0;
                 const linkTitle = link.branchName
-                  ? `${link.title || link.url} (Branch: ${link.branchName})`
-                  : link.title || link.url;
+                  ? `${link.title || link.url} (Branch: ${link.branchName})${subIssueCount > 0 ? ` - ${subIssueCount} sub-issues` : ''}`
+                  : `${link.title || link.url}${subIssueCount > 0 ? ` - ${subIssueCount} sub-issues` : ''}`;
                 return (
                   <a
                     key={link.id}
@@ -2365,6 +2375,9 @@ export function PlanningPanel({
                     title={linkTitle}
                   >
                     <img src={iconSrc} alt={link.linkType} />
+                    {subIssueCount > 0 && (
+                      <span className="planning-panel__link-sub-badge">{subIssueCount}</span>
+                    )}
                     {selectedSession.status === "draft" && (
                       <span
                         className="planning-panel__link-remove-overlay"

@@ -668,6 +668,24 @@
   display: flex;
 }
 
+.planning-panel__link-sub-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #3b82f6;
+  border-radius: 7px;
+  font-size: 9px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1;
+}
+
 .planning-panel__link-add-icon {
   width: 32px;
   height: 32px;

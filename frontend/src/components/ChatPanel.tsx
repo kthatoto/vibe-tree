@@ -202,10 +202,10 @@ export function ChatPanel({
     });
 
     const unsubEnd = wsClient.on("chat.streaming.end", (msg) => {
-      const data = msg.data as { sessionId: string; message?: ChatMessage };
-      console.log(`[ChatPanel] streaming.end received, msgSessionId=${data.sessionId}, currentSessionId=${sessionId}, match=${data.sessionId === sessionId}`);
+      const data = msg.data as { sessionId: string; message?: ChatMessage; interrupted?: boolean };
+      console.log(`[ChatPanel] streaming.end received, msgSessionId=${data.sessionId}, currentSessionId=${sessionId}, match=${data.sessionId === sessionId}, interrupted=${data.interrupted}`);
       if (data.sessionId === sessionId) {
-        console.log(`[ChatPanel] streaming.end: Setting loading=false, message=${!!data.message}`);
+        console.log(`[ChatPanel] streaming.end: message=${!!data.message}, interrupted=${data.interrupted}`);
 
         // Add the message to messages list and clear streaming chunks
         // Note: Instruction/ToDo/Question updates are now handled via MCP tools and WebSocket broadcasts
@@ -214,13 +214,19 @@ export function ChatPanel({
             if (prev.some((m) => m.id === data.message!.id)) {
               return prev;
             }
-            return [...prev, data.message!];
+            // Add message and sort by createdAt to ensure correct order
+            const updated = [...prev, data.message!];
+            return updated.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
           });
         }
         setStreamingChunks([]);
         streamingChunksRef.current = [];
         hasStreamingChunksRef.current = false;
-        setLoading(false);
+        // If interrupted, keep loading=true (new execution will start)
+        // Otherwise, set loading=false
+        if (!data.interrupted) {
+          setLoading(false);
+        }
       }
     });
 
@@ -236,7 +242,9 @@ export function ChatPanel({
           if (prev.some((m) => m.id === data.id)) {
             return prev;
           }
-          return [...prev, data];
+          // Add message and sort by createdAt to ensure correct order
+          const updated = [...prev, data];
+          return updated.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
         });
         // Stop loading when we receive an assistant message
         if (data.role === "assistant") {
@@ -325,18 +333,10 @@ export function ChatPanel({
     setInput("");
     const wasAlreadyLoading = loading;
 
-    // If sending during streaming, convert current streaming chunks to a message first
+    // If sending during streaming, clear chunks (backend will send streaming.end with the interrupted message)
     if (wasAlreadyLoading && streamingChunks.length > 0) {
-      // Create an interrupted assistant message from streaming chunks
-      const interruptedMsg: ChatMessage = {
-        id: Date.now() - 1, // Temporary ID, will be replaced by actual message from server
-        sessionId,
-        role: "assistant",
-        content: JSON.stringify({ chunks: streamingChunks, interrupted: true }),
-        createdAt: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, interruptedMsg]);
       setStreamingChunks([]);
+      streamingChunksRef.current = [];
       hasStreamingChunksRef.current = false;
     }
 

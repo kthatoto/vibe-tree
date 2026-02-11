@@ -529,6 +529,21 @@ chatRouter.post("/send", async (c) => {
         .update(schema.chatMessages)
         .set({ content: finalContent })
         .where(eq(schema.chatMessages.id, state.assistantMsgId));
+
+      // Broadcast streaming.end with the interrupted message
+      const [updatedMsg] = await db
+        .select()
+        .from(schema.chatMessages)
+        .where(eq(schema.chatMessages.id, state.assistantMsgId))
+        .limit(1);
+
+      if (updatedMsg) {
+        broadcast({
+          type: "chat.streaming.end",
+          repoId: session.repoId,
+          data: { sessionId: input.sessionId, message: toMessage(updatedMsg), interrupted: true },
+        });
+      }
     }
 
     // Clear streaming state

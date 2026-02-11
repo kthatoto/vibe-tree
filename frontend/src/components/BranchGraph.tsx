@@ -374,9 +374,10 @@ export default function BranchGraph({
         return Math.max(col, currentCol);
       };
 
-      // Layout each root tentative node tree - start from base branch's column
-      const baseCol = baseBranchNode?.row ?? 0;
-      let tentativeCol = baseCol;
+      // Layout each root tentative node tree - start AFTER all existing branches to avoid overlap
+      // Calculate max column used by existing nodes
+      const maxExistingCol = layoutNodes.reduce((max, n) => Math.max(max, n.row), -1);
+      let tentativeCol = maxExistingCol + 1; // Start tentative nodes after all existing branches
       rootTentativeNodes.forEach((task) => {
         tentativeCol = layoutTentativeSubtree(task.id, tentativeCol) + 1;
       });

@@ -1451,11 +1451,9 @@ export function PlanningPanel({
       let updated = await api.updatePlanningSession(selectedSession.id, {
         title: executeEditTitle,
       });
-      // Update execute branches if changed
-      const branchesChanged = JSON.stringify(executeEditBranches) !== JSON.stringify(selectedSession.executeBranches);
-      if (branchesChanged) {
-        updated = await api.updateExecuteBranches(selectedSession.id, executeEditBranches);
-      }
+      // Always update execute branches when saving from edit mode
+      // (Don't compare with selectedSession.executeBranches as it may have been updated by WebSocket)
+      updated = await api.updateExecuteBranches(selectedSession.id, executeEditBranches);
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       onSessionSelect?.(updated);
       setExecuteEditMode(false);

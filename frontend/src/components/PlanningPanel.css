@@ -772,11 +772,43 @@
 
 .planning-panel__task-item {
   position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   padding: 10px;
   margin-bottom: 8px;
   background: #0f172a;
   border: 1px solid #374151;
   border-radius: 6px;
+  cursor: grab;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.planning-panel__task-item:hover {
+  background: #1e293b;
+}
+
+.planning-panel__task-item:active {
+  cursor: grabbing;
+}
+
+.planning-panel__task-order {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #374151;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9ca3af;
+}
+
+.planning-panel__task-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .planning-panel__task-title {

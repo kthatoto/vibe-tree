@@ -54,6 +54,17 @@ import {
   saveImageToBranch,
   listBranchFilesSchema,
   listBranchFiles,
+  // Refinement task tools
+  getRefinementTasksSchema,
+  getRefinementTasks,
+  addRefinementTaskSchema,
+  addRefinementTask,
+  updateRefinementTaskSchema,
+  updateRefinementTask,
+  deleteRefinementTaskSchema,
+  deleteRefinementTask,
+  reorderRefinementTasksSchema,
+  reorderRefinementTasks,
 } from "./tools";
 
 // Create MCP server
@@ -542,6 +553,125 @@ export function createServer() {
             required: ["repoId", "branchName"],
           },
         },
+        // Refinement task tools
+        {
+          name: "get_refinement_tasks",
+          description:
+            "Get all tasks in a refinement session. Tasks are ordered serially (each depends on the previous one).",
+          inputSchema: {
+            type: "object",
+            properties: {
+              planningSessionId: {
+                type: "string",
+                description: "Planning session ID",
+              },
+            },
+            required: ["planningSessionId"],
+          },
+        },
+        {
+          name: "add_refinement_task",
+          description:
+            "Add a new task to the refinement session. Tasks are added to the end and automatically connected in serial order.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              planningSessionId: {
+                type: "string",
+                description: "Planning session ID",
+              },
+              title: {
+                type: "string",
+                description: "Task title",
+              },
+              description: {
+                type: "string",
+                description: "Task description (optional)",
+              },
+              branchName: {
+                type: "string",
+                description: "Branch name (auto-generated if omitted)",
+              },
+              issueUrl: {
+                type: "string",
+                description: "GitHub issue URL to link (optional)",
+              },
+            },
+            required: ["planningSessionId", "title"],
+          },
+        },
+        {
+          name: "update_refinement_task",
+          description: "Update an existing task in the refinement session",
+          inputSchema: {
+            type: "object",
+            properties: {
+              planningSessionId: {
+                type: "string",
+                description: "Planning session ID",
+              },
+              taskId: {
+                type: "string",
+                description: "Task ID to update",
+              },
+              title: {
+                type: "string",
+                description: "New task title",
+              },
+              description: {
+                type: "string",
+                description: "New task description",
+              },
+              branchName: {
+                type: "string",
+                description: "New branch name",
+              },
+              issueUrl: {
+                type: "string",
+                description: "New GitHub issue URL",
+              },
+            },
+            required: ["planningSessionId", "taskId"],
+          },
+        },
+        {
+          name: "delete_refinement_task",
+          description: "Delete a task from the refinement session",
+          inputSchema: {
+            type: "object",
+            properties: {
+              planningSessionId: {
+                type: "string",
+                description: "Planning session ID",
+              },
+              taskId: {
+                type: "string",
+                description: "Task ID to delete",
+              },
+            },
+            required: ["planningSessionId", "taskId"],
+          },
+        },
+        {
+          name: "reorder_refinement_tasks",
+          description:
+            "Reorder tasks in the refinement session. Provide all task IDs in the new order.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              planningSessionId: {
+                type: "string",
+                description: "Planning session ID",
+              },
+              taskIds: {
+                type: "array",
+                items: { type: "string" },
+                description: "Task IDs in new order",
+              },
+            },
+            required: ["planningSessionId", "taskIds"],
+          },
+        },
       ],
     };
   });
@@ -732,6 +862,47 @@ export function createServer() {
         case "list_branch_files": {
           const input = listBranchFilesSchema.parse(args);
           const result = listBranchFiles(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        // Refinement task tools
+        case "get_refinement_tasks": {
+          const input = getRefinementTasksSchema.parse(args);
+          const result = getRefinementTasks(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "add_refinement_task": {
+          const input = addRefinementTaskSchema.parse(args);
+          const result = addRefinementTask(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "update_refinement_task": {
+          const input = updateRefinementTaskSchema.parse(args);
+          const result = updateRefinementTask(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "delete_refinement_task": {
+          const input = deleteRefinementTaskSchema.parse(args);
+          const result = deleteRefinementTask(input);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case "reorder_refinement_tasks": {
+          const input = reorderRefinementTasksSchema.parse(args);
+          const result = reorderRefinementTasks(input);
           return {
             content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
           };

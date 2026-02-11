@@ -69,3 +69,17 @@ export function broadcastSessionUpdated(repoId: string, session: unknown) {
 export function broadcastTaskAdvanced(repoId: string, data: unknown) {
   return broadcast({ type: "planning.taskAdvanced", repoId, data });
 }
+
+export function broadcastRefinementTasksUpdated(
+  repoId: string,
+  planningSessionId: string,
+  nodes: unknown,
+  edges: unknown
+) {
+  return broadcast({
+    type: "planning.tasksUpdated",
+    repoId,
+    planningSessionId,
+    data: { nodes, edges },
+  });
+}

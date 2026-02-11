@@ -11,7 +11,13 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { useDraggable, useDroppable } from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   api,
   type PlanningSession,
@@ -39,36 +45,41 @@ import figmaIcon from "../assets/figma.svg";
 import linkIcon from "../assets/link.svg";
 import "./PlanningPanel.css";
 
-// Draggable task item component
-function DraggableTaskItem({
+// Sortable task item component (for reordering)
+function SortableTaskItem({
   task,
-  parentName,
-  depth,
+  index,
   isDraft,
   onRemove,
-  onRemoveParent,
   onBranchNameChange,
 }: {
   task: TaskNode;
-  parentName?: string;
-  depth: number;
+  index: number;
   isDraft: boolean;
   onRemove: () => void;
-  onRemoveParent?: () => void;
   onBranchNameChange?: (newName: string) => void;
 }) {
   const [isEditingBranch, setIsEditingBranch] = useState(false);
   const [editBranchValue, setEditBranchValue] = useState(task.branchName || "");
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id: task.id,
     disabled: !isDraft || isEditingBranch,
   });
-  const { setNodeRef: setDropRef, isOver } = useDroppable({
-    id: `drop-${task.id}`,
-    disabled: !isDraft,
-  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
 
   const handleBranchSave = () => {
     onBranchNameChange?.(editBranchValue);
@@ -97,84 +108,68 @@ function DraggableTaskItem({
 
   return (
     <div
-      ref={(node) => {
-        setDragRef(node);
-        setDropRef(node);
-      }}
-      className={`planning-panel__task-item ${isOver ? "planning-panel__task-item--drop-target" : ""} ${isExpanded ? "planning-panel__task-item--expanded" : ""} ${task.issueUrl ? "planning-panel__task-item--has-issue" : ""}`}
-      style={{ opacity: isDragging ? 0.5 : 1, marginLeft: depth * 16 }}
+      ref={setNodeRef}
+      style={style}
+      className={`planning-panel__task-item ${isExpanded ? "planning-panel__task-item--expanded" : ""} ${task.issueUrl ? "planning-panel__task-item--has-issue" : ""} ${isDragging ? "planning-panel__task-item--dragging" : ""}`}
       onClick={handleTaskClick}
       {...(isEditingBranch ? {} : { ...attributes, ...listeners })}
     >
-      {parentName && (
-        <div className="planning-panel__task-parent">
-          ↳ {parentName}
-          {isDraft && onRemoveParent && (
-            <button
-              className="planning-panel__task-parent-remove"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemoveParent();
-              }}
+      <div className="planning-panel__task-order">{index + 1}</div>
+      <div className="planning-panel__task-content">
+        <div className="planning-panel__task-title">
+          {task.title}
+          {task.issueUrl && (
+            <a
+              href={task.issueUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="planning-panel__task-issue-link"
+              onClick={(e) => e.stopPropagation()}
+              title={task.issueUrl}
             >
-              ×
-            </button>
+              <img src={githubIcon} alt="Issue" />
+            </a>
           )}
         </div>
-      )}
-      <div className="planning-panel__task-title">
-        {task.title}
-        {task.issueUrl && (
-          <a
-            href={task.issueUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="planning-panel__task-issue-link"
-            onClick={(e) => e.stopPropagation()}
-            title={task.issueUrl}
-          >
-            <img src={githubIcon} alt="Issue" />
-          </a>
-        )}
-      </div>
-      <div className="planning-panel__task-branch-row">
-        {isEditingBranch ? (
-          <input
-            type="text"
-            value={editBranchValue}
-            onChange={(e) => setEditBranchValue(e.target.value)}
-            onBlur={handleBranchSave}
-            onKeyDown={handleBranchKeyDown}
-            className="planning-panel__task-branch-input"
-            autoFocus
-            onClick={(e) => e.stopPropagation()}
-          />
-        ) : (
-          <div
-            className={`planning-panel__task-branch ${isDraft ? "planning-panel__task-branch--editable" : ""}`}
-            onClick={(e) => {
-              if (isDraft) {
-                e.stopPropagation();
-                setEditBranchValue(task.branchName || displayBranchName);
-                setIsEditingBranch(true);
-              }
-            }}
-          >
-            {displayBranchName}
-            {isDraft && <span className="planning-panel__task-branch-edit">✎</span>}
-          </div>
-        )}
-      </div>
-      {task.description && (
-        <div className="planning-panel__task-desc-wrapper">
-          <div className={`planning-panel__task-desc ${isExpanded ? "planning-panel__task-desc--expanded" : ""}`}>
-            {task.description}
-          </div>
-          <span className="planning-panel__task-expand-hint">
-            {isExpanded ? "▲" : "▼"}
-          </span>
+        <div className="planning-panel__task-branch-row">
+          {isEditingBranch ? (
+            <input
+              type="text"
+              value={editBranchValue}
+              onChange={(e) => setEditBranchValue(e.target.value)}
+              onBlur={handleBranchSave}
+              onKeyDown={handleBranchKeyDown}
+              className="planning-panel__task-branch-input"
+              autoFocus
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <div
+              className={`planning-panel__task-branch ${isDraft ? "planning-panel__task-branch--editable" : ""}`}
+              onClick={(e) => {
+                if (isDraft) {
+                  e.stopPropagation();
+                  setEditBranchValue(task.branchName || displayBranchName);
+                  setIsEditingBranch(true);
+                }
+              }}
+            >
+              {displayBranchName}
+              {isDraft && <span className="planning-panel__task-branch-edit">✎</span>}
+            </div>
+          )}
         </div>
-      )}
+        {task.description && (
+          <div className="planning-panel__task-desc-wrapper">
+            <div className={`planning-panel__task-desc ${isExpanded ? "planning-panel__task-desc--expanded" : ""}`}>
+              {task.description}
+            </div>
+            <span className="planning-panel__task-expand-hint">
+              {isExpanded ? "▲" : "▼"}
+            </span>
+          </div>
+        )}
+      </div>
       {isDraft && (
         <button
           className="planning-panel__task-remove"
@@ -183,7 +178,7 @@ function DraggableTaskItem({
             onRemove();
           }}
         >
-          x
+          ×
         </button>
       )}
     </div>
@@ -619,12 +614,37 @@ export function PlanningPanel({
       }
     });
 
+    // Handle real-time task updates from MCP tools
+    const unsubTasksUpdated = wsClient.on("planning.tasksUpdated", (msg) => {
+      if (msg.data && typeof msg.data === "object" && "nodes" in msg.data && "edges" in msg.data) {
+        const { nodes, edges } = msg.data as { nodes: TaskNode[]; edges: TaskEdge[] };
+        const sessionId = msg.planningSessionId as string;
+        if (sessionId) {
+          setSessions((prev) => prev.map((s) => {
+            if (s.id === sessionId) {
+              return { ...s, nodes, edges };
+            }
+            return s;
+          }));
+          if (activeTabId === sessionId) {
+            const existing = sessions.find(s => s.id === sessionId);
+            if (existing) {
+              const merged = { ...existing, nodes, edges };
+              onSessionSelect?.(merged as PlanningSession);
+              onTasksChange?.(nodes, edges);
+            }
+          }
+        }
+      }
+    });
+
     return () => {
       unsubCreated();
       unsubUpdated();
       unsubDeleted();
       unsubDiscarded();
       unsubConfirmed();
+      unsubTasksUpdated();
     };
   }, [repoId, selectedSession?.id]);
 
@@ -1437,7 +1457,7 @@ export function PlanningPanel({
     }
   };
 
-  // Drag and drop handlers for parent-child relationships
+  // Drag and drop handlers for reordering tasks (serial order)
   const handleDragStart = (event: DragStartEvent) => {
     setActiveDragId(event.active.id as string);
   };
@@ -1448,51 +1468,47 @@ export function PlanningPanel({
     if (!over || !selectedSession) return;
 
     const draggedId = active.id as string;
-    const droppedOnId = (over.id as string).replace("drop-", "");
+    const overId = over.id as string;
 
-    // Don't drop on self
-    if (draggedId === droppedOnId) return;
+    // Don't reorder if dropped on self
+    if (draggedId === overId) return;
 
-    // Check for circular dependency
-    const wouldCreateCycle = (childId: string, parentId: string): boolean => {
-      const existingParent = selectedSession.edges.find((e) => e.child === parentId)?.parent;
-      if (!existingParent) return false;
-      if (existingParent === childId) return true;
-      return wouldCreateCycle(childId, existingParent);
-    };
+    const oldIndex = selectedSession.nodes.findIndex((n) => n.id === draggedId);
+    const newIndex = selectedSession.nodes.findIndex((n) => n.id === overId);
 
-    if (wouldCreateCycle(draggedId, droppedOnId)) {
-      console.warn("Cannot create circular dependency");
-      return;
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    // Reorder nodes using arrayMove
+    const reorderedNodes = arrayMove(selectedSession.nodes, oldIndex, newIndex);
+
+    // Generate serial edges (each task depends on the previous one)
+    const serialEdges: TaskEdge[] = [];
+    for (let i = 0; i < reorderedNodes.length - 1; i++) {
+      const current = reorderedNodes[i];
+      const next = reorderedNodes[i + 1];
+      if (current && next) {
+        serialEdges.push({ parent: current.id, child: next.id });
+      }
     }
 
-    // Remove existing parent edge for this task
-    const updatedEdges = selectedSession.edges.filter((e) => e.child !== draggedId);
-    // Add new parent edge
-    updatedEdges.push({ parent: droppedOnId, child: draggedId });
+    // Optimistic update
+    setSessions((prev) => prev.map((s) =>
+      s.id === selectedSession.id ? { ...s, nodes: reorderedNodes, edges: serialEdges } : s
+    ));
+    onTasksChange?.(reorderedNodes, serialEdges);
 
     try {
-      const updated = await api.updatePlanningSession(selectedSession.id, {
-        edges: updatedEdges,
+      await api.updatePlanningSession(selectedSession.id, {
+        nodes: reorderedNodes,
+        edges: serialEdges,
       });
-      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-      onTasksChange?.(updated.nodes, updated.edges);
     } catch (err) {
-      console.error("Failed to set parent:", err);
-    }
-  };
-
-  const handleRemoveParent = async (taskId: string) => {
-    if (!selectedSession) return;
-    const updatedEdges = selectedSession.edges.filter((e) => e.child !== taskId);
-    try {
-      const updated = await api.updatePlanningSession(selectedSession.id, {
-        edges: updatedEdges,
-      });
-      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-      onTasksChange?.(updated.nodes, updated.edges);
-    } catch (err) {
-      console.error("Failed to remove parent:", err);
+      console.error("Failed to reorder tasks:", err);
+      // Revert on error
+      setSessions((prev) => prev.map((s) =>
+        s.id === selectedSession.id ? selectedSession : s
+      ));
+      onTasksChange?.(selectedSession.nodes, selectedSession.edges);
     }
   };
 
@@ -1511,29 +1527,6 @@ export function PlanningPanel({
     } catch (err) {
       console.error("Failed to update branch name:", err);
     }
-  };
-
-  // Get parent name for a task
-  const getParentName = (taskId: string): string | undefined => {
-    if (!selectedSession) return undefined;
-    const edge = selectedSession.edges.find((e) => e.child === taskId);
-    if (!edge) return undefined;
-    const parentTask = selectedSession.nodes.find((n) => n.id === edge.parent);
-    return parentTask?.title;
-  };
-
-  // Get depth of a task in the hierarchy
-  const getTaskDepth = (taskId: string): number => {
-    if (!selectedSession) return 0;
-    let depth = 0;
-    let currentId = taskId;
-    while (true) {
-      const edge = selectedSession.edges.find((e) => e.child === currentId);
-      if (!edge) break;
-      depth++;
-      currentId = edge.parent;
-    }
-    return depth;
   };
 
   const getLinkTypeIcon = (type: string): { iconSrc: string; className: string } => {
@@ -2452,18 +2445,21 @@ export function PlanningPanel({
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
               >
-                {selectedSession.nodes.map((task) => (
-                  <DraggableTaskItem
-                    key={task.id}
-                    task={task}
-                    parentName={getParentName(task.id)}
-                    depth={getTaskDepth(task.id)}
-                    isDraft={selectedSession.status === "draft"}
-                    onRemove={() => handleRemoveTask(task.id)}
-                    onRemoveParent={() => handleRemoveParent(task.id)}
-                    onBranchNameChange={(newName) => handleBranchNameChange(task.id, newName)}
-                  />
-                ))}
+                <SortableContext
+                  items={selectedSession.nodes.map((n) => n.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {selectedSession.nodes.map((task, index) => (
+                    <SortableTaskItem
+                      key={task.id}
+                      task={task}
+                      index={index}
+                      isDraft={selectedSession.status === "draft"}
+                      onRemove={() => handleRemoveTask(task.id)}
+                      onBranchNameChange={(newName) => handleBranchNameChange(task.id, newName)}
+                    />
+                  ))}
+                </SortableContext>
                 <DragOverlay>
                   {activeDragId && (
                     <div className="planning-panel__task-item planning-panel__task-item--dragging">

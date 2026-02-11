@@ -27,7 +27,7 @@ export function ExecuteSidebar({
   executeBranches,
   currentExecuteIndex,
   planningSessionId,
-  onManualBranchSwitch,
+  onManualBranchSwitch: _onManualBranchSwitch,
   onBranchCompleted,
   workingBranch,
   onExpandToggle,
@@ -37,9 +37,9 @@ export function ExecuteSidebar({
   // Preview branch (clicked but not switched to)
   const [previewBranch, setPreviewBranch] = useState<string | null>(null);
 
-  // Active tab: "info", "instruction", "todo", or "questions"
+  // Active tab: "info", "instruction", "todo", "questions", or "resources"
   // Planning sessions default to "instruction", execute sessions default to "info"
-  const [activeTab, setActiveTab] = useState<"info" | "instruction" | "todo" | "questions">(
+  const [activeTab, setActiveTab] = useState<"info" | "instruction" | "todo" | "questions" | "resources">(
     sessionType === "planning" ? "instruction" : "info"
   );
 
@@ -65,6 +65,12 @@ export function ExecuteSidebar({
   const [instruction, setInstruction] = useState<TaskInstruction | null>(null);
   const [instructionLoading, setInstructionLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
+
+  // Instruction editing state (for planning sessions)
+  const [instructionEditing, setInstructionEditing] = useState(false);
+  const [editingInstructionText, setEditingInstructionText] = useState("");
+  const [instructionDirty, setInstructionDirty] = useState(false);
+  const [instructionSaving, setInstructionSaving] = useState(false);
 
   // Refresh state
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -485,16 +491,6 @@ export function ExecuteSidebar({
     setPreviewBranch(branch === previewBranch ? null : branch);
   }, [previewBranch]);
 
-  // Handle switch to branch
-  const handleSwitchToBranch = useCallback(() => {
-    if (!previewBranch || !onManualBranchSwitch) return;
-    const index = executeBranches.indexOf(previewBranch);
-    if (index !== -1) {
-      onManualBranchSwitch(index);
-      setPreviewBranch(null);
-    }
-  }, [previewBranch, executeBranches, onManualBranchSwitch]);
-
   // Handle confirm/unconfirm toggle
   const handleConfirmToggle = useCallback(async () => {
     if (!instruction || !instruction.instructionMd || !displayBranch || confirming) return;
@@ -526,6 +522,44 @@ export function ExecuteSidebar({
       setConfirming(false);
     }
   }, [instruction, confirming, repoId, displayBranch]);
+
+  // Handle starting instruction edit
+  const handleStartInstructionEdit = useCallback(() => {
+    setEditingInstructionText(instruction?.instructionMd || "");
+    setInstructionEditing(true);
+    setInstructionDirty(false);
+  }, [instruction]);
+
+  // Handle canceling instruction edit
+  const handleCancelInstructionEdit = useCallback(() => {
+    setInstructionEditing(false);
+    setEditingInstructionText("");
+    setInstructionDirty(false);
+  }, []);
+
+  // Handle saving instruction
+  const handleSaveInstruction = useCallback(async () => {
+    if (!displayBranch || instructionSaving) return;
+
+    setInstructionSaving(true);
+    try {
+      const updated = await api.updateTaskInstruction(repoId, displayBranch, editingInstructionText);
+      setInstruction(updated);
+      setInstructionDirty(false);
+      // Don't close edit mode, let user continue editing if they want
+    } catch (err) {
+      console.error("Failed to save instruction:", err);
+    } finally {
+      setInstructionSaving(false);
+    }
+  }, [repoId, displayBranch, editingInstructionText, instructionSaving]);
+
+  // Reset editing state when branch changes
+  useEffect(() => {
+    setInstructionEditing(false);
+    setEditingInstructionText("");
+    setInstructionDirty(false);
+  }, [displayBranch]);
 
   // Handle refresh all branch links
   const handleRefreshAll = useCallback(async () => {
@@ -596,15 +630,12 @@ export function ExecuteSidebar({
 
       {/* Tabs - using planning-panel classes for consistent styling */}
       <div className="planning-panel__sidebar-tabs">
-        {/* Info tab only for execute sessions */}
-        {sessionType === "execute" && (
-          <button
-            className={`planning-panel__sidebar-tab ${activeTab === "info" ? "planning-panel__sidebar-tab--active" : ""}`}
-            onClick={() => setActiveTab("info")}
-          >
-            Info
-          </button>
-        )}
+        <button
+          className={`planning-panel__sidebar-tab ${activeTab === "info" ? "planning-panel__sidebar-tab--active" : ""}`}
+          onClick={() => setActiveTab("info")}
+        >
+          Info
+        </button>
         <button
           className={`planning-panel__sidebar-tab ${activeTab === "instruction" ? "planning-panel__sidebar-tab--active" : ""}`}
           onClick={() => setActiveTab("instruction")}
@@ -625,6 +656,17 @@ export function ExecuteSidebar({
           {(displayBranchQuestionCount.pending > 0 || displayBranchQuestionCount.answered > 0) && (
             <span className="execute-sidebar__tab-badge">
               {displayBranchQuestionCount.pending + displayBranchQuestionCount.answered}
+            </span>
+          )}
+        </button>
+        <button
+          className={`planning-panel__sidebar-tab ${activeTab === "resources" ? "planning-panel__sidebar-tab--active" : ""}`}
+          onClick={() => setActiveTab("resources")}
+        >
+          Resources
+          {(externalLinks.length > 0 || branchFiles.length > 0) && (
+            <span className="execute-sidebar__tab-badge">
+              {externalLinks.length + branchFiles.length}
             </span>
           )}
         </button>
@@ -767,85 +809,6 @@ export function ExecuteSidebar({
                 <div className="execute-sidebar__no-links">No PR linked</div>
               )}
             </div>
-
-            {/* External Links Section */}
-            {externalLinks.length > 0 && (
-              <div className="execute-sidebar__links-section">
-                <div className="execute-sidebar__links-header">
-                  <h4>Resources</h4>
-                </div>
-                <div className="execute-sidebar__external-links">
-                  {externalLinks.map((link) => {
-                    const icon = getResourceIcon(link.linkType);
-                    return (
-                      <a
-                        key={link.id}
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="execute-sidebar__external-link"
-                      >
-                        <img
-                          src={icon.src}
-                          alt={icon.alt}
-                          className={`execute-sidebar__link-icon execute-sidebar__link-icon${icon.className}`}
-                        />
-                        <span className="execute-sidebar__external-link-text">
-                          {link.title || link.url}
-                        </span>
-                      </a>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Files/Images Section */}
-            {branchFiles.length > 0 && (
-              <div className="execute-sidebar__links-section">
-                <div className="execute-sidebar__links-header">
-                  <h4>Files</h4>
-                </div>
-                <div className="execute-sidebar__files">
-                  {branchFiles.map((file) => {
-                    const isImage = file.mimeType?.startsWith("image/");
-                    return (
-                      <div key={file.id} className="execute-sidebar__file">
-                        {isImage ? (
-                          <a
-                            href={api.getBranchFileUrl(file.id)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="execute-sidebar__file-image-link"
-                          >
-                            <img
-                              src={api.getBranchFileUrl(file.id)}
-                              alt={file.originalName || "Image"}
-                              className="execute-sidebar__file-thumbnail"
-                            />
-                          </a>
-                        ) : (
-                          <a
-                            href={api.getBranchFileUrl(file.id)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="execute-sidebar__file-link"
-                          >
-                            📄 {file.originalName || file.filePath}
-                          </a>
-                        )}
-                        {file.description && (
-                          <span className="execute-sidebar__file-description">{file.description}</span>
-                        )}
-                        {file.sourceType === "figma_mcp" && (
-                          <span className="execute-sidebar__file-source">From Figma</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -853,7 +816,7 @@ export function ExecuteSidebar({
           <div className="planning-panel__instruction">
             {instructionLoading ? (
               <div className="planning-panel__instruction-loading">Loading...</div>
-            ) : instruction?.instructionMd ? (
+            ) : (
               <>
                 <div className="execute-sidebar__instruction-header">
                   <div className="execute-sidebar__branch-nav">
@@ -899,42 +862,86 @@ export function ExecuteSidebar({
                       ↓
                     </button>
                   </div>
-                  {/* Confirm button only for planning sessions */}
-                  {sessionType === "planning" && (
-                    <button
-                      className={`execute-sidebar__confirm-btn execute-sidebar__confirm-btn--${instruction.confirmationStatus}`}
-                      onClick={handleConfirmToggle}
-                      disabled={confirming}
-                      title={
-                        instruction.confirmationStatus === "confirmed"
-                          ? "Click to unconfirm"
-                          : instruction.confirmationStatus === "changed"
-                          ? "Instruction changed since last confirmation - click to re-confirm"
-                          : "Click to confirm instruction"
-                      }
-                    >
-                      {confirming ? (
-                        "..."
-                      ) : instruction.confirmationStatus === "confirmed" ? (
-                        <>✓ Confirmed</>
-                      ) : instruction.confirmationStatus === "changed" ? (
-                        <>⚠ Changed</>
+                  <div className="execute-sidebar__instruction-actions">
+                    {instructionDirty && (
+                      <span className="execute-sidebar__instruction-dirty">unsaved</span>
+                    )}
+                    {/* Confirm button only for planning sessions when not editing */}
+                    {sessionType === "planning" && instruction?.instructionMd && !instructionEditing && (
+                      <button
+                        className={`execute-sidebar__confirm-btn execute-sidebar__confirm-btn--${instruction.confirmationStatus}`}
+                        onClick={handleConfirmToggle}
+                        disabled={confirming}
+                        title={
+                          instruction.confirmationStatus === "confirmed"
+                            ? "Click to unconfirm"
+                            : instruction.confirmationStatus === "changed"
+                            ? "Instruction changed since last confirmation - click to re-confirm"
+                            : "Click to confirm instruction"
+                        }
+                      >
+                        {confirming ? (
+                          "..."
+                        ) : instruction.confirmationStatus === "confirmed" ? (
+                          <>✓ Confirmed</>
+                        ) : instruction.confirmationStatus === "changed" ? (
+                          <>⚠ Changed</>
+                        ) : (
+                          "Confirm"
+                        )}
+                      </button>
+                    )}
+                    {/* Edit button only for planning sessions */}
+                    {sessionType === "planning" && (
+                      !instructionEditing ? (
+                        <button
+                          className="execute-sidebar__instruction-edit-btn"
+                          onClick={handleStartInstructionEdit}
+                        >
+                          Edit
+                        </button>
                       ) : (
-                        "Confirm"
-                      )}
+                        <button
+                          className="execute-sidebar__instruction-edit-btn"
+                          onClick={handleCancelInstructionEdit}
+                        >
+                          Done
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+                {instructionEditing ? (
+                  <>
+                    <textarea
+                      className="planning-panel__instruction-textarea"
+                      value={editingInstructionText}
+                      onChange={(e) => {
+                        setEditingInstructionText(e.target.value);
+                        setInstructionDirty(true);
+                      }}
+                      placeholder="Enter detailed task instructions..."
+                    />
+                    <button
+                      className="planning-panel__instruction-save"
+                      onClick={handleSaveInstruction}
+                      disabled={!instructionDirty || instructionSaving}
+                    >
+                      {instructionSaving ? "Saving..." : "Save"}
                     </button>
-                  )}
-                </div>
-                <div className="planning-panel__instruction-view">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {instruction.instructionMd}
-                  </ReactMarkdown>
-                </div>
+                  </>
+                ) : instruction?.instructionMd ? (
+                  <div className="planning-panel__instruction-view">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {instruction.instructionMd}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <span className="planning-panel__instruction-empty">
+                    No instruction set for this branch. {sessionType === "planning" && "Click Edit to add."}
+                  </span>
+                )}
               </>
-            ) : (
-              <span className="planning-panel__instruction-empty">
-                No instruction set for this branch
-              </span>
             )}
           </div>
         )}
@@ -957,6 +964,93 @@ export function ExecuteSidebar({
               branchName={displayBranch}
               disabled={!isCurrent}
             />
+          </div>
+        )}
+
+        {activeTab === "resources" && (
+          <div className="planning-panel__resources-section">
+            {/* External Links */}
+            {externalLinks.length > 0 && (
+              <div className="execute-sidebar__links-section">
+                <div className="execute-sidebar__links-header">
+                  <h4>Links</h4>
+                </div>
+                <div className="execute-sidebar__external-links">
+                  {externalLinks.map((link) => {
+                    const icon = getResourceIcon(link.linkType);
+                    return (
+                      <a
+                        key={link.id}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="execute-sidebar__external-link"
+                      >
+                        <img
+                          src={icon.src}
+                          alt={icon.alt}
+                          className={`execute-sidebar__link-icon execute-sidebar__link-icon${icon.className}`}
+                        />
+                        <span className="execute-sidebar__external-link-text">
+                          {link.title || link.url}
+                        </span>
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Files/Images */}
+            {branchFiles.length > 0 && (
+              <div className="execute-sidebar__links-section">
+                <div className="execute-sidebar__links-header">
+                  <h4>Files</h4>
+                </div>
+                <div className="execute-sidebar__files">
+                  {branchFiles.map((file) => {
+                    const isImage = file.mimeType?.startsWith("image/");
+                    return (
+                      <div key={file.id} className="execute-sidebar__file">
+                        {isImage ? (
+                          <a
+                            href={api.getBranchFileUrl(file.id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="execute-sidebar__file-image-link"
+                          >
+                            <img
+                              src={api.getBranchFileUrl(file.id)}
+                              alt={file.originalName || "Image"}
+                              className="execute-sidebar__file-thumbnail"
+                            />
+                          </a>
+                        ) : (
+                          <a
+                            href={api.getBranchFileUrl(file.id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="execute-sidebar__file-link"
+                          >
+                            📄 {file.originalName || file.filePath}
+                          </a>
+                        )}
+                        {file.description && (
+                          <span className="execute-sidebar__file-description">{file.description}</span>
+                        )}
+                        {file.sourceType === "figma_mcp" && (
+                          <span className="execute-sidebar__file-source">From Figma</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {externalLinks.length === 0 && branchFiles.length === 0 && (
+              <div className="execute-sidebar__no-links">No resources linked</div>
+            )}
           </div>
         )}
       </div>

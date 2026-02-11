@@ -596,3 +596,35 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Instruction actions (edit button, dirty indicator) */
+.execute-sidebar__instruction-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.execute-sidebar__instruction-dirty {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: #854d0e;
+  color: #fbbf24;
+  border-radius: 4px;
+}
+
+.execute-sidebar__instruction-edit-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: #374151;
+  border: 1px solid #4b5563;
+  color: #e5e7eb;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.execute-sidebar__instruction-edit-btn:hover {
+  background: #4b5563;
+  border-color: #6b7280;
+}

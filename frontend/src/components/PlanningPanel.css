@@ -2143,35 +2143,6 @@
   border-color: #6b7280;
 }
 
-/* Sidebar expand/collapse button */
-.planning-panel__sidebar-expand {
-  position: absolute;
-  top: 8px;
-  left: -11px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  background: #374151;
-  border: 1px solid #4b5563;
-  border-radius: 4px;
-  color: #9ca3af;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.15s;
-  z-index: 10;
-}
-
-.planning-panel__sidebar-expand:hover {
-  background: #3b82f6;
-  color: #fff;
-  border-color: #3b82f6;
-}
-
-.planning-panel__sidebar-expand--expanded {
-  left: 8px;
-}
 
 /* Planning Sidebar - Branches section at top */
 .planning-panel__sidebar-branches {

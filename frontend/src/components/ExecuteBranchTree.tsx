@@ -30,6 +30,8 @@ interface ExecuteBranchTreeProps {
   showCompletionCount?: boolean;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  onExpandToggle?: () => void;
+  isExpanded?: boolean;
 }
 
 export function ExecuteBranchTree({
@@ -45,6 +47,8 @@ export function ExecuteBranchTree({
   showCompletionCount = true,
   onRefresh,
   isRefreshing = false,
+  onExpandToggle,
+  isExpanded = false,
 }: ExecuteBranchTreeProps) {
   // Determine branch completion status
   const getCompletionStatus = (branch: string): "completed" | "pending" => {
@@ -60,16 +64,27 @@ export function ExecuteBranchTree({
             ? `${completedBranches.size}/${branches.length} Branches`
             : `${branches.length} Branches`}
         </h4>
-        {onRefresh && (
-          <button
-            className="execute-branch-tree__refresh-btn"
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            title="Refresh all PR info from GitHub"
-          >
-            {isRefreshing ? "..." : "↻"}
-          </button>
-        )}
+        <div className="execute-branch-tree__header-buttons">
+          {onRefresh && (
+            <button
+              className="execute-branch-tree__refresh-btn"
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              title="Refresh all PR info from GitHub"
+            >
+              {isRefreshing ? "..." : "↻"}
+            </button>
+          )}
+          {onExpandToggle && (
+            <button
+              className="execute-branch-tree__expand-btn"
+              onClick={onExpandToggle}
+              title={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
+            >
+              {isExpanded ? "→" : "←"}
+            </button>
+          )}
+        </div>
       </div>
       <div className="execute-branch-tree__list">
         {branches.map((branch, index) => {

@@ -740,6 +740,7 @@ export function PlanningPanel({
 
     // Check initial streaming state when session is selected
     const checkInitialState = async () => {
+      if (!selectedSession.chatSessionId) return;
       try {
         const streamingState = await api.getStreamingState(selectedSession.chatSessionId);
         console.log("[PlanningPanel] Initial streaming state:", streamingState.isStreaming);
@@ -777,7 +778,7 @@ export function PlanningPanel({
     }
 
     const handleVisibilityChange = async () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "visible" && selectedSession.chatSessionId) {
         console.log("[PlanningPanel] Tab became visible, checking streaming state");
         try {
           const streamingState = await api.getStreamingState(selectedSession.chatSessionId);
@@ -2147,14 +2148,6 @@ export function PlanningPanel({
                 className={`planning-panel__sidebar ${sidebarFullscreen ? "planning-panel__sidebar--fullscreen" : ""}`}
                 style={sidebarFullscreen ? undefined : { width: sidebarWidth }}
               >
-                {/* Expand/Collapse button */}
-                <button
-                  className={`planning-panel__sidebar-expand${sidebarFullscreen ? " planning-panel__sidebar-expand--expanded" : ""}`}
-                  onClick={() => setSidebarFullscreen(!sidebarFullscreen)}
-                  title={sidebarFullscreen ? "Collapse sidebar" : "Expand sidebar"}
-                >
-                  {sidebarFullscreen ? "→" : "←"}
-                </button>
                 <ExecuteSidebar
                   repoId={repoId}
                   executeBranches={selectedSession.executeBranches}
@@ -2163,6 +2156,8 @@ export function PlanningPanel({
                   onManualBranchSwitch={handleManualBranchSwitch}
                   onBranchCompleted={handleBranchCompleted}
                   workingBranch={claudeWorking ? selectedSession.executeBranches[selectedSession.currentExecuteIndex] : null}
+                  onExpandToggle={() => setSidebarFullscreen(!sidebarFullscreen)}
+                  isExpanded={sidebarFullscreen}
                 />
               </div>
             </div>
@@ -2283,14 +2278,6 @@ export function PlanningPanel({
                 className={`planning-panel__sidebar ${sidebarFullscreen ? "planning-panel__sidebar--fullscreen" : ""}`}
                 style={sidebarFullscreen ? undefined : { width: sidebarWidth }}
               >
-                {/* Expand/Collapse button */}
-                <button
-                  className={`planning-panel__sidebar-expand${sidebarFullscreen ? " planning-panel__sidebar-expand--expanded" : ""}`}
-                  onClick={() => setSidebarFullscreen(!sidebarFullscreen)}
-                  title={sidebarFullscreen ? "Collapse sidebar" : "Expand sidebar"}
-                >
-                  {sidebarFullscreen ? "→" : "←"}
-                </button>
                 {/* Branch Tree (always visible at top) */}
                 <div className="planning-panel__sidebar-branches">
                   <ExecuteBranchTree
@@ -2304,6 +2291,8 @@ export function PlanningPanel({
                     branchLinks={planningAllBranchLinks}
                     branchResourceCounts={planningResourceCounts}
                     showCompletionCount={false}
+                    onExpandToggle={() => setSidebarFullscreen(!sidebarFullscreen)}
+                    isExpanded={sidebarFullscreen}
                   />
                 </div>
 

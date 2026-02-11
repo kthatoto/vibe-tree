@@ -17,6 +17,8 @@ interface ExecuteSidebarProps {
   onManualBranchSwitch?: (branchIndex: number) => void;
   onBranchCompleted?: (branchName: string) => void;
   workingBranch?: string | null;
+  onExpandToggle?: () => void;
+  isExpanded?: boolean;
 }
 
 export function ExecuteSidebar({
@@ -27,6 +29,8 @@ export function ExecuteSidebar({
   onManualBranchSwitch,
   onBranchCompleted,
   workingBranch,
+  onExpandToggle,
+  isExpanded = false,
 }: ExecuteSidebarProps) {
   // Preview branch (clicked but not switched to)
   const [previewBranch, setPreviewBranch] = useState<string | null>(null);
@@ -482,6 +486,8 @@ export function ExecuteSidebar({
           branchResourceCounts={allResourceCounts}
           onRefresh={handleRefreshAll}
           isRefreshing={isRefreshing}
+          onExpandToggle={onExpandToggle}
+          isExpanded={isExpanded}
         />
       </div>
 

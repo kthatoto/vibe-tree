@@ -1920,10 +1920,6 @@ export function PlanningPanel({
       const currentPlanningBranch = hasBranches
         ? planningBranches[userViewBranchIndex]
         : null;
-      // AI's working branch
-      const aiWorkingBranch = hasBranches
-        ? planningBranches[planningCurrentBranchIndex]
-        : null;
 
       return (
         <div className="planning-panel__detail-content">
@@ -2015,17 +2011,13 @@ export function PlanningPanel({
                 <div className="planning-panel__sidebar-branches">
                   <ExecuteBranchTree
                     branches={planningBranches}
-                    currentBranchIndex={userViewBranchIndex}
-                    previewBranch={null}
-                    onPreviewBranch={(branch) => {
-                      const index = planningBranches.indexOf(branch);
-                      if (index !== -1) handlePlanningBranchSwitch(index);
-                    }}
+                    selectedBranchIndex={userViewBranchIndex}
+                    aiBranchIndex={claudeWorking ? planningCurrentBranchIndex : null}
+                    onBranchSelect={(_branch, index) => handlePlanningBranchSwitch(index)}
                     completedBranches={new Set()}
                     branchTodoCounts={branchTodoCounts}
                     branchQuestionCounts={branchQuestionCounts}
                     branchLinks={planningAllBranchLinks}
-                    workingBranch={claudeWorking ? aiWorkingBranch : null}
                     showCompletionCount={false}
                   />
                 </div>

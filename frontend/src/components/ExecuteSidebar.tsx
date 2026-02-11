@@ -386,14 +386,13 @@ export function ExecuteSidebar({
       <div className="execute-sidebar__branches">
         <ExecuteBranchTree
           branches={executeBranches}
-          currentBranchIndex={currentExecuteIndex}
-          previewBranch={previewBranch}
-          onPreviewBranch={handlePreviewBranch}
+          selectedBranchIndex={previewBranch ? executeBranches.indexOf(previewBranch) : currentExecuteIndex}
+          aiBranchIndex={workingBranch ? executeBranches.indexOf(workingBranch) : null}
+          onBranchSelect={(_branch, index) => handlePreviewBranch(executeBranches[index])}
           completedBranches={completedBranches}
           branchTodoCounts={branchTodoCounts}
           branchQuestionCounts={branchQuestionCounts}
           branchLinks={allBranchLinks}
-          workingBranch={workingBranch}
         />
       </div>
 

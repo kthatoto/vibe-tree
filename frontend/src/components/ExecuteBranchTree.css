@@ -58,18 +58,22 @@
   background: #222;
 }
 
-.execute-branch-tree__item--preview {
-  border-color: #555;
-  background: #252525;
-}
-
-.execute-branch-tree__item--current {
+/* User selected branch - blue */
+.execute-branch-tree__item--selected {
   border-color: #3b82f6;
   background: #1e3a5f;
 }
 
-.execute-branch-tree__item--current.execute-branch-tree__item--preview {
-  border-color: #60a5fa;
+/* AI working branch - purple */
+.execute-branch-tree__item--ai-working {
+  border-color: #8b5cf6;
+  background: #2e1065;
+}
+
+/* Both selected and AI working */
+.execute-branch-tree__item--selected.execute-branch-tree__item--ai-working {
+  border-color: #3b82f6;
+  background: linear-gradient(135deg, #1e3a5f 50%, #2e1065 50%);
 }
 
 .execute-branch-tree__item--completed {
@@ -90,8 +94,14 @@
   color: #22c55e;
 }
 
-.execute-branch-tree__status--current {
+/* User selected - blue dot */
+.execute-branch-tree__status--selected {
   color: #3b82f6;
+}
+
+/* AI working - purple (overrides selected when both) */
+.execute-branch-tree__status--ai {
+  color: #8b5cf6;
 }
 
 .execute-branch-tree__status--pending {
@@ -158,17 +168,8 @@
   background: #14532d;
 }
 
-/* Working indicator */
-.execute-branch-tree__item--working {
-  border-color: #a855f7;
-  background: #2e1065;
-}
-
-.execute-branch-tree__item--working.execute-branch-tree__item--preview {
-  border-color: #c084fc;
-}
-
-.execute-branch-tree__working-indicator {
+/* AI indicator */
+.execute-branch-tree__ai-indicator {
   flex-shrink: 0;
   margin-left: auto;
 }

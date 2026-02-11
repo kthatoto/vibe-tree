@@ -10,45 +10,31 @@ interface QuestionCounts {
 
 interface ExecuteBranchTreeProps {
   branches: string[];
-  currentBranchIndex: number;
-  previewBranch: string | null;
-  onPreviewBranch: (branch: string) => void;
+  selectedBranchIndex: number; // User's selected branch (blue)
+  aiBranchIndex?: number | null; // AI's working branch (purple + robot)
+  onBranchSelect: (branch: string, index: number) => void;
   completedBranches: Set<string>;
   branchTodoCounts?: Map<string, { total: number; completed: number }>;
   branchQuestionCounts?: Map<string, QuestionCounts>;
   branchLinks?: Map<string, BranchLink[]>;
-  workingBranch?: string | null;
   showCompletionCount?: boolean;
 }
 
 export function ExecuteBranchTree({
   branches,
-  currentBranchIndex,
-  previewBranch,
-  onPreviewBranch,
+  selectedBranchIndex,
+  aiBranchIndex = null,
+  onBranchSelect,
   completedBranches,
   branchTodoCounts = new Map(),
   branchQuestionCounts = new Map(),
   branchLinks = new Map(),
-  workingBranch = null,
   showCompletionCount = true,
 }: ExecuteBranchTreeProps) {
-  // Determine branch status
-  const getBranchStatus = (branch: string, index: number): "completed" | "current" | "pending" => {
+  // Determine branch completion status
+  const getCompletionStatus = (branch: string): "completed" | "pending" => {
     if (completedBranches.has(branch)) return "completed";
-    if (index === currentBranchIndex) return "current";
     return "pending";
-  };
-
-  const getStatusIcon = (status: "completed" | "current" | "pending") => {
-    switch (status) {
-      case "completed":
-        return "✓";
-      case "current":
-        return "●";
-      default:
-        return "○";
-    }
   };
 
   return (
@@ -62,9 +48,9 @@ export function ExecuteBranchTree({
       </div>
       <div className="execute-branch-tree__list">
         {branches.map((branch, index) => {
-          const status = getBranchStatus(branch, index);
-          const isPreview = branch === previewBranch;
-          const isWorking = branch === workingBranch;
+          const completionStatus = getCompletionStatus(branch);
+          const isSelected = index === selectedBranchIndex;
+          const isAiWorking = aiBranchIndex !== null && index === aiBranchIndex;
           const todoCount = branchTodoCounts.get(branch);
           const questionCount = branchQuestionCounts.get(branch);
           const links = branchLinks.get(branch) || [];
@@ -76,19 +62,19 @@ export function ExecuteBranchTree({
           return (
             <div
               key={branch}
-              className={`execute-branch-tree__item execute-branch-tree__item--${status} ${isPreview ? "execute-branch-tree__item--preview" : ""} ${isWorking ? "execute-branch-tree__item--working" : ""}`}
-              onClick={() => onPreviewBranch(branch)}
+              className={`execute-branch-tree__item execute-branch-tree__item--${completionStatus} ${isSelected ? "execute-branch-tree__item--selected" : ""} ${isAiWorking ? "execute-branch-tree__item--ai-working" : ""}`}
+              onClick={() => onBranchSelect(branch, index)}
             >
               {/* Row 1: Branch name */}
               <div className="execute-branch-tree__row">
-                <span className={`execute-branch-tree__status execute-branch-tree__status--${status}`}>
-                  {getStatusIcon(status)}
+                <span className={`execute-branch-tree__status ${isSelected ? "execute-branch-tree__status--selected" : ""} ${isAiWorking ? "execute-branch-tree__status--ai" : ""} execute-branch-tree__status--${completionStatus}`}>
+                  {completionStatus === "completed" ? "✓" : isSelected ? "●" : "○"}
                 </span>
                 <span className="execute-branch-tree__name" title={branch}>
                   {branch}
                 </span>
-                {isWorking && (
-                  <span className="execute-branch-tree__working-indicator" title="Claude is working on this">
+                {isAiWorking && (
+                  <span className="execute-branch-tree__ai-indicator" title="Claude is working on this">
                     <span className="execute-branch-tree__robot">🤖</span>
                   </span>
                 )}

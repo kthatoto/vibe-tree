@@ -2284,7 +2284,7 @@ export function PlanningPanel({
                   currentExecuteIndex={userViewBranchIndex}
                   planningSessionId={selectedSession.id}
                   onManualBranchSwitch={handlePlanningBranchSwitch}
-                  workingBranch={claudeWorking ? planningBranches[userViewBranchIndex] : null}
+                  workingBranch={claudeWorking ? planningBranches[planningCurrentBranchIndex] : null}
                   sessionType="planning"
                   onExpandToggle={() => setSidebarFullscreen(!sidebarFullscreen)}
                   isExpanded={sidebarFullscreen}

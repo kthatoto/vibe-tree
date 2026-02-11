@@ -559,42 +559,42 @@
   font-weight: 500;
 }
 
-/* Unconfirmed state - subtle gray button */
+/* Unconfirmed state - green button */
 .execute-sidebar__confirm-btn--unconfirmed {
-  background: #333;
-  border: 1px solid #444;
-  color: #888;
+  background: #166534;
+  border: 1px solid #166534;
+  color: #4ade80;
 }
 
 .execute-sidebar__confirm-btn--unconfirmed:hover:not(:disabled) {
-  background: #444;
-  border-color: #555;
-  color: #ccc;
+  background: #15803d;
+  border-color: #15803d;
+  color: #86efac;
 }
 
 /* Confirmed state - green with check */
 .execute-sidebar__confirm-btn--confirmed {
-  background: #22c55e22;
-  border: 1px solid #22c55e44;
+  background: #166534;
+  border: 1px solid #166534;
   color: #4ade80;
 }
 
 .execute-sidebar__confirm-btn--confirmed:hover:not(:disabled) {
-  background: #22c55e33;
-  border-color: #22c55e66;
+  background: #15803d;
+  border-color: #15803d;
   color: #86efac;
 }
 
 /* Changed state - orange warning */
 .execute-sidebar__confirm-btn--changed {
-  background: #f59e0b22;
-  border: 1px solid #f59e0b55;
+  background: #854d0e;
+  border: 1px solid #854d0e;
   color: #fbbf24;
 }
 
 .execute-sidebar__confirm-btn--changed:hover:not(:disabled) {
-  background: #f59e0b33;
-  border-color: #f59e0b77;
+  background: #a16207;
+  border-color: #a16207;
   color: #fcd34d;
 }
 

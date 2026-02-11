@@ -116,7 +116,7 @@ export function ExecuteBranchTree({
             >
               {/* Row 1: Branch name */}
               <div className="execute-branch-tree__row">
-                <span className={`execute-branch-tree__status ${isSelected ? "execute-branch-tree__status--selected" : ""} ${isAiWorking ? "execute-branch-tree__status--ai" : ""} execute-branch-tree__status--${completionStatus}`}>
+                <span className={`execute-branch-tree__status ${isSelected ? "execute-branch-tree__status--selected" : ""} ${isAiWorking ? "execute-branch-tree__status--ai" : ""} execute-branch-tree__status--${completionStatus} ${instructionStatus ? `execute-branch-tree__status--instruction-${instructionStatus}` : ""}`}>
                   {completionStatus === "completed" ? "✓" : isSelected ? "●" : "○"}
                 </span>
                 <span className="execute-branch-tree__name" title={branch}>

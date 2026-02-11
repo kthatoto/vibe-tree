@@ -166,6 +166,15 @@
   color: #555;
 }
 
+/* Instruction status overrides (highest priority for dot color) */
+.execute-branch-tree__status--instruction-confirmed {
+  color: #22c55e;
+}
+
+.execute-branch-tree__status--instruction-changed {
+  color: #f59e0b;
+}
+
 .execute-branch-tree__name {
   flex: 1;
   font-size: 12px;

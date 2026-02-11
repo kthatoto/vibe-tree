@@ -59,8 +59,9 @@ export default function TreeDashboard() {
   const [branchLinks, setBranchLinks] = useState<Map<string, BranchLink[]>>(new Map());
 
 
-  // Multi-session planning state
-  const [selectedPlanningSession, setSelectedPlanningSession] = useState<PlanningSession | null>(null);
+  // Multi-session planning state (only store what's needed, not full session copy)
+  const [selectedSessionBaseBranch, setSelectedSessionBaseBranch] = useState<string | null>(null);
+  const [selectedSessionType, setSelectedSessionType] = useState<string | null>(null);
   const [tentativeNodes, setTentativeNodes] = useState<TaskNode[]>([]);
   const [tentativeEdges, setTentativeEdges] = useState<TaskEdge[]>([]);
   const [pendingPlanning, setPendingPlanning] = useState<{ branchName: string; instruction: string | null } | null>(null);
@@ -376,7 +377,10 @@ export default function TreeDashboard() {
 
   // Planning session handlers
   const handlePlanningSessionSelect = useCallback((session: PlanningSession | null) => {
-    setSelectedPlanningSession(session);
+    // Only store the fields we need, not a full session copy
+    // This prevents data duplication and potential sync issues
+    setSelectedSessionBaseBranch(session?.baseBranch ?? null);
+    setSelectedSessionType(session?.type ?? null);
     // Show tentative nodes for the session (BranchGraph will skip nodes that already exist as real branches)
     if (session) {
       setTentativeNodes(session.nodes);
@@ -1344,7 +1348,7 @@ export default function TreeDashboard() {
                           };
                         });
                       }}
-                      tentativeBaseBranch={selectedPlanningSession?.baseBranch}
+                      tentativeBaseBranch={selectedSessionBaseBranch}
                       onBranchCreate={(baseBranch) => {
                         setCreateBranchBase(baseBranch);
                         setCreateBranchName("");
@@ -1371,8 +1375,8 @@ export default function TreeDashboard() {
                       setPendingPlanning({ branchName, instruction });
                     }}
                     activePlanningBranch={
-                      selectedPlanningSession?.type === "planning"
-                        ? selectedPlanningSession.baseBranch
+                      selectedSessionType === "planning"
+                        ? selectedSessionBaseBranch
                         : null
                     }
                     instruction={currentInstruction}

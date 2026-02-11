@@ -151,12 +151,13 @@ scanRouter.post("/", async (c) => {
       }
     }
 
-    // Root tasks connect to base branch
+    // Root tasks connect to base branch (fallback to savedBaseBranch if session.baseBranch doesn't exist)
+    const effectiveBaseBranch = cachedBranchNames.has(session.baseBranch) ? session.baseBranch : savedBaseBranch;
     const childTaskIds = new Set(sessionEdges.map((e) => e.child));
     for (const node of sessionNodes) {
       if (node.branchName && !childTaskIds.has(node.id)) {
         cachedEdges.push({
-          parent: session.baseBranch,
+          parent: effectiveBaseBranch,
           child: node.branchName,
           confidence: "high" as const,
           isDesigned: true,
@@ -180,21 +181,25 @@ scanRouter.post("/", async (c) => {
 
   if (treeSpec) {
     for (const designedEdge of treeSpec.specJson.edges as Array<{ parent: string; child: string }>) {
-      const existingIndex = cachedEdges.findIndex((e) => e.child === designedEdge.child);
-      if (existingIndex >= 0) {
-        cachedEdges[existingIndex] = {
-          parent: designedEdge.parent,
-          child: designedEdge.child,
-          confidence: "high" as const,
-          isDesigned: true,
-        };
-      } else {
-        cachedEdges.push({
-          parent: designedEdge.parent,
-          child: designedEdge.child,
-          confidence: "high" as const,
-          isDesigned: true,
-        });
+      // Fallback parent to savedBaseBranch if it doesn't exist in cached branches
+      const parentBranch = cachedBranchNames.has(designedEdge.parent) ? designedEdge.parent : savedBaseBranch;
+      if (cachedBranchNames.has(designedEdge.child)) {
+        const existingIndex = cachedEdges.findIndex((e) => e.child === designedEdge.child);
+        if (existingIndex >= 0) {
+          cachedEdges[existingIndex] = {
+            parent: parentBranch,
+            child: designedEdge.child,
+            confidence: "high" as const,
+            isDesigned: true,
+          };
+        } else {
+          cachedEdges.push({
+            parent: parentBranch,
+            child: designedEdge.child,
+            confidence: "high" as const,
+            isDesigned: true,
+          });
+        }
       }
     }
   }
@@ -303,6 +308,7 @@ scanRouter.post("/", async (c) => {
       currentEdges = treeEdges;
 
       // Merge planning session edges
+      const branchSet = new Set(branchNames);
       for (const session of confirmedSessions) {
         const sessionNodes = JSON.parse(session.nodesJson) as Array<{ id: string; branchName?: string }>;
         const sessionEdges = JSON.parse(session.edgesJson) as Array<{ parent: string; child: string }>;
@@ -310,10 +316,14 @@ scanRouter.post("/", async (c) => {
         for (const node of sessionNodes) {
           if (node.branchName) taskToBranch.set(node.id, node.branchName);
         }
+        // Fallback to currentDefaultBranch if session.baseBranch doesn't exist
+        const effectiveBaseBranch = branchSet.has(session.baseBranch) ? session.baseBranch : currentDefaultBranch;
         for (const edge of sessionEdges) {
-          const parentBranch = taskToBranch.get(edge.parent) ?? edge.parent;
+          let parentBranch = taskToBranch.get(edge.parent) ?? edge.parent;
           const childBranch = taskToBranch.get(edge.child) ?? edge.child;
-          if (parentBranch && childBranch) {
+          // Fallback parent to effectiveBaseBranch if it doesn't exist
+          if (!branchSet.has(parentBranch)) parentBranch = effectiveBaseBranch;
+          if (parentBranch && childBranch && branchSet.has(childBranch)) {
             const idx = currentEdges.findIndex((e) => e.child === childBranch);
             if (idx >= 0) currentEdges[idx] = { parent: parentBranch, child: childBranch, confidence: "high", isDesigned: true };
             else currentEdges.push({ parent: parentBranch, child: childBranch, confidence: "high", isDesigned: true });
@@ -321,10 +331,10 @@ scanRouter.post("/", async (c) => {
         }
         const childTaskIds = new Set(sessionEdges.map((e) => e.child));
         for (const node of sessionNodes) {
-          if (node.branchName && !childTaskIds.has(node.id)) {
+          if (node.branchName && !childTaskIds.has(node.id) && branchSet.has(node.branchName)) {
             const idx = currentEdges.findIndex((e) => e.child === node.branchName);
-            if (idx >= 0) currentEdges[idx] = { parent: session.baseBranch, child: node.branchName, confidence: "high", isDesigned: true };
-            else currentEdges.push({ parent: session.baseBranch, child: node.branchName, confidence: "high", isDesigned: true });
+            if (idx >= 0) currentEdges[idx] = { parent: effectiveBaseBranch, child: node.branchName, confidence: "high", isDesigned: true };
+            else currentEdges.push({ parent: effectiveBaseBranch, child: node.branchName, confidence: "high", isDesigned: true });
           }
         }
       }
@@ -332,9 +342,13 @@ scanRouter.post("/", async (c) => {
       // Merge treeSpec edges
       if (treeSpec) {
         for (const designedEdge of treeSpec.specJson.edges as Array<{ parent: string; child: string }>) {
-          const idx = currentEdges.findIndex((e) => e.child === designedEdge.child);
-          if (idx >= 0) currentEdges[idx] = { parent: designedEdge.parent, child: designedEdge.child, confidence: "high", isDesigned: true };
-          else currentEdges.push({ parent: designedEdge.parent, child: designedEdge.child, confidence: "high", isDesigned: true });
+          // Fallback parent to currentDefaultBranch if it doesn't exist
+          const parentBranch = branchSet.has(designedEdge.parent) ? designedEdge.parent : currentDefaultBranch;
+          if (branchSet.has(designedEdge.child)) {
+            const idx = currentEdges.findIndex((e) => e.child === designedEdge.child);
+            if (idx >= 0) currentEdges[idx] = { parent: parentBranch, child: designedEdge.child, confidence: "high", isDesigned: true };
+            else currentEdges.push({ parent: parentBranch, child: designedEdge.child, confidence: "high", isDesigned: true });
+          }
         }
       }
 

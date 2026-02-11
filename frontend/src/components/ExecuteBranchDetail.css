@@ -206,17 +206,17 @@
   font-weight: 500;
 }
 
-/* Unconfirmed state - subtle gray button */
+/* Unconfirmed state - green button */
 .execute-branch-detail__confirm-btn--unconfirmed {
-  background: #333;
-  border: 1px solid #444;
-  color: #888;
+  background: #166534;
+  border: 1px solid #166534;
+  color: #4ade80;
 }
 
 .execute-branch-detail__confirm-btn--unconfirmed:hover:not(:disabled) {
-  background: #444;
-  border-color: #555;
-  color: #ccc;
+  background: #15803d;
+  border-color: #15803d;
+  color: #86efac;
 }
 
 /* Confirmed state - green with check */

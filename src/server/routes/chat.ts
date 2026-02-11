@@ -1611,21 +1611,23 @@ ${gitStatus || "Clean working directory"}
         ? executeBranches[currentBranchIndex]
         : planningSession[0].baseBranch;
 
-      if (executeBranches.length > 0) {
-        // Multi-branch session (planning or execute)
-        parts.push(`## MCPツール用パラメータ【重要】
+      // Always include MCP parameters for all planning sessions (Refinement, Planning, Execute)
+      parts.push(`## MCPツール用パラメータ【重要】
 以下の値をMCPツール呼び出しで使用してください：
 - planningSessionId: \`${planningSession[0].id}\`
 - repoId: \`${session.repoId}\`
+`);
 
-## 作業対象ブランチ一覧（全${executeBranches.length}件）
+      if (executeBranches.length > 0) {
+        // Multi-branch session (planning or execute)
+        parts.push(`## 作業対象ブランチ一覧（全${executeBranches.length}件）
 ${executeBranches.map((b, i) => `${i === currentBranchIndex ? "→ " : "  "}${i + 1}. \`${b}\`${i === currentBranchIndex ? " 【現在作業中】" : ""}`).join("\n")}
 
 現在は **${currentBranch}** ${isExecuteSession ? "の実装を行っています。" : "のインストラクションとToDoを編集しています。"}
 ${isExecuteSession ? "\n**最初に \`get_current_context\` でインストラクションとToDoを取得してください。**" : ""}
 `);
       } else {
-        // Single branch (legacy)
+        // Single branch / Refinement (no branches yet)
         parts.push(`## ベースブランチ
 このPlanning Sessionのベースブランチ: \`${planningSession[0].baseBranch}\`
 提案するタスクは、このブランチを起点として作成されます。

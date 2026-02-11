@@ -280,16 +280,22 @@
 .execute-branch-tree__links-group {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   padding: 2px 6px;
   background: #374151;
   border-radius: 4px;
   font-size: 11px;
 }
 
+.execute-branch-tree__link-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .execute-branch-tree__link-icon {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   opacity: 0.9;
 }
 
@@ -298,6 +304,11 @@
 }
 
 .execute-branch-tree__link-icon--other {
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
+}
+
+.execute-branch-tree__link-count {
+  color: #9ca3af;
+  font-size: 10px;
 }

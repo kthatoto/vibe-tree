@@ -173,18 +173,36 @@ export function ExecuteBranchTree({
                     <span className="execute-branch-tree__links-group">
                       {hasFigma && (() => {
                         const icon = getResourceIcon("figma");
-                        return <img src={icon.src} alt={icon.alt} className={`execute-branch-tree__link-icon execute-branch-tree__link-icon${icon.className}`} title={`Figma: ${resourceCount!.figma}`} />;
+                        return (
+                          <span className="execute-branch-tree__link-item">
+                            <img src={icon.src} alt={icon.alt} className={`execute-branch-tree__link-icon execute-branch-tree__link-icon${icon.className}`} />
+                            <span className="execute-branch-tree__link-count">{resourceCount!.figma}</span>
+                          </span>
+                        );
                       })()}
                       {hasGithubIssue && (() => {
                         const icon = getResourceIcon("github_issue");
-                        return <img src={icon.src} alt={icon.alt} className={`execute-branch-tree__link-icon execute-branch-tree__link-icon${icon.className}`} title={`GitHub Issue: ${resourceCount!.githubIssue}`} />;
+                        return (
+                          <span className="execute-branch-tree__link-item">
+                            <img src={icon.src} alt={icon.alt} className={`execute-branch-tree__link-icon execute-branch-tree__link-icon${icon.className}`} />
+                            <span className="execute-branch-tree__link-count">{resourceCount!.githubIssue}</span>
+                          </span>
+                        );
                       })()}
                       {hasNotion && (() => {
                         const icon = getResourceIcon("notion");
-                        return <img src={icon.src} alt={icon.alt} className={`execute-branch-tree__link-icon execute-branch-tree__link-icon${icon.className}`} title={`Notion: ${resourceCount!.notion}`} />;
+                        return (
+                          <span className="execute-branch-tree__link-item">
+                            <img src={icon.src} alt={icon.alt} className={`execute-branch-tree__link-icon execute-branch-tree__link-icon${icon.className}`} />
+                            <span className="execute-branch-tree__link-count">{resourceCount!.notion}</span>
+                          </span>
+                        );
                       })()}
                       {hasOtherResources && (
-                        <span className="execute-branch-tree__link-icon execute-branch-tree__link-icon--other" title={`Other: ${(resourceCount?.other || 0) + (resourceCount?.files || 0)}`}>📎</span>
+                        <span className="execute-branch-tree__link-item">
+                          <span className="execute-branch-tree__link-icon execute-branch-tree__link-icon--other">📎</span>
+                          <span className="execute-branch-tree__link-count">{(resourceCount?.other || 0) + (resourceCount?.files || 0)}</span>
+                        </span>
                       )}
                     </span>
                   )}

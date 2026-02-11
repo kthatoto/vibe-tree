@@ -37,31 +37,18 @@ scanRouter.post("/", async (c) => {
     throw new BadRequestError(`Local path does not exist: ${localPath}`);
   }
 
-  // Get repo info from gh CLI
+  // Get repo info from gh CLI (fast operation)
   const repoId = getRepoId(localPath);
   if (!repoId) {
     throw new BadRequestError(`Could not detect GitHub repo at: ${localPath}`);
   }
 
-  // 1. Get branches
-  const branches = getBranches(localPath);
-  const branchNames = branches.map((b) => b.name);
-
-  // 2. Get worktrees with heartbeat (can run independently)
-  const worktrees = getWorktrees(localPath);
-
-  // 3. Run all DB queries in parallel
-  const [repoPinRecords, cachedPrLinks, rules, treeSpecs, confirmedSessions] = await Promise.all([
-    // Repo pins
+  // ============================================================
+  // Phase 1: Return cached data from DB immediately (no git commands)
+  // ============================================================
+  const [repoPinRecords, cachedBranchLinks, rules, treeSpecs, confirmedSessions, worktreeActivities] = await Promise.all([
     db.select().from(schema.repoPins).where(eq(schema.repoPins.localPath, localPath)),
-    // Cached PR links
-    db.select().from(schema.branchLinks).where(
-      and(
-        eq(schema.branchLinks.repoId, repoId),
-        eq(schema.branchLinks.linkType, "pr")
-      )
-    ),
-    // Branch naming rules
+    db.select().from(schema.branchLinks).where(eq(schema.branchLinks.repoId, repoId)),
     db.select().from(schema.projectRules).where(
       and(
         eq(schema.projectRules.repoId, repoId),
@@ -69,291 +56,197 @@ scanRouter.post("/", async (c) => {
         eq(schema.projectRules.isActive, true)
       )
     ),
-    // Tree specs
     db.select().from(schema.treeSpecs).where(eq(schema.treeSpecs.repoId, repoId)),
-    // Confirmed sessions
     db.select().from(schema.planningSessions).where(
       and(
         eq(schema.planningSessions.repoId, repoId),
         eq(schema.planningSessions.status, "confirmed")
       )
     ),
+    db.select().from(schema.worktreeActivity).where(eq(schema.worktreeActivity.repoId, repoId)),
   ]);
 
-  // 4. Process repoPin and detect default branch
   const repoPin = repoPinRecords[0];
-  const savedBaseBranch = repoPin?.baseBranch;
+  const savedBaseBranch = repoPin?.baseBranch ?? "main";
 
-  // Update repoId in repo_pins if it has changed (ensures consistency)
-  if (repoPin && repoPin.repoId !== repoId) {
-    await db
-      .update(schema.repoPins)
-      .set({ repoId })
-      .where(eq(schema.repoPins.id, repoPin.id));
+  // Build cached snapshot from DB data
+  const cachedBranchNames = new Set<string>();
+  const cachedPrs: import("../../shared/types").PRInfo[] = [];
+
+  for (const link of cachedBranchLinks) {
+    cachedBranchNames.add(link.branchName);
+    if (link.linkType === "pr") {
+      cachedPrs.push({
+        branch: link.branchName,
+        number: link.number ?? 0,
+        title: link.title ?? "",
+        url: link.url,
+        state: (link.status?.toUpperCase() ?? "OPEN") as "OPEN" | "MERGED" | "CLOSED",
+        checks: link.checksStatus?.toUpperCase() as "PENDING" | "SUCCESS" | "FAILURE" | undefined,
+        reviewDecision: link.reviewDecision as "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | undefined,
+        reviewStatus: link.reviewStatus as "none" | "requested" | "reviewed" | "approved" | undefined,
+        labels: link.labels ? JSON.parse(link.labels) : undefined,
+        reviewers: link.reviewers ? JSON.parse(link.reviewers) : undefined,
+      });
+    }
   }
 
-  // 5. Detect default branch dynamically (use saved if available and valid)
-  const defaultBranch = savedBaseBranch && branchNames.includes(savedBaseBranch)
-    ? savedBaseBranch
-    : getDefaultBranch(localPath, branchNames);
+  // Add branches from worktree activity
+  for (const wt of worktreeActivities) {
+    if (wt.branchName) cachedBranchNames.add(wt.branchName);
+  }
 
-  // Convert cached data to PRInfo format
-  const cachedPrs: import("../../shared/types").PRInfo[] = cachedPrLinks.map((link) => ({
-    branch: link.branchName,
-    number: link.number ?? 0,
-    title: link.title ?? "",
-    url: link.url,
-    state: (link.status?.toUpperCase() ?? "OPEN") as "OPEN" | "MERGED" | "CLOSED",
-    checks: link.checksStatus?.toUpperCase() as "PENDING" | "SUCCESS" | "FAILURE" | undefined,
-    reviewDecision: link.reviewDecision as "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | undefined,
-    reviewStatus: link.reviewStatus as "none" | "requested" | "reviewed" | "approved" | undefined,
-    labels: link.labels ? JSON.parse(link.labels) : undefined,
-    reviewers: link.reviewers ? JSON.parse(link.reviewers) : undefined,
-  }));
+  // Add branches from planning sessions
+  for (const session of confirmedSessions) {
+    const sessionNodes = JSON.parse(session.nodesJson) as Array<{ branchName?: string }>;
+    for (const node of sessionNodes) {
+      if (node.branchName) cachedBranchNames.add(node.branchName);
+    }
+  }
 
-  // 4.5. Use cached PRs for immediate response, fetch fresh data in background
-  const prs = cachedPrs;
+  // Always include base branch
+  cachedBranchNames.add(savedBaseBranch);
 
-  // Fetch fresh PR info from GitHub in background (non-blocking)
-  (async () => {
-    try {
-      const freshPrs = getPRs(localPath);
-      if (freshPrs.length === 0) return;
+  // Build cached nodes (minimal info from DB)
+  const cachedNodes: import("../../shared/types").TreeNode[] = Array.from(cachedBranchNames).map((branchName) => {
+    const pr = cachedPrs.find((p) => p.branch === branchName);
+    const wt = worktreeActivities.find((w) => w.branchName === branchName);
+    return {
+      branchName,
+      badges: [],
+      pr,
+      worktree: wt ? {
+        path: wt.worktreePath,
+        branch: wt.branchName ?? "",
+        commit: "",
+        dirty: false,
+        isActive: wt.activeAgent !== null,
+        activeAgent: wt.activeAgent ?? undefined,
+      } : undefined,
+      lastCommitAt: "",
+    };
+  });
 
-      const now = new Date().toISOString();
-      for (const pr of freshPrs) {
-        // Check if PR link already exists
-        const existing = await db
-          .select()
-          .from(schema.branchLinks)
-          .where(
-            and(
-              eq(schema.branchLinks.repoId, repoId),
-              eq(schema.branchLinks.branchName, pr.branch),
-              eq(schema.branchLinks.linkType, "pr"),
-              eq(schema.branchLinks.number, pr.number)
-            )
-          )
-          .limit(1);
+  // Build cached edges from planning sessions
+  const cachedEdges: import("../../shared/types").TreeEdge[] = [];
+  for (const session of confirmedSessions) {
+    const sessionNodes = JSON.parse(session.nodesJson) as Array<{ id: string; branchName?: string }>;
+    const sessionEdges = JSON.parse(session.edgesJson) as Array<{ parent: string; child: string }>;
 
-        const prData = {
-          title: pr.title,
-          status: pr.state.toLowerCase(),
-          checksStatus: pr.checks?.toLowerCase() ?? null,
-          reviewDecision: pr.reviewDecision ?? null,
-          reviewStatus: pr.reviewStatus ?? null,
-          labels: pr.labels ? JSON.stringify(pr.labels) : null,
-          reviewers: pr.reviewers ? JSON.stringify(pr.reviewers) : null,
-          updatedAt: now,
-        };
+    const taskToBranch = new Map<string, string>();
+    for (const node of sessionNodes) {
+      if (node.branchName) taskToBranch.set(node.id, node.branchName);
+    }
 
-        if (existing[0]) {
-          await db
-            .update(schema.branchLinks)
-            .set(prData)
-            .where(eq(schema.branchLinks.id, existing[0].id));
-        } else {
-          await db.insert(schema.branchLinks).values({
-            repoId,
-            branchName: pr.branch,
-            linkType: "pr",
-            url: pr.url,
-            number: pr.number,
-            ...prData,
-            createdAt: now,
-          });
-        }
-
-        // Broadcast update for real-time UI refresh
-        broadcast({
-          type: "branchLink.updated",
-          repoId,
-          data: {
-            branchName: pr.branch,
-            linkType: "pr",
-            ...prData,
-          },
+    for (const edge of sessionEdges) {
+      const parentBranch = taskToBranch.get(edge.parent) ?? edge.parent;
+      const childBranch = taskToBranch.get(edge.child) ?? edge.child;
+      if (parentBranch && childBranch && cachedBranchNames.has(parentBranch) && cachedBranchNames.has(childBranch)) {
+        cachedEdges.push({
+          parent: parentBranch,
+          child: childBranch,
+          confidence: "high" as const,
+          isDesigned: true,
         });
       }
-
-      // After all PRs updated, trigger a rescan broadcast to update the graph
-      broadcast({
-        type: "scan.prsUpdated",
-        repoId,
-        data: { count: freshPrs.length },
-      });
-    } catch (err) {
-      console.warn("[Scan] Background PR fetch failed:", err);
     }
-  })();
 
-  // 5. Build tree (infer parent-child relationships)
-  const { nodes, edges } = buildTree(branches, worktrees, prs, localPath, defaultBranch);
+    // Root tasks connect to base branch
+    const childTaskIds = new Set(sessionEdges.map((e) => e.child));
+    for (const node of sessionNodes) {
+      if (node.branchName && !childTaskIds.has(node.id)) {
+        cachedEdges.push({
+          parent: session.baseBranch,
+          child: node.branchName,
+          confidence: "high" as const,
+          isDesigned: true,
+        });
+      }
+    }
+  }
 
-  // 6. Process branch naming rule (already fetched in parallel)
-  const ruleRecord = rules[0];
-  const branchNaming = ruleRecord
-    ? (JSON.parse(ruleRecord.ruleJson) as BranchNamingRule)
-    : null;
-
-  // 7. Process tree spec (already fetched in parallel)
-  const treeSpec: TreeSpec | undefined = treeSpecs[0]
+  // Add edges from treeSpecs
+  const treeSpec: import("../../shared/types").TreeSpec | undefined = treeSpecs[0]
     ? {
         id: treeSpecs[0].id,
         repoId: treeSpecs[0].repoId,
-        baseBranch: treeSpecs[0].baseBranch ?? defaultBranch,
-        status: (treeSpecs[0].status ?? "draft") as TreeSpec["status"],
+        baseBranch: treeSpecs[0].baseBranch ?? savedBaseBranch,
+        status: (treeSpecs[0].status ?? "draft") as import("../../shared/types").TreeSpec["status"],
         specJson: JSON.parse(treeSpecs[0].specJson),
         createdAt: treeSpecs[0].createdAt,
         updatedAt: treeSpecs[0].updatedAt,
       }
     : undefined;
 
-  // 8. Merge confirmed planning session edges (already fetched in parallel)
-  for (const session of confirmedSessions) {
-    console.log(`[Scan] Processing confirmed session: ${session.id}, title: ${session.title || "Untitled"}`);
-    const sessionNodes = JSON.parse(session.nodesJson) as Array<{
-      id: string;
-      title: string;
-      branchName?: string;
-    }>;
-    // Planning session edges use { parent, child } format (task IDs)
-    const sessionEdges = JSON.parse(session.edgesJson) as Array<{
-      parent: string;
-      child: string;
-    }>;
-    console.log(`[Scan] Session has ${sessionNodes.length} nodes, ${sessionEdges.length} edges`);
-    console.log(`[Scan] Session edges raw:`, JSON.stringify(sessionEdges));
-
-    // Build taskId -> branchName map
-    const taskToBranch = new Map<string, string>();
-    for (const node of sessionNodes) {
-      if (node.branchName) {
-        taskToBranch.set(node.id, node.branchName);
-        console.log(`[Scan] Task mapping: ${node.id} -> ${node.branchName}`);
-      }
-    }
-
-    // Convert task edges to branch edges
-    // NOTE: Planning session edges are user-designed, so we trust them completely
-    // and do NOT validate against git ancestry (which can fail for newly created branches)
-    for (const edge of sessionEdges) {
-      console.log(`[Scan] Processing edge: parent=${edge.parent}, child=${edge.child}`);
-      // First try to resolve as task IDs, then as branch names directly
-      const parentBranch = taskToBranch.get(edge.parent) ?? edge.parent;
-      const childBranch = taskToBranch.get(edge.child) ?? edge.child;
-      console.log(`[Scan] Resolved to: parentBranch=${parentBranch}, childBranch=${childBranch}`);
-
-      if (parentBranch && childBranch) {
-        // Check if this child already has an edge
-        const existingIndex = edges.findIndex((e) => e.child === childBranch);
-        if (existingIndex >= 0) {
-          // Planning session edges (user-designed) always take priority over git-inferred edges
-          edges[existingIndex] = {
-            parent: parentBranch,
-            child: childBranch,
-            confidence: "high" as const,
-            isDesigned: true,
-          };
-        } else {
-          // Add new edge
-          edges.push({
-            parent: parentBranch,
-            child: childBranch,
-            confidence: "high" as const,
-            isDesigned: true,
-          });
-        }
-      } else if (childBranch && !parentBranch) {
-        // Child has branch but parent doesn't - connect to base branch
-        const existingIndex = edges.findIndex((e) => e.child === childBranch);
-        if (existingIndex < 0) {
-          edges.push({
-            parent: session.baseBranch,
-            child: childBranch,
-            confidence: "high" as const,
-            isDesigned: true,
-          });
-        }
-      }
-    }
-
-    // Also add edges for root tasks (tasks without parent edge) to base branch
-    const childTaskIds = new Set(sessionEdges.map((e) => e.child));
-    for (const node of sessionNodes) {
-      if (node.branchName && !childTaskIds.has(node.id)) {
-        // This is a root task - connect to base branch
-        const existingIndex = edges.findIndex((e) => e.child === node.branchName);
-        if (existingIndex >= 0) {
-          // Planning session edges (user-designed) always take priority
-          edges[existingIndex] = {
-            parent: session.baseBranch,
-            child: node.branchName,
-            confidence: "high" as const,
-            isDesigned: true,
-          };
-        } else {
-          edges.push({
-            parent: session.baseBranch,
-            child: node.branchName,
-            confidence: "high" as const,
-            isDesigned: true,
-          });
-        }
-      }
-    }
-  }
-
-  // 8.5. Merge treeSpec edges LAST (manual edits take highest priority)
-  // User-designed edges are trusted - no git ancestry validation needed
   if (treeSpec) {
-    console.log(`[Scan] treeSpec found with ${(treeSpec.specJson.edges as Array<unknown>).length} edges`);
     for (const designedEdge of treeSpec.specJson.edges as Array<{ parent: string; child: string }>) {
-      console.log(`[Scan] Processing treeSpec edge: ${designedEdge.parent} -> ${designedEdge.child}`);
-
-      // Find and replace existing edge for this child
-      // User-designed edges (from branch graph) always take priority over git-inferred edges
-      const existingIndex = edges.findIndex((e) => e.child === designedEdge.child);
+      const existingIndex = cachedEdges.findIndex((e) => e.child === designedEdge.child);
       if (existingIndex >= 0) {
-        const oldParent = edges[existingIndex].parent;
-        edges[existingIndex] = {
+        cachedEdges[existingIndex] = {
           parent: designedEdge.parent,
           child: designedEdge.child,
           confidence: "high" as const,
           isDesigned: true,
         };
-        console.log(`[Scan] Replaced edge for ${designedEdge.child}: ${oldParent} -> ${designedEdge.parent}`);
       } else {
-        edges.push({
+        cachedEdges.push({
           parent: designedEdge.parent,
           child: designedEdge.child,
           confidence: "high" as const,
           isDesigned: true,
         });
-        console.log(`[Scan] Added new edge: ${designedEdge.parent} -> ${designedEdge.child}`);
       }
     }
   }
 
-  // Log final edges for debugging
-  console.log(`[Scan] Final edges:`, edges.map(e => `${e.parent}->${e.child}(${e.confidence}${e.isDesigned ? ',designed' : ''})`).join(', '));
+  const ruleRecord = rules[0];
+  const branchNaming = ruleRecord ? (JSON.parse(ruleRecord.ruleJson) as BranchNamingRule) : null;
 
-  // 9. Calculate ahead/behind based on finalized edges (parent branch, not default)
-  calculateAheadBehind(nodes, edges, localPath, defaultBranch);
+  // Build cached worktrees from DB
+  const cachedWorktrees: import("../../shared/types").WorktreeInfo[] = worktreeActivities.map((wt) => ({
+    path: wt.worktreePath,
+    branch: wt.branchName ?? "",
+    commit: "",
+    dirty: false,
+    isActive: wt.activeAgent !== null,
+    activeAgent: wt.activeAgent ?? undefined,
+  }));
 
-  // 9.5. Calculate ahead/behind relative to remote (origin)
-  calculateRemoteAheadBehind(nodes, localPath);
+  // Return cached snapshot immediately
+  const cachedSnapshot: ScanSnapshot = {
+    repoId,
+    defaultBranch: savedBaseBranch,
+    branches: Array.from(cachedBranchNames),
+    nodes: cachedNodes,
+    edges: cachedEdges,
+    warnings: [],
+    worktrees: cachedWorktrees,
+    rules: { branchNaming },
+    restart: null,
+    ...(treeSpec && { treeSpec }),
+  };
 
-  // 10. Calculate warnings (including tree divergence)
-  const warnings = calculateWarnings(nodes, edges, branchNaming, defaultBranch, treeSpec);
+  // Broadcast cached result immediately
+  broadcast({
+    type: "scan.updated",
+    repoId,
+    data: cachedSnapshot,
+  });
 
-  // 9. Generate restart info for active worktree
-  const activeWorktree = worktrees.find((w) => w.branch !== "HEAD");
-  const restart = activeWorktree
-    ? generateRestartInfo(activeWorktree, nodes, warnings, branchNaming)
-    : null;
+  // ============================================================
+  // Phase 2: Incremental git scan in background
+  // Each step broadcasts updates as it completes
+  // ============================================================
 
-  const snapshot: ScanSnapshot = {
+  // Helper to build current snapshot state
+  const buildSnapshot = (
+    branchNames: string[],
+    defaultBranch: string,
+    nodes: import("../../shared/types").TreeNode[],
+    edges: import("../../shared/types").TreeEdge[],
+    worktrees: import("../../shared/types").WorktreeInfo[],
+    warnings: import("../../shared/types").Warning[]
+  ): ScanSnapshot => ({
     repoId,
     defaultBranch,
     branches: branchNames,
@@ -362,18 +255,159 @@ scanRouter.post("/", async (c) => {
     warnings,
     worktrees,
     rules: { branchNaming },
-    restart,
+    restart: null,
     ...(treeSpec && { treeSpec }),
-  };
-
-  // Broadcast scan result
-  broadcast({
-    type: "scan.updated",
-    repoId,
-    data: snapshot,
   });
 
-  return c.json(snapshot);
+  // Start background scan
+  (async () => {
+    try {
+      let currentBranches = Array.from(cachedBranchNames);
+      let currentDefaultBranch = savedBaseBranch;
+      let currentNodes = [...cachedNodes];
+      let currentEdges = [...cachedEdges];
+      let currentWorktrees = [...cachedWorktrees];
+      let currentWarnings: import("../../shared/types").Warning[] = [];
+
+      // Step 1: Get branches
+      const branches = getBranches(localPath);
+      const branchNames = branches.map((b) => b.name);
+      currentBranches = branchNames;
+      currentDefaultBranch = savedBaseBranch && branchNames.includes(savedBaseBranch)
+        ? savedBaseBranch
+        : getDefaultBranch(localPath, branchNames);
+
+      // Update nodes with fresh branch list
+      currentNodes = branchNames.map((name) => {
+        const existing = cachedNodes.find((n) => n.branchName === name);
+        return existing ?? { branchName: name, badges: [], lastCommitAt: "" };
+      });
+
+      broadcast({ type: "scan.updated", repoId, data: buildSnapshot(currentBranches, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings) });
+
+      // Step 2: Get worktrees
+      const worktrees = getWorktrees(localPath);
+      currentWorktrees = worktrees;
+
+      // Update nodes with worktree info
+      for (const node of currentNodes) {
+        const wt = worktrees.find((w) => w.branch === node.branchName);
+        if (wt) node.worktree = wt;
+      }
+
+      broadcast({ type: "scan.updated", repoId, data: buildSnapshot(currentBranches, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings) });
+
+      // Step 3: Build tree structure (infer parent-child from git)
+      const { nodes: treeNodes, edges: treeEdges } = buildTree(branches, worktrees, cachedPrs, localPath, currentDefaultBranch);
+      currentNodes = treeNodes;
+      currentEdges = treeEdges;
+
+      // Merge planning session edges
+      for (const session of confirmedSessions) {
+        const sessionNodes = JSON.parse(session.nodesJson) as Array<{ id: string; branchName?: string }>;
+        const sessionEdges = JSON.parse(session.edgesJson) as Array<{ parent: string; child: string }>;
+        const taskToBranch = new Map<string, string>();
+        for (const node of sessionNodes) {
+          if (node.branchName) taskToBranch.set(node.id, node.branchName);
+        }
+        for (const edge of sessionEdges) {
+          const parentBranch = taskToBranch.get(edge.parent) ?? edge.parent;
+          const childBranch = taskToBranch.get(edge.child) ?? edge.child;
+          if (parentBranch && childBranch) {
+            const idx = currentEdges.findIndex((e) => e.child === childBranch);
+            if (idx >= 0) currentEdges[idx] = { parent: parentBranch, child: childBranch, confidence: "high", isDesigned: true };
+            else currentEdges.push({ parent: parentBranch, child: childBranch, confidence: "high", isDesigned: true });
+          }
+        }
+        const childTaskIds = new Set(sessionEdges.map((e) => e.child));
+        for (const node of sessionNodes) {
+          if (node.branchName && !childTaskIds.has(node.id)) {
+            const idx = currentEdges.findIndex((e) => e.child === node.branchName);
+            if (idx >= 0) currentEdges[idx] = { parent: session.baseBranch, child: node.branchName, confidence: "high", isDesigned: true };
+            else currentEdges.push({ parent: session.baseBranch, child: node.branchName, confidence: "high", isDesigned: true });
+          }
+        }
+      }
+
+      // Merge treeSpec edges
+      if (treeSpec) {
+        for (const designedEdge of treeSpec.specJson.edges as Array<{ parent: string; child: string }>) {
+          const idx = currentEdges.findIndex((e) => e.child === designedEdge.child);
+          if (idx >= 0) currentEdges[idx] = { parent: designedEdge.parent, child: designedEdge.child, confidence: "high", isDesigned: true };
+          else currentEdges.push({ parent: designedEdge.parent, child: designedEdge.child, confidence: "high", isDesigned: true });
+        }
+      }
+
+      broadcast({ type: "scan.updated", repoId, data: buildSnapshot(currentBranches, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings) });
+
+      // Step 4: Calculate ahead/behind (slowest operation)
+      calculateAheadBehind(currentNodes, currentEdges, localPath, currentDefaultBranch);
+      broadcast({ type: "scan.updated", repoId, data: buildSnapshot(currentBranches, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings) });
+
+      // Step 5: Calculate remote ahead/behind
+      calculateRemoteAheadBehind(currentNodes, localPath);
+      broadcast({ type: "scan.updated", repoId, data: buildSnapshot(currentBranches, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings) });
+
+      // Step 6: Calculate warnings
+      currentWarnings = calculateWarnings(currentNodes, currentEdges, branchNaming, currentDefaultBranch, treeSpec);
+
+      // Final broadcast with restart info
+      const activeWorktree = currentWorktrees.find((w) => w.branch !== "HEAD");
+      const finalSnapshot: ScanSnapshot = {
+        ...buildSnapshot(currentBranches, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings),
+        restart: activeWorktree ? generateRestartInfo(activeWorktree, currentNodes, currentWarnings, branchNaming) : null,
+      };
+      broadcast({ type: "scan.updated", repoId, data: finalSnapshot });
+
+      // Update repoId if changed
+      if (repoPin && repoPin.repoId !== repoId) {
+        await db.update(schema.repoPins).set({ repoId }).where(eq(schema.repoPins.id, repoPin.id));
+      }
+
+      console.log(`[Scan] Background scan completed for ${repoId}`);
+
+      // Step 7: Fetch PR info from GitHub (separate async)
+      try {
+        const freshPrs = getPRs(localPath);
+        if (freshPrs.length > 0) {
+          const now = new Date().toISOString();
+          for (const pr of freshPrs) {
+            const existing = await db.select().from(schema.branchLinks)
+              .where(and(
+                eq(schema.branchLinks.repoId, repoId),
+                eq(schema.branchLinks.branchName, pr.branch),
+                eq(schema.branchLinks.linkType, "pr"),
+                eq(schema.branchLinks.number, pr.number)
+              )).limit(1);
+
+            const prData = {
+              title: pr.title,
+              status: pr.state.toLowerCase(),
+              checksStatus: pr.checks?.toLowerCase() ?? null,
+              reviewDecision: pr.reviewDecision ?? null,
+              reviewStatus: pr.reviewStatus ?? null,
+              labels: pr.labels ? JSON.stringify(pr.labels) : null,
+              reviewers: pr.reviewers ? JSON.stringify(pr.reviewers) : null,
+              updatedAt: now,
+            };
+
+            if (existing[0]) {
+              await db.update(schema.branchLinks).set(prData).where(eq(schema.branchLinks.id, existing[0].id));
+            } else {
+              await db.insert(schema.branchLinks).values({ repoId, branchName: pr.branch, linkType: "pr", url: pr.url, number: pr.number, ...prData, createdAt: now });
+            }
+            broadcast({ type: "branchLink.updated", repoId, data: { branchName: pr.branch, linkType: "pr", ...prData } });
+          }
+        }
+      } catch (err) {
+        console.warn("[Scan] Background PR fetch failed:", err);
+      }
+    } catch (err) {
+      console.error("[Scan] Background scan failed:", err);
+    }
+  })();
+
+  return c.json(cachedSnapshot);
 });
 
 // GET /api/scan/restart-prompt

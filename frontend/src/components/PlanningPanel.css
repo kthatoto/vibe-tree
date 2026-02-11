@@ -1820,6 +1820,27 @@
   border-color: #4b5563;
 }
 
+.planning-panel__generate-title-btn {
+  padding: 4px 8px;
+  background: transparent;
+  color: #fbbf24;
+  border: 1px solid #fbbf24;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.planning-panel__generate-title-btn:hover {
+  background: #fbbf24;
+  color: #1f2937;
+}
+
+.planning-panel__generate-title-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .planning-panel__execute-status {
   padding: 3px 8px;
   border-radius: 4px;

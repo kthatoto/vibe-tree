@@ -1210,6 +1210,25 @@ export function PlanningPanel({
     setUserViewBranchIndex(branchIndex);
   };
 
+  // Generate title from conversation history (no chat history impact)
+  const [generatingTitle, setGeneratingTitle] = useState(false);
+  const handleGenerateTitle = async () => {
+    if (!selectedSession) return;
+    setGeneratingTitle(true);
+    try {
+      const result = await api.generateSessionTitle(selectedSession.id, 999); // Force generation
+      if (result.updated) {
+        setSessions((prev) =>
+          prev.map((s) => s.id === selectedSession.id ? { ...s, title: result.title } : s)
+        );
+      }
+    } catch (err) {
+      console.error("[PlanningPanel] Title generation failed:", err);
+    } finally {
+      setGeneratingTitle(false);
+    }
+  };
+
   // Execute Session edit mode handlers
   const handleStartExecuteEdit = () => {
     if (!selectedSession) return;
@@ -1783,6 +1802,16 @@ export function PlanningPanel({
             <span className={`planning-panel__header-title${!selectedSession.title ? " planning-panel__header-title--untitled" : ""}`}>
               {selectedSession.title || "Untitled Session"}
             </span>
+            {!selectedSession.title && !executeEditMode && (
+              <button
+                className="planning-panel__generate-title-btn"
+                onClick={handleGenerateTitle}
+                disabled={generatingTitle}
+                title="Generate title from conversation"
+              >
+                {generatingTitle ? "..." : "✨"}
+              </button>
+            )}
             {executeEditMode ? (
               <>
                 <button
@@ -1934,6 +1963,16 @@ export function PlanningPanel({
             <span className={`planning-panel__header-title${!selectedSession.title ? " planning-panel__header-title--untitled" : ""}`}>
               {selectedSession.title || "Untitled Session"}
             </span>
+            {!selectedSession.title && (
+              <button
+                className="planning-panel__generate-title-btn"
+                onClick={handleGenerateTitle}
+                disabled={generatingTitle}
+                title="Generate title from conversation"
+              >
+                {generatingTitle ? "..." : "✨"}
+              </button>
+            )}
             {hasBranches && selectedSession.status !== "confirmed" && (
               <button
                 className="planning-panel__finalize-btn"
@@ -2212,6 +2251,16 @@ export function PlanningPanel({
           <span className={`planning-panel__header-title${!selectedSession.title ? " planning-panel__header-title--untitled" : ""}`}>
             {selectedSession.title || "Untitled Session"}
           </span>
+          {!selectedSession.title && (
+            <button
+              className="planning-panel__generate-title-btn"
+              onClick={handleGenerateTitle}
+              disabled={generatingTitle}
+              title="Generate title from conversation"
+            >
+              {generatingTitle ? "..." : "✨"}
+            </button>
+          )}
           <button
             className="planning-panel__delete-btn"
             onClick={handleDelete}

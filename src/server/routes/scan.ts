@@ -40,6 +40,19 @@ scanRouter.get("/snapshot/:pinId", async (c) => {
   const repoId = repoPin.repoId;
   const savedBaseBranch = repoPin.baseBranch ?? "main";
 
+  // Use cached branches from last scan if available
+  let cachedBranchNames: Set<string>;
+  if (repoPin.cachedBranchesJson) {
+    try {
+      const branches = JSON.parse(repoPin.cachedBranchesJson) as string[];
+      cachedBranchNames = new Set(branches);
+    } catch {
+      cachedBranchNames = new Set<string>();
+    }
+  } else {
+    cachedBranchNames = new Set<string>();
+  }
+
   const [cachedBranchLinks, rules, treeSpecs, confirmedSessions, worktreeActivities] = await Promise.all([
     db.select().from(schema.branchLinks).where(eq(schema.branchLinks.repoId, repoId)),
     db.select().from(schema.projectRules).where(
@@ -59,13 +72,10 @@ scanRouter.get("/snapshot/:pinId", async (c) => {
     db.select().from(schema.worktreeActivity).where(eq(schema.worktreeActivity.repoId, repoId)),
   ]);
 
-  // Build cached snapshot from DB data
-  const cachedBranchNames = new Set<string>();
+  // Build PR info from cached branch links (only for branches that exist in cache)
   const cachedPrs: import("../../shared/types").PRInfo[] = [];
-
   for (const link of cachedBranchLinks) {
-    cachedBranchNames.add(link.branchName);
-    if (link.linkType === "pr") {
+    if (link.linkType === "pr" && cachedBranchNames.has(link.branchName)) {
       cachedPrs.push({
         branch: link.branchName,
         number: link.number ?? 0,
@@ -81,38 +91,36 @@ scanRouter.get("/snapshot/:pinId", async (c) => {
     }
   }
 
-  // Add branches from worktree activity
-  for (const wt of worktreeActivities) {
-    if (wt.branchName) cachedBranchNames.add(wt.branchName);
-  }
-
-  // Add branches from planning sessions
-  for (const session of confirmedSessions) {
-    const sessionNodes = JSON.parse(session.nodesJson) as Array<{ branchName?: string }>;
-    for (const node of sessionNodes) {
-      if (node.branchName) cachedBranchNames.add(node.branchName);
+  // If no cached branches, fall back to building from DB tables
+  if (cachedBranchNames.size === 0) {
+    for (const link of cachedBranchLinks) {
+      cachedBranchNames.add(link.branchName);
     }
-  }
-
-  // Add branches from tree specs (designed branches)
-  if (treeSpecs[0]) {
-    const specJson = JSON.parse(treeSpecs[0].specJson) as { nodes?: Array<{ branchName: string }>; edges?: Array<{ parent: string; child: string }> };
-    if (specJson.nodes) {
-      for (const node of specJson.nodes) {
+    for (const wt of worktreeActivities) {
+      if (wt.branchName) cachedBranchNames.add(wt.branchName);
+    }
+    for (const session of confirmedSessions) {
+      const sessionNodes = JSON.parse(session.nodesJson) as Array<{ branchName?: string }>;
+      for (const node of sessionNodes) {
         if (node.branchName) cachedBranchNames.add(node.branchName);
       }
     }
-    // Also add branches from edges (parent and child)
-    if (specJson.edges) {
-      for (const edge of specJson.edges) {
-        if (edge.parent) cachedBranchNames.add(edge.parent);
-        if (edge.child) cachedBranchNames.add(edge.child);
+    if (treeSpecs[0]) {
+      const specJson = JSON.parse(treeSpecs[0].specJson) as { nodes?: Array<{ branchName: string }>; edges?: Array<{ parent: string; child: string }> };
+      if (specJson.nodes) {
+        for (const node of specJson.nodes) {
+          if (node.branchName) cachedBranchNames.add(node.branchName);
+        }
+      }
+      if (specJson.edges) {
+        for (const edge of specJson.edges) {
+          if (edge.parent) cachedBranchNames.add(edge.parent);
+          if (edge.child) cachedBranchNames.add(edge.child);
+        }
       }
     }
+    cachedBranchNames.add(savedBaseBranch);
   }
-
-  // Always include base branch
-  cachedBranchNames.add(savedBaseBranch);
 
   // Build cached nodes (minimal info from DB)
   const cachedNodes: import("../../shared/types").TreeNode[] = Array.from(cachedBranchNames).map((branchName) => {
@@ -134,46 +142,26 @@ scanRouter.get("/snapshot/:pinId", async (c) => {
     };
   });
 
-  // Build cached edges from planning sessions
-  const cachedEdges: import("../../shared/types").TreeEdge[] = [];
-  for (const session of confirmedSessions) {
-    const sessionNodes = JSON.parse(session.nodesJson) as Array<{ id: string; branchName?: string }>;
-    const sessionEdges = JSON.parse(session.edgesJson) as Array<{ parent: string; child: string }>;
-
-    const taskToBranch = new Map<string, string>();
-    for (const node of sessionNodes) {
-      if (node.branchName) taskToBranch.set(node.id, node.branchName);
-    }
-
-    for (const edge of sessionEdges) {
-      const parentBranch = taskToBranch.get(edge.parent) ?? edge.parent;
-      const childBranch = taskToBranch.get(edge.child) ?? edge.child;
-      if (parentBranch && childBranch && cachedBranchNames.has(parentBranch) && cachedBranchNames.has(childBranch)) {
-        cachedEdges.push({
-          parent: parentBranch,
-          child: childBranch,
-          confidence: "high" as const,
-          isDesigned: true,
-        });
-      }
-    }
-
-    // Root tasks connect to base branch (fallback to savedBaseBranch if session.baseBranch doesn't exist)
-    const effectiveBaseBranch = cachedBranchNames.has(session.baseBranch) ? session.baseBranch : savedBaseBranch;
-    const childTaskIds = new Set(sessionEdges.map((e) => e.child));
-    for (const node of sessionNodes) {
-      if (node.branchName && !childTaskIds.has(node.id)) {
-        cachedEdges.push({
-          parent: effectiveBaseBranch,
-          child: node.branchName,
-          confidence: "high" as const,
-          isDesigned: true,
-        });
-      }
+  // Use cached edges from last scan if available, otherwise build from DB
+  let cachedEdges: import("../../shared/types").TreeEdge[] = [];
+  if (repoPin.cachedEdgesJson) {
+    try {
+      const rawCachedEdges = JSON.parse(repoPin.cachedEdgesJson) as import("../../shared/types").TreeEdge[];
+      // Remap cached edges: keep edges for existing children, remap parent to savedBaseBranch if parent doesn't exist
+      cachedEdges = rawCachedEdges
+        .filter((e) => cachedBranchNames.has(e.child))
+        .map((e) => ({
+          ...e,
+          parent: (cachedBranchNames.has(e.parent) || e.parent === savedBaseBranch)
+            ? e.parent
+            : savedBaseBranch,
+        }));
+    } catch {
+      // Fallback to building from DB below
     }
   }
 
-  // Add edges from treeSpecs
+  // Build treeSpec (needed for response regardless of cache)
   const treeSpec: import("../../shared/types").TreeSpec | undefined = treeSpecs[0]
     ? {
         id: treeSpecs[0].id,
@@ -186,25 +174,66 @@ scanRouter.get("/snapshot/:pinId", async (c) => {
       }
     : undefined;
 
-  if (treeSpec) {
-    for (const designedEdge of treeSpec.specJson.edges as Array<{ parent: string; child: string }>) {
-      const parentBranch = cachedBranchNames.has(designedEdge.parent) ? designedEdge.parent : savedBaseBranch;
-      if (cachedBranchNames.has(designedEdge.child)) {
-        const existingIndex = cachedEdges.findIndex((e) => e.child === designedEdge.child);
-        if (existingIndex >= 0) {
-          cachedEdges[existingIndex] = {
-            parent: parentBranch,
-            child: designedEdge.child,
-            confidence: "high" as const,
-            isDesigned: true,
-          };
-        } else {
+  // If no cached edges, build from planning sessions and treeSpecs
+  if (cachedEdges.length === 0) {
+    for (const session of confirmedSessions) {
+      const sessionNodes = JSON.parse(session.nodesJson) as Array<{ id: string; branchName?: string }>;
+      const sessionEdges = JSON.parse(session.edgesJson) as Array<{ parent: string; child: string }>;
+
+      const taskToBranch = new Map<string, string>();
+      for (const node of sessionNodes) {
+        if (node.branchName) taskToBranch.set(node.id, node.branchName);
+      }
+
+      for (const edge of sessionEdges) {
+        const parentBranch = taskToBranch.get(edge.parent) ?? edge.parent;
+        const childBranch = taskToBranch.get(edge.child) ?? edge.child;
+        if (parentBranch && childBranch && cachedBranchNames.has(parentBranch) && cachedBranchNames.has(childBranch)) {
           cachedEdges.push({
             parent: parentBranch,
-            child: designedEdge.child,
+            child: childBranch,
             confidence: "high" as const,
             isDesigned: true,
           });
+        }
+      }
+
+      // Root tasks connect to base branch
+      const effectiveBaseBranch = cachedBranchNames.has(session.baseBranch) ? session.baseBranch : savedBaseBranch;
+      const childTaskIds = new Set(sessionEdges.map((e) => e.child));
+      for (const node of sessionNodes) {
+        if (node.branchName && !childTaskIds.has(node.id)) {
+          cachedEdges.push({
+            parent: effectiveBaseBranch,
+            child: node.branchName,
+            confidence: "high" as const,
+            isDesigned: true,
+          });
+        }
+      }
+    }
+
+    // Add edges from treeSpecs
+    if (treeSpec) {
+      for (const designedEdge of treeSpec.specJson.edges as Array<{ parent: string; child: string }>) {
+        const parentBranch = cachedBranchNames.has(designedEdge.parent) ? designedEdge.parent : savedBaseBranch;
+        if (cachedBranchNames.has(designedEdge.child)) {
+          const existingIndex = cachedEdges.findIndex((e) => e.child === designedEdge.child);
+          if (existingIndex >= 0) {
+            cachedEdges[existingIndex] = {
+              parent: parentBranch,
+              child: designedEdge.child,
+              confidence: "high" as const,
+              isDesigned: true,
+            };
+          } else {
+            cachedEdges.push({
+              parent: parentBranch,
+              child: designedEdge.child,
+              confidence: "high" as const,
+              isDesigned: true,
+            });
+          }
         }
       }
     }
@@ -351,19 +380,72 @@ scanRouter.post("/", async (c) => {
         lastCommitAt: "",
       }));
 
-      // Initialize edges from treeSpec (designed edges) to preserve hierarchy during scan
+      // Initialize edges from cached scan result if available
       const branchSet = new Set(branchNames);
       let currentEdges: import("../../shared/types").TreeEdge[] = [];
-      if (treeSpec) {
-        for (const designedEdge of treeSpec.specJson.edges as Array<{ parent: string; child: string }>) {
-          const parentBranch = branchSet.has(designedEdge.parent) ? designedEdge.parent : currentDefaultBranch;
-          if (branchSet.has(designedEdge.child)) {
-            currentEdges.push({
-              parent: parentBranch,
-              child: designedEdge.child,
-              confidence: "high" as const,
-              isDesigned: true,
-            });
+
+      // Use cached edges from last scan if available
+      if (repoPin?.cachedEdgesJson) {
+        try {
+          const cachedEdges = JSON.parse(repoPin.cachedEdgesJson) as import("../../shared/types").TreeEdge[];
+          // Remap cached edges: keep edges for existing children, remap parent to defaultBranch if parent doesn't exist
+          currentEdges = cachedEdges
+            .filter((e) => branchSet.has(e.child))
+            .map((e) => ({
+              ...e,
+              parent: (branchSet.has(e.parent) || e.parent === currentDefaultBranch)
+                ? e.parent
+                : currentDefaultBranch,
+            }));
+        } catch {
+          // Fall through to build from DB
+        }
+      }
+
+      // Get confirmed sessions (needed for building edges and later merging)
+      const confirmedSessions = await db.select().from(schema.planningSessions).where(
+        and(eq(schema.planningSessions.repoId, repoId), eq(schema.planningSessions.status, "confirmed"))
+      );
+
+      // If no cached edges, build from planning sessions and treeSpec
+      if (currentEdges.length === 0) {
+        for (const session of confirmedSessions) {
+          const sessionNodes = JSON.parse(session.nodesJson) as Array<{ id: string; branchName?: string }>;
+          const sessionEdges = JSON.parse(session.edgesJson) as Array<{ parent: string; child: string }>;
+          const taskToBranch = new Map<string, string>();
+          for (const node of sessionNodes) {
+            if (node.branchName) taskToBranch.set(node.id, node.branchName);
+          }
+          const effectiveBaseBranch = branchSet.has(session.baseBranch) ? session.baseBranch : currentDefaultBranch;
+          for (const edge of sessionEdges) {
+            let parentBranch = taskToBranch.get(edge.parent) ?? edge.parent;
+            const childBranch = taskToBranch.get(edge.child) ?? edge.child;
+            if (!branchSet.has(parentBranch)) parentBranch = effectiveBaseBranch;
+            if (parentBranch && childBranch && branchSet.has(childBranch)) {
+              const idx = currentEdges.findIndex((e) => e.child === childBranch);
+              if (idx >= 0) currentEdges[idx] = { parent: parentBranch, child: childBranch, confidence: "high", isDesigned: true };
+              else currentEdges.push({ parent: parentBranch, child: childBranch, confidence: "high", isDesigned: true });
+            }
+          }
+          const childTaskIds = new Set(sessionEdges.map((e) => e.child));
+          for (const node of sessionNodes) {
+            if (node.branchName && !childTaskIds.has(node.id) && branchSet.has(node.branchName)) {
+              const idx = currentEdges.findIndex((e) => e.child === node.branchName);
+              if (idx >= 0) currentEdges[idx] = { parent: effectiveBaseBranch, child: node.branchName, confidence: "high", isDesigned: true };
+              else currentEdges.push({ parent: effectiveBaseBranch, child: node.branchName, confidence: "high", isDesigned: true });
+            }
+          }
+        }
+
+        // Add edges from treeSpec
+        if (treeSpec) {
+          for (const designedEdge of treeSpec.specJson.edges as Array<{ parent: string; child: string }>) {
+            const parentBranch = branchSet.has(designedEdge.parent) ? designedEdge.parent : currentDefaultBranch;
+            if (branchSet.has(designedEdge.child)) {
+              const idx = currentEdges.findIndex((e) => e.child === designedEdge.child);
+              if (idx >= 0) currentEdges[idx] = { parent: parentBranch, child: designedEdge.child, confidence: "high", isDesigned: true };
+              else currentEdges.push({ parent: parentBranch, child: designedEdge.child, confidence: "high", isDesigned: true });
+            }
           }
         }
       }
@@ -371,6 +453,7 @@ scanRouter.post("/", async (c) => {
       let currentWorktrees: import("../../shared/types").WorktreeInfo[] = [];
       let currentWarnings: import("../../shared/types").Warning[] = [];
 
+      console.log(`[Scan] First broadcast: ${currentEdges.length} edges from DB cache`);
       broadcast({ type: "scan.updated", repoId, data: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings) });
 
       // Step 2: Get worktrees
@@ -405,11 +488,7 @@ scanRouter.post("/", async (c) => {
       currentNodes = treeNodes;
       currentEdges = treeEdges;
 
-      // Merge planning session edges
-      const confirmedSessions = await db.select().from(schema.planningSessions).where(
-        and(eq(schema.planningSessions.repoId, repoId), eq(schema.planningSessions.status, "confirmed"))
-      );
-
+      // Merge planning session edges (reuse confirmedSessions from initial load)
       for (const session of confirmedSessions) {
         const sessionNodes = JSON.parse(session.nodesJson) as Array<{ id: string; branchName?: string }>;
         const sessionEdges = JSON.parse(session.edgesJson) as Array<{ parent: string; child: string }>;
@@ -477,6 +556,15 @@ scanRouter.post("/", async (c) => {
       }
 
       console.log(`[Scan] Background scan completed for ${repoId}`);
+
+      // Cache branches and edges in DB for next snapshot
+      if (repoPin) {
+        await db.update(schema.repoPins).set({
+          cachedBranchesJson: JSON.stringify(branchNames),
+          cachedEdgesJson: JSON.stringify(currentEdges),
+        }).where(eq(schema.repoPins.id, repoPin.id));
+        console.log(`[Scan] Cached ${branchNames.length} branches and ${currentEdges.length} edges for ${repoId}`);
+      }
 
       // Step 7: Fetch PR info from GitHub
       try {

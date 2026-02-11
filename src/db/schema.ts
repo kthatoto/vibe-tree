@@ -96,6 +96,8 @@ export const repoPins = sqliteTable("repo_pins", {
   localPath: text("local_path").notNull().unique(),
   label: text("label"), // optional display name
   baseBranch: text("base_branch"), // user-selected base branch
+  cachedBranchesJson: text("cached_branches_json"), // cached branch names from last scan
+  cachedEdgesJson: text("cached_edges_json"), // cached edges from last scan
   lastUsedAt: text("last_used_at").notNull(),
   createdAt: text("created_at").notNull(),
 });

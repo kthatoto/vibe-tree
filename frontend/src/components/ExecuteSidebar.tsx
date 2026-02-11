@@ -973,7 +973,6 @@ export function ExecuteSidebar({
             <PlanningQuestionsPanel
               planningSessionId={planningSessionId}
               branchName={displayBranch}
-              disabled={!isCurrent}
             />
           </div>
         )}

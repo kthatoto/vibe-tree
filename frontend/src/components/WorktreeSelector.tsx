@@ -116,12 +116,12 @@ export function WorktreeSelector({
                   />
                 </div>
                 <div className="worktree-selector__item-content">
-                  <div className="worktree-selector__item-branch">
-                    {wt.branch || "(detached)"}
+                  <div className="worktree-selector__item-directory">
+                    {wt.path.split("/").pop() || wt.path}
                     {wt.dirty && <span className="worktree-selector__badge worktree-selector__badge--dirty">dirty</span>}
                     {wt.isActive && <span className="worktree-selector__badge worktree-selector__badge--active">in use</span>}
                   </div>
-                  <div className="worktree-selector__item-path">{wt.path}</div>
+                  <div className="worktree-selector__item-branch">{wt.branch || "(detached)"}</div>
                 </div>
               </div>
             ))

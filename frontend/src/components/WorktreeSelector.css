@@ -131,7 +131,7 @@
   min-width: 0;
 }
 
-.worktree-selector__item-branch {
+.worktree-selector__item-directory {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary, #fff);
@@ -141,11 +141,10 @@
   flex-wrap: wrap;
 }
 
-.worktree-selector__item-path {
+.worktree-selector__item-branch {
   font-size: 12px;
   color: var(--text-secondary, #888);
   margin-top: 4px;
-  word-break: break-all;
   font-family: monospace;
 }
 

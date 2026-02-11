@@ -106,7 +106,6 @@ export function ExecuteBranchTree({
           const hasNotion = resourceCount && resourceCount.notion > 0;
           const hasOtherResources = resourceCount && (resourceCount.other > 0 || resourceCount.files > 0);
           const hasPR = !!prLink;
-          const hasInstructionStatus = instructionStatus && instructionStatus !== "unconfirmed";
 
           return (
             <div
@@ -128,8 +127,8 @@ export function ExecuteBranchTree({
                   </span>
                 )}
               </div>
-              {/* Row 2: All badges (PR, Issue, ToDo, Question, Resources, Instruction Status) */}
-              {(hasPR || hasTodos || hasQuestions || hasFigma || hasGithubIssue || hasNotion || hasOtherResources || hasInstructionStatus) && (
+              {/* Row 2: All badges (PR, Issue, ToDo, Question, Resources) */}
+              {(hasPR || hasTodos || hasQuestions || hasFigma || hasGithubIssue || hasNotion || hasOtherResources) && (
                 <div className="execute-branch-tree__badges-row">
                   {/* PR badge */}
                   {hasPR && (
@@ -223,19 +222,6 @@ export function ExecuteBranchTree({
                           <span className="execute-branch-tree__link-count">{(resourceCount?.other || 0) + (resourceCount?.files || 0)}</span>
                         </span>
                       )}
-                    </span>
-                  )}
-                  {/* Instruction confirmation status */}
-                  {hasInstructionStatus && (
-                    <span
-                      className={`execute-branch-tree__badge execute-branch-tree__badge--instruction execute-branch-tree__badge--instruction-${instructionStatus}`}
-                      title={
-                        instructionStatus === "confirmed"
-                          ? "Instruction confirmed"
-                          : "Instruction changed since confirmation"
-                      }
-                    >
-                      {instructionStatus === "confirmed" ? "✓" : "⚠"}
                     </span>
                   )}
                 </div>

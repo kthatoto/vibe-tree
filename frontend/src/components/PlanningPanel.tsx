@@ -323,6 +323,7 @@ export function PlanningPanel({
   const [executeAllTasksInstructions, setExecuteAllTasksInstructions] = useState<Array<{ branchName: string; instruction: string | null }>>([]);
   const [executeLoading, setExecuteLoading] = useState(false);
   const [executeEditMode, setExecuteEditMode] = useState(false);
+  const executeEditModeRef = useRef(false);
   const [executeEditTitle, setExecuteEditTitle] = useState("");
   const [executeEditBranches, setExecuteEditBranches] = useState<string[]>([]);
   const [showWorktreeSelector, setShowWorktreeSelector] = useState(false);
@@ -355,6 +356,9 @@ export function PlanningPanel({
   // Ref to track the latest planning branch index for async operations
   const planningCurrentBranchIndexRef = useRef(planningCurrentBranchIndex);
   planningCurrentBranchIndexRef.current = planningCurrentBranchIndex;
+
+  // Keep executeEditModeRef in sync with state (for WebSocket listener access)
+  executeEditModeRef.current = executeEditMode;
 
   // Load execute branches from session when selected
   useEffect(() => {
@@ -605,21 +609,25 @@ export function PlanningPanel({
     const unsubUpdated = wsClient.on("planning.updated", (msg) => {
       if (msg.data && typeof msg.data === "object" && "id" in msg.data) {
         const updated = msg.data as Partial<PlanningSession> & { id: string };
-        setSessions((prev) => prev.map((s) => {
-          if (s.id === updated.id) {
-            // Merge updated fields with existing session (preserve nodes/edges if not in update)
-            return { ...s, ...updated, nodes: updated.nodes ?? s.nodes, edges: updated.edges ?? s.edges };
+        setSessions((prev) => {
+          const newSessions = prev.map((s) => {
+            if (s.id === updated.id) {
+              // Merge updated fields with existing session (preserve nodes/edges if not in update)
+              return { ...s, ...updated, nodes: updated.nodes ?? s.nodes, edges: updated.edges ?? s.edges };
+            }
+            return s;
+          });
+          // Update parent only if this is the active tab AND not in edit mode
+          // Use the updated session from newSessions to avoid stale closure
+          if (activeTabId === updated.id && !executeEditModeRef.current) {
+            const merged = newSessions.find(s => s.id === updated.id);
+            if (merged) {
+              onSessionSelect?.(merged as PlanningSession);
+              onTasksChange?.(merged.nodes, merged.edges);
+            }
           }
-          return s;
-        }));
-        if (activeTabId === updated.id) {
-          const existing = sessions.find(s => s.id === updated.id);
-          if (existing) {
-            const merged = { ...existing, ...updated, nodes: updated.nodes ?? existing.nodes, edges: updated.edges ?? existing.edges };
-            onSessionSelect?.(merged as PlanningSession);
-            onTasksChange?.(merged.nodes, merged.edges);
-          }
-        }
+          return newSessions;
+        });
       }
     });
 

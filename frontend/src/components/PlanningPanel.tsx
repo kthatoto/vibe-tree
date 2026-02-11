@@ -279,10 +279,18 @@ export function PlanningPanel({
   const [instructionEditing, setInstructionEditing] = useState(false);
 
 
-  // Resizable sidebar
-  const [sidebarWidth, setSidebarWidth] = useState(420);
+  // Resizable sidebar - load initial width from localStorage
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem("vibe-tree-sidebar-width");
+    return saved ? parseInt(saved, 10) : 420;
+  });
   const [sidebarFullscreen, setSidebarFullscreen] = useState(false);
   const isResizing = useRef(false);
+
+  // Save sidebar width to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem("vibe-tree-sidebar-width", sidebarWidth.toString());
+  }, [sidebarWidth]);
 
   // Ref to track the latest selected session for async operations
   const selectedSessionRef = useRef(selectedSession);

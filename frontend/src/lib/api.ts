@@ -1163,6 +1163,7 @@ export const api = {
     assumption?: string;
     status?: PlanningQuestionStatus;
     answer?: string;
+    acknowledged?: boolean;
   }) =>
     fetchJson<PlanningQuestion>(`${API_BASE}/questions/${id}`, {
       method: "PATCH",

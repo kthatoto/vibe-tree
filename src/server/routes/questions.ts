@@ -104,6 +104,7 @@ const updateQuestionSchema = z.object({
   assumption: z.string().optional(),
   status: z.enum(["pending", "answered", "skipped"]).optional(),
   answer: z.string().optional(),
+  acknowledged: z.boolean().optional(),
 });
 
 // PATCH /api/questions/:id

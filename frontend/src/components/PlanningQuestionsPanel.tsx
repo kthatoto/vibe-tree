@@ -108,6 +108,15 @@ export function PlanningQuestionsPanel({
     }
   }, [disabled]);
 
+  const handleArchive = useCallback(async (id: number) => {
+    if (disabled) return;
+    try {
+      await api.updateQuestion(id, { acknowledged: true });
+    } catch (err) {
+      console.error("Failed to archive question:", err);
+    }
+  }, [disabled]);
+
   // Filter by branch if specified
   const filteredQuestions = branchName
     ? questions.filter((q) => q.branchName === branchName)
@@ -272,13 +281,29 @@ export function PlanningQuestionsPanel({
                 <div className="planning-questions__answer-row">
                   <p className="planning-questions__answer">{q.answer}</p>
                   {!disabled && (
-                    <button
-                      className="planning-questions__edit-btn"
-                      onClick={() => handleStartAnswer(q)}
-                      title="Edit answer"
-                    >
-                      Edit
-                    </button>
+                    <div className="planning-questions__row-actions">
+                      <button
+                        className="planning-questions__edit-btn"
+                        onClick={() => handleStartAnswer(q)}
+                        title="Edit answer"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="planning-questions__btn planning-questions__btn--small"
+                        onClick={() => handleArchive(q.id)}
+                        title="Mark as acknowledged"
+                      >
+                        Archive
+                      </button>
+                      <button
+                        className="planning-questions__btn planning-questions__btn--danger planning-questions__btn--small"
+                        onClick={() => handleDelete(q.id)}
+                        title="Delete question"
+                      >
+                        ×
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
@@ -300,13 +325,22 @@ export function PlanningQuestionsPanel({
               <div className="planning-questions__answer-row">
                 <p className="planning-questions__answer">{q.answer}</p>
                 {!disabled && (
-                  <button
-                    className="planning-questions__edit-btn"
-                    onClick={() => handleStartAnswer(q)}
-                    title="Edit answer"
-                  >
-                    Edit
-                  </button>
+                  <div className="planning-questions__row-actions">
+                    <button
+                      className="planning-questions__edit-btn"
+                      onClick={() => handleStartAnswer(q)}
+                      title="Edit answer"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="planning-questions__btn planning-questions__btn--danger planning-questions__btn--small"
+                      onClick={() => handleDelete(q.id)}
+                      title="Delete question"
+                    >
+                      ×
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -324,6 +358,17 @@ export function PlanningQuestionsPanel({
                 <span className="planning-questions__branch">{q.branchName}</span>
               )}
               <p className="planning-questions__text">{q.question}</p>
+              {!disabled && (
+                <div className="planning-questions__actions">
+                  <button
+                    className="planning-questions__btn planning-questions__btn--danger"
+                    onClick={() => handleDelete(q.id)}
+                    title="Delete question"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

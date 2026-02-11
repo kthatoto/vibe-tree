@@ -207,6 +207,18 @@
   background: #ef444422;
 }
 
+.planning-questions__btn--small {
+  padding: 2px 6px;
+  font-size: 10px;
+}
+
+.planning-questions__row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
 .planning-questions__answer-form {
   margin-top: 8px;
 }

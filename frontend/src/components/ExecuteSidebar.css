@@ -526,6 +526,10 @@
   flex-shrink: 0;
 }
 
+.execute-sidebar__branch-copy-btn--copied {
+  color: #22c55e;
+}
+
 .execute-sidebar__branch-nav-btn {
   width: 22px;
   height: 22px;

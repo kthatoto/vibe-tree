@@ -29,6 +29,7 @@ import {
   type TreeEdge,
   type TaskInstruction,
   type BranchLink,
+  type BranchExternalLink,
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import { useSessionNotifications } from "../lib/useSessionNotifications";
@@ -45,6 +46,16 @@ import figmaIcon from "../assets/figma.svg";
 import linkIcon from "../assets/link.svg";
 import "./PlanningPanel.css";
 
+// Get link type icon helper
+function getLinkTypeIconForTask(type: string): { iconSrc: string; className: string } {
+  switch (type) {
+    case "notion": return { iconSrc: notionIcon, className: "planning-panel__task-link-icon--notion" };
+    case "figma": return { iconSrc: figmaIcon, className: "planning-panel__task-link-icon--figma" };
+    case "github_issue": return { iconSrc: githubIcon, className: "planning-panel__task-link-icon--github" };
+    default: return { iconSrc: linkIcon, className: "planning-panel__task-link-icon--url" };
+  }
+}
+
 // Sortable task item component (for reordering)
 function SortableTaskItem({
   task,
@@ -52,12 +63,14 @@ function SortableTaskItem({
   isDraft,
   onRemove,
   onBranchNameChange,
+  links = [],
 }: {
   task: TaskNode;
   index: number;
   isDraft: boolean;
   onRemove: () => void;
   onBranchNameChange?: (newName: string) => void;
+  links?: BranchExternalLink[];
 }) {
   const [isEditingBranch, setIsEditingBranch] = useState(false);
   const [editBranchValue, setEditBranchValue] = useState(task.branchName || "");
@@ -167,6 +180,26 @@ function SortableTaskItem({
             <span className="planning-panel__task-expand-hint">
               {isExpanded ? "▲" : "▼"}
             </span>
+          </div>
+        )}
+        {links.length > 0 && (
+          <div className="planning-panel__task-links">
+            {links.map((link) => {
+              const { iconSrc, className } = getLinkTypeIconForTask(link.linkType);
+              return (
+                <a
+                  key={link.id}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`planning-panel__task-link-icon ${className}`}
+                  onClick={(e) => e.stopPropagation()}
+                  title={link.title || link.url}
+                >
+                  <img src={iconSrc} alt={link.linkType} />
+                </a>
+              );
+            })}
           </div>
         )}
       </div>
@@ -284,6 +317,9 @@ export function PlanningPanel({
       activationConstraint: { distance: 8 },
     })
   );
+
+  // Branch external links for tasks (keyed by branchName)
+  const [taskBranchLinksMap, setTaskBranchLinksMap] = useState<Record<string, BranchExternalLink[]>>({});
 
   // Execute Session state
   const [executeSelectedBranches, setExecuteSelectedBranches] = useState<string[]>([]);
@@ -1074,6 +1110,28 @@ export function PlanningPanel({
       handleStartPlanningSession();
     }
   }, [pendingPlanning]);
+
+  // Fetch branch links when tasks change
+  useEffect(() => {
+    if (!selectedSession || selectedSession.type !== "refinement") return;
+
+    const branchNames = selectedSession.nodes
+      .map((n) => n.branchName)
+      .filter((b): b is string => !!b);
+
+    if (branchNames.length === 0) {
+      setTaskBranchLinksMap({});
+      return;
+    }
+
+    api.getBranchLinksBatch(repoId, branchNames)
+      .then((links) => {
+        setTaskBranchLinksMap(links);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch branch links:", err);
+      });
+  }, [repoId, selectedSession?.id, selectedSession?.nodes]);
 
   // Sidebar resize handlers
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -2457,6 +2515,7 @@ export function PlanningPanel({
                       isDraft={selectedSession.status === "draft"}
                       onRemove={() => handleRemoveTask(task.id)}
                       onBranchNameChange={(newName) => handleBranchNameChange(task.id, newName)}
+                      links={task.branchName ? taskBranchLinksMap[task.branchName] : []}
                     />
                   ))}
                 </SortableContext>

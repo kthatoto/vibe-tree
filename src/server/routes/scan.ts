@@ -338,16 +338,19 @@ scanRouter.post("/", async (c) => {
   // Log final edges for debugging
   console.log(`[Scan] Final edges:`, edges.map(e => `${e.parent}->${e.child}(${e.confidence}${e.isDesigned ? ',designed' : ''})`).join(', '));
 
-  // Phase 1: Return immediately without ahead/behind (fast response)
-  // Calculate warnings without ahead/behind dependent ones
-  const initialWarnings = calculateWarnings(nodes, edges, branchNaming, defaultBranch, treeSpec);
-  // Filter out BEHIND_PARENT warnings (they depend on ahead/behind calculation)
-  const warningsWithoutBehind = initialWarnings.filter(w => w.code !== "BEHIND_PARENT");
+  // 9. Calculate ahead/behind based on finalized edges (parent branch, not default)
+  calculateAheadBehind(nodes, edges, localPath, defaultBranch);
 
-  // Generate restart info for active worktree
+  // 9.5. Calculate ahead/behind relative to remote (origin)
+  calculateRemoteAheadBehind(nodes, localPath);
+
+  // 10. Calculate warnings (including tree divergence)
+  const warnings = calculateWarnings(nodes, edges, branchNaming, defaultBranch, treeSpec);
+
+  // 9. Generate restart info for active worktree
   const activeWorktree = worktrees.find((w) => w.branch !== "HEAD");
   const restart = activeWorktree
-    ? generateRestartInfo(activeWorktree, nodes, warningsWithoutBehind, branchNaming)
+    ? generateRestartInfo(activeWorktree, nodes, warnings, branchNaming)
     : null;
 
   const snapshot: ScanSnapshot = {
@@ -356,46 +359,19 @@ scanRouter.post("/", async (c) => {
     branches: branchNames,
     nodes,
     edges,
-    warnings: warningsWithoutBehind,
+    warnings,
     worktrees,
     rules: { branchNaming },
     restart,
     ...(treeSpec && { treeSpec }),
   };
 
-  // Broadcast initial scan result (without ahead/behind)
+  // Broadcast scan result
   broadcast({
     type: "scan.updated",
     repoId,
     data: snapshot,
   });
-
-  // Phase 2: Calculate ahead/behind in background
-  (async () => {
-    try {
-      // Calculate ahead/behind based on finalized edges (parent branch, not default)
-      calculateAheadBehind(nodes, edges, localPath, defaultBranch);
-
-      // Calculate ahead/behind relative to remote (origin)
-      calculateRemoteAheadBehind(nodes, localPath);
-
-      // Recalculate warnings with ahead/behind data (now includes BEHIND_PARENT)
-      const fullWarnings = calculateWarnings(nodes, edges, branchNaming, defaultBranch, treeSpec);
-
-      // Broadcast the updated data
-      broadcast({
-        type: "scan.aheadBehindUpdated",
-        repoId,
-        data: {
-          nodes,
-          warnings: fullWarnings,
-        },
-      });
-      console.log(`[Scan] Background ahead/behind calculation completed for ${repoId}`);
-    } catch (err) {
-      console.warn("[Scan] Background ahead/behind calculation failed:", err);
-    }
-  })();
 
   return c.json(snapshot);
 });

@@ -783,8 +783,6 @@ export default function BranchGraph({
         {/* All badges in a single horizontal row below the node */}
         {(() => {
           const badges: Array<{ label: string; color: string }> = [];
-          // Check if ahead/behind is still loading (undefined means not yet calculated)
-          const isAheadBehindLoading = !isTentative && !isDefault && node.aheadBehind === undefined;
           // Local ahead/behind (vs parent branch)
           if (node.aheadBehind?.ahead && node.aheadBehind.ahead > 0) {
             badges.push({ label: `+${node.aheadBehind.ahead}`, color: "#4caf50" });
@@ -798,21 +796,6 @@ export default function BranchGraph({
           }
           if (node.remoteAheadBehind?.behind && node.remoteAheadBehind.behind > 0) {
             badges.push({ label: `↓${node.remoteAheadBehind.behind}`, color: "#f59e0b" });
-          }
-          // Show loading indicator if ahead/behind not yet calculated
-          if (isAheadBehindLoading) {
-            const startX = x + 4;
-            return (
-              <text
-                x={startX}
-                y={y + nodeHeight + 11}
-                fontSize={10}
-                fill="#6b7280"
-                opacity={0.7}
-              >
-                ...
-              </text>
-            );
           }
           if (badges.length === 0) return null;
           const badgeWidth = 22;

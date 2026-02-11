@@ -322,7 +322,6 @@ export type WSMessageType =
   | "projectRules.updated"
   | "plan.updated"
   | "scan.updated"
-  | "scan.aheadBehindUpdated"
   | "instructions.logged"
   | "agent.started"
   | "agent.finished"

@@ -179,3 +179,5 @@ dist
 .DS_Store
 data/local.db
 data/data.db
+
+/todos

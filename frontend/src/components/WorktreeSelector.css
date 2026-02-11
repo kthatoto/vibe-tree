@@ -1,0 +1,210 @@
+.worktree-selector {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.worktree-selector__overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.worktree-selector__dialog {
+  position: relative;
+  background: var(--bg-primary, #1a1a1a);
+  border: 1px solid var(--border-primary, #333);
+  border-radius: 8px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.worktree-selector__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary, #333);
+}
+
+.worktree-selector__header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.worktree-selector__close {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #888);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.worktree-selector__close:hover {
+  color: var(--text-primary, #fff);
+}
+
+.worktree-selector__description {
+  padding: 12px 20px;
+  font-size: 13px;
+  color: var(--text-secondary, #888);
+  border-bottom: 1px solid var(--border-primary, #333);
+}
+
+.worktree-selector__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.worktree-selector__empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-secondary, #888);
+  font-size: 13px;
+}
+
+.worktree-selector__loading {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-secondary, #888);
+  font-size: 14px;
+}
+
+.worktree-selector__error {
+  padding: 20px;
+  text-align: center;
+  color: var(--error, #e55);
+  font-size: 13px;
+}
+
+.worktree-selector__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.worktree-selector__item:hover {
+  background: var(--bg-secondary, #252525);
+}
+
+.worktree-selector__item--selected {
+  background: var(--bg-active, #2a2a3a);
+  border: 1px solid var(--accent, #6366f1);
+}
+
+.worktree-selector__item--active {
+  opacity: 0.7;
+}
+
+.worktree-selector__item-radio {
+  padding-top: 2px;
+}
+
+.worktree-selector__item-radio input {
+  cursor: pointer;
+}
+
+.worktree-selector__item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.worktree-selector__item-branch {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary, #fff);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.worktree-selector__item-path {
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+  margin-top: 4px;
+  word-break: break-all;
+  font-family: monospace;
+}
+
+.worktree-selector__badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.worktree-selector__badge--dirty {
+  background: rgba(234, 179, 8, 0.2);
+  color: #eab308;
+}
+
+.worktree-selector__badge--active {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+.worktree-selector__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-primary, #333);
+}
+
+.worktree-selector__btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.worktree-selector__btn--secondary {
+  background: var(--bg-secondary, #252525);
+  border: 1px solid var(--border-primary, #333);
+  color: var(--text-primary, #fff);
+}
+
+.worktree-selector__btn--secondary:hover {
+  background: var(--bg-tertiary, #333);
+}
+
+.worktree-selector__btn--primary {
+  background: var(--accent, #6366f1);
+  border: 1px solid var(--accent, #6366f1);
+  color: #fff;
+}
+
+.worktree-selector__btn--primary:hover {
+  background: var(--accent-hover, #5558e3);
+}
+
+.worktree-selector__btn--primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

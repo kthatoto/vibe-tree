@@ -40,6 +40,7 @@ import ExecuteSidebar from "./ExecuteSidebar";
 import ExecuteBranchTree from "./ExecuteBranchTree";
 import ExecuteTodoList from "./ExecuteTodoList";
 import PlanningQuestionsPanel from "./PlanningQuestionsPanel";
+import WorktreeSelector from "./WorktreeSelector";
 import type { TaskSuggestion } from "../lib/task-parser";
 import { getResourceIcon, figmaIcon, githubIcon, notionIcon, linkIcon } from "../lib/resourceIcons";
 import "./PlanningPanel.css";
@@ -317,6 +318,7 @@ export function PlanningPanel({
   const [executeEditMode, setExecuteEditMode] = useState(false);
   const [executeEditTitle, setExecuteEditTitle] = useState("");
   const [executeEditBranches, setExecuteEditBranches] = useState<string[]>([]);
+  const [showWorktreeSelector, setShowWorktreeSelector] = useState(false);
 
   // Planning Session state (similar to Execute but for planning multiple branches)
   const [planningSelectedBranches, setPlanningSelectedBranches] = useState<string[]>([]);
@@ -1105,6 +1107,7 @@ export function PlanningPanel({
       chatSessionId: null,
       executeBranches: null,
       currentExecuteIndex: 0,
+      selectedWorktreePath: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -1305,9 +1308,22 @@ export function PlanningPanel({
 
   const handleStartExecution = async () => {
     if (!selectedSession || executeSelectedBranches.length === 0) return;
+    // Show worktree selector dialog
+    setShowWorktreeSelector(true);
+  };
+
+  const handleWorktreeSelected = async (worktreePath: string | null) => {
+    setShowWorktreeSelector(false);
+    if (!selectedSession || executeSelectedBranches.length === 0) return;
     setExecuteLoading(true);
     try {
+      // First update execute branches
       const updated = await api.updateExecuteBranches(selectedSession.id, executeSelectedBranches);
+      // Then set worktree path if selected
+      if (worktreePath !== null) {
+        await api.selectWorktree(selectedSession.id, worktreePath);
+        updated.selectedWorktreePath = worktreePath;
+      }
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       onSessionSelect?.(updated);
     } catch (err) {
@@ -2762,6 +2778,16 @@ export function PlanningPanel({
       <div className="planning-panel__content">
         {selectedSession ? renderSessionDetail() : renderSessionList()}
       </div>
+
+      {/* Worktree Selection Dialog */}
+      {showWorktreeSelector && (
+        <WorktreeSelector
+          repoId={repoId}
+          onSelect={handleWorktreeSelected}
+          onCancel={() => setShowWorktreeSelector(false)}
+          selectedWorktreePath={selectedSession?.selectedWorktreePath}
+        />
+      )}
     </div>
   );
 }

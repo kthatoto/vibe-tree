@@ -450,7 +450,22 @@ chatRouter.post("/send", async (c) => {
     if (!repoPin) {
       throw new BadRequestError(`Repo pin not found for repoId: ${session.repoId}`);
     }
-    worktreePath = repoPin.localPath;
+
+    // Check if this is an Execute session with a selected worktree
+    const planningSessionId = session.worktreePath.replace("planning:", "");
+    const [planningSession] = await db
+      .select()
+      .from(schema.planningSessions)
+      .where(eq(schema.planningSessions.id, planningSessionId))
+      .limit(1);
+
+    // Use selectedWorktreePath if set for Execute sessions, otherwise use localPath
+    if (planningSession?.type === "execute" && planningSession.selectedWorktreePath) {
+      worktreePath = planningSession.selectedWorktreePath;
+      console.log(`[Chat] Using selected worktree for Execute session: ${worktreePath}`);
+    } else {
+      worktreePath = repoPin.localPath;
+    }
   } else {
     worktreePath = session.worktreePath;
   }

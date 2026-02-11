@@ -318,6 +318,7 @@ export interface PlanningSession {
   chatSessionId: string | null;
   executeBranches: string[] | null; // Selected branches for execute session
   currentExecuteIndex: number; // Current index in executeBranches
+  selectedWorktreePath: string | null; // Selected worktree path for execute session
   createdAt: string;
   updatedAt: string;
 }
@@ -891,6 +892,22 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ messageCount }),
       }
+    ),
+  selectWorktree: (id: string, worktreePath: string | null) =>
+    fetchJson<PlanningSession>(
+      `${API_BASE}/planning-sessions/${id}/select-worktree`,
+      {
+        method: "POST",
+        body: JSON.stringify({ worktreePath }),
+      }
+    ),
+
+  // Worktrees API
+  getWorktrees: (localPath: string) =>
+    fetchJson<WorktreeInfo[]>(`${API_BASE}/worktrees?localPath=${encodeURIComponent(localPath)}`),
+  getWorktreesByRepo: (repoId: string) =>
+    fetchJson<{ localPath: string; worktrees: WorktreeInfo[] }>(
+      `${API_BASE}/worktrees/by-repo?repoId=${encodeURIComponent(repoId)}`
     ),
 
   // Task Instructions

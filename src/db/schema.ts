@@ -73,6 +73,7 @@ export const planningSessions = sqliteTable("planning_sessions", {
   chatSessionId: text("chat_session_id"), // linked chat session
   executeBranchesJson: text("execute_branches_json"), // JSON array of branch names for execute session ["branch1", "branch2"]
   currentExecuteIndex: integer("current_execute_index").default(0), // current index in executeBranchesJson
+  selectedWorktreePath: text("selected_worktree_path"), // Selected worktree path for execute session (null = use default)
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

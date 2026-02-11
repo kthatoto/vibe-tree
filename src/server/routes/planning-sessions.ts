@@ -39,6 +39,7 @@ interface PlanningSession {
   chatSessionId: string | null;
   executeBranches: string[] | null; // Selected branches for execute session
   currentExecuteIndex: number; // Current index in executeBranches
+  selectedWorktreePath: string | null; // Selected worktree path for execute session
   createdAt: string;
   updatedAt: string;
 }
@@ -57,6 +58,7 @@ function toSession(row: typeof schema.planningSessions.$inferSelect): PlanningSe
     chatSessionId: row.chatSessionId,
     executeBranches: row.executeBranchesJson ? JSON.parse(row.executeBranchesJson) as string[] : null,
     currentExecuteIndex: row.currentExecuteIndex ?? 0,
+    selectedWorktreePath: row.selectedWorktreePath ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -874,4 +876,52 @@ ${conversationSnippet}
     // Return current title on error
     return c.json({ title: currentTitle, updated: false });
   }
+});
+
+// Schema for select-worktree
+const selectWorktreeSchema = z.object({
+  worktreePath: z.string().nullable(), // null to clear selection (use default)
+});
+
+// POST /api/planning-sessions/:id/select-worktree - Select worktree for execute session
+planningSessionsRouter.post("/:id/select-worktree", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+  const { worktreePath } = validateOrThrow(selectWorktreeSchema, body);
+
+  const [session] = await db
+    .select()
+    .from(schema.planningSessions)
+    .where(eq(schema.planningSessions.id, id));
+
+  if (!session) {
+    throw new NotFoundError("Planning session not found");
+  }
+
+  // Only allow worktree selection for execute sessions
+  if (session.type !== "execute") {
+    throw new BadRequestError("Worktree selection is only available for execute sessions");
+  }
+
+  const now = new Date().toISOString();
+  await db
+    .update(schema.planningSessions)
+    .set({
+      selectedWorktreePath: worktreePath,
+      updatedAt: now,
+    })
+    .where(eq(schema.planningSessions.id, id));
+
+  const [updated] = await db
+    .select()
+    .from(schema.planningSessions)
+    .where(eq(schema.planningSessions.id, id));
+
+  broadcast({
+    type: "planning.updated",
+    repoId: updated!.repoId,
+    data: toSession(updated!),
+  });
+
+  return c.json(toSession(updated!));
 });

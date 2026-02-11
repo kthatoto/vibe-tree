@@ -19,6 +19,7 @@ import { branchLinksRouter } from "./routes/branch-links";
 import { todosRouter } from "./routes/todos";
 import { questionsRouter } from "./routes/questions";
 import { branchResourcesRouter } from "./routes/branch-resources";
+import { worktreesRouter } from "./routes/worktrees";
 import { errorHandler } from "./middleware/error-handler";
 import { ptyManager } from "./pty-manager";
 import { handleWsMessage, addClient, removeClient, broadcast, type WSClient } from "./ws";
@@ -68,6 +69,7 @@ app.route("/api/branch-links", branchLinksRouter);
 app.route("/api/todos", todosRouter);
 app.route("/api/questions", questionsRouter);
 app.route("/api/branch-resources", branchResourcesRouter);
+app.route("/api/worktrees", worktreesRouter);
 
 // Internal broadcast endpoint for MCP server
 app.post("/api/internal/broadcast", async (c) => {

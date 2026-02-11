@@ -434,16 +434,6 @@ export function ExecuteSidebar({
     <div className="execute-sidebar">
       {/* Branch Tree (compact) with refresh button */}
       <div className="execute-sidebar__branches">
-        <div className="execute-sidebar__branches-header">
-          <button
-            className="execute-sidebar__refresh-btn"
-            onClick={handleRefreshAll}
-            disabled={isRefreshing}
-            title="Refresh all PR info from GitHub"
-          >
-            {isRefreshing ? "..." : "↻"}
-          </button>
-        </div>
         <ExecuteBranchTree
           branches={executeBranches}
           selectedBranchIndex={previewBranch ? executeBranches.indexOf(previewBranch) : currentExecuteIndex}
@@ -453,6 +443,8 @@ export function ExecuteSidebar({
           branchTodoCounts={branchTodoCounts}
           branchQuestionCounts={branchQuestionCounts}
           branchLinks={allBranchLinks}
+          onRefresh={handleRefreshAll}
+          isRefreshing={isRefreshing}
         />
       </div>
 

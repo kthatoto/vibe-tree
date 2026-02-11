@@ -18,6 +18,8 @@ interface ExecuteBranchTreeProps {
   branchQuestionCounts?: Map<string, QuestionCounts>;
   branchLinks?: Map<string, BranchLink[]>;
   showCompletionCount?: boolean;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export function ExecuteBranchTree({
@@ -30,6 +32,8 @@ export function ExecuteBranchTree({
   branchQuestionCounts = new Map(),
   branchLinks = new Map(),
   showCompletionCount = true,
+  onRefresh,
+  isRefreshing = false,
 }: ExecuteBranchTreeProps) {
   // Determine branch completion status
   const getCompletionStatus = (branch: string): "completed" | "pending" => {
@@ -45,6 +49,16 @@ export function ExecuteBranchTree({
             ? `${completedBranches.size}/${branches.length} Branches`
             : `${branches.length} Branches`}
         </h4>
+        {onRefresh && (
+          <button
+            className="execute-branch-tree__refresh-btn"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            title="Refresh all PR info from GitHub"
+          >
+            {isRefreshing ? "..." : "↻"}
+          </button>
+        )}
       </div>
       <div className="execute-branch-tree__list">
         {branches.map((branch, index) => {

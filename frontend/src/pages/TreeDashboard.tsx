@@ -1348,7 +1348,7 @@ export default function TreeDashboard() {
                           };
                         });
                       }}
-                      tentativeBaseBranch={selectedSessionBaseBranch}
+                      tentativeBaseBranch={selectedSessionBaseBranch ?? undefined}
                       onBranchCreate={(baseBranch) => {
                         setCreateBranchBase(baseBranch);
                         setCreateBranchName("");

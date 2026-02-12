@@ -1,22 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  DndContext,
-  DragOverlay,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-  arrayMove,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import {
   api,
   type PlanningSession,
   type TaskNode,
@@ -32,175 +15,12 @@ import {
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import { useSessionNotifications } from "../lib/useSessionNotifications";
-import { ChatPanel } from "./ChatPanel";
-import ExecuteBranchSelector from "./ExecuteBranchSelector";
-import ExecuteSidebar from "./ExecuteSidebar";
 import WorktreeSelector from "./WorktreeSelector";
+import { SessionDetail } from "./SessionDetail";
 import type { TaskSuggestion } from "../lib/task-parser";
-import { getResourceIcon, figmaIcon, githubIcon, notionIcon, linkIcon } from "../lib/resourceIcons";
 import "./PlanningPanel.css";
 
 // Sortable task item component (for reordering)
-function SortableTaskItem({
-  task,
-  index,
-  isDraft,
-  onRemove,
-  onBranchNameChange,
-  links = [],
-}: {
-  task: TaskNode;
-  index: number;
-  isDraft: boolean;
-  onRemove: () => void;
-  onBranchNameChange?: (newName: string) => void;
-  links?: BranchExternalLink[];
-}) {
-  const [isEditingBranch, setIsEditingBranch] = useState(false);
-  const [editBranchValue, setEditBranchValue] = useState(task.branchName || "");
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: task.id,
-    disabled: !isDraft || isEditingBranch,
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
-  const handleBranchSave = () => {
-    onBranchNameChange?.(editBranchValue);
-    setIsEditingBranch(false);
-  };
-
-  const handleBranchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleBranchSave();
-    } else if (e.key === "Escape") {
-      setEditBranchValue(task.branchName || "");
-      setIsEditingBranch(false);
-    }
-  };
-
-  const handleTaskClick = (e: React.MouseEvent) => {
-    // Don't toggle if clicking on interactive elements
-    if ((e.target as HTMLElement).closest("button, input, .planning-panel__task-branch--editable")) {
-      return;
-    }
-    setIsExpanded(!isExpanded);
-  };
-
-  // Generate default branch name from title if not set
-  const displayBranchName = task.branchName || `task/${task.title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").substring(0, 30)}`;
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`planning-panel__task-item ${isExpanded ? "planning-panel__task-item--expanded" : ""} ${task.issueUrl ? "planning-panel__task-item--has-issue" : ""} ${isDragging ? "planning-panel__task-item--dragging" : ""}`}
-      onClick={handleTaskClick}
-      {...(isEditingBranch ? {} : { ...attributes, ...listeners })}
-    >
-      <div className="planning-panel__task-order">{index + 1}</div>
-      <div className="planning-panel__task-content">
-        <div className="planning-panel__task-title">
-          {task.title}
-          {task.issueUrl && (
-            <a
-              href={task.issueUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="planning-panel__task-issue-link"
-              onClick={(e) => e.stopPropagation()}
-              title={task.issueUrl}
-            >
-              <img src={githubIcon} alt="Issue" />
-            </a>
-          )}
-        </div>
-        <div className="planning-panel__task-branch-row">
-          {isEditingBranch ? (
-            <input
-              type="text"
-              value={editBranchValue}
-              onChange={(e) => setEditBranchValue(e.target.value)}
-              onBlur={handleBranchSave}
-              onKeyDown={handleBranchKeyDown}
-              className="planning-panel__task-branch-input"
-              autoFocus
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <div
-              className={`planning-panel__task-branch ${isDraft ? "planning-panel__task-branch--editable" : ""}`}
-              onClick={(e) => {
-                if (isDraft) {
-                  e.stopPropagation();
-                  setEditBranchValue(task.branchName || displayBranchName);
-                  setIsEditingBranch(true);
-                }
-              }}
-            >
-              {displayBranchName}
-              {isDraft && <span className="planning-panel__task-branch-edit">✎</span>}
-            </div>
-          )}
-        </div>
-        {task.description && (
-          <div className="planning-panel__task-desc-wrapper">
-            <div className={`planning-panel__task-desc ${isExpanded ? "planning-panel__task-desc--expanded" : ""}`}>
-              {task.description}
-            </div>
-            <span className="planning-panel__task-expand-hint">
-              {isExpanded ? "▲" : "▼"}
-            </span>
-          </div>
-        )}
-        {links.length > 0 && (
-          <div className="planning-panel__task-links">
-            {links.map((link) => {
-              const icon = getResourceIcon(link.linkType);
-              return (
-                <a
-                  key={link.id}
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`planning-panel__task-link-icon planning-panel__task-link-icon${icon.className}`}
-                  onClick={(e) => e.stopPropagation()}
-                  title={link.title || link.url}
-                >
-                  <img src={icon.src} alt={icon.alt} />
-                </a>
-              );
-            })}
-          </div>
-        )}
-      </div>
-      {isDraft && (
-        <button
-          className="planning-panel__task-remove"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-        >
-          ×
-        </button>
-      )}
-    </div>
-  );
-}
 
 interface PlanningPanelProps {
   repoId: string;
@@ -306,22 +126,14 @@ export function PlanningPanel({
     markAsSeen,
   } = useSessionNotifications(chatSessionIds, selectedSession?.chatSessionId);
 
-  // Drag and drop for task parent-child relationships
-  const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    })
-  );
-
   // Branch external links for tasks (keyed by branchName)
-  const [taskBranchLinksMap, setTaskBranchLinksMap] = useState<Record<string, BranchExternalLink[]>>({});
+  const [_taskBranchLinksMap, setTaskBranchLinksMap] = useState<Record<string, BranchExternalLink[]>>({});
 
   // Execute Session state
   const [executeSelectedBranches, setExecuteSelectedBranches] = useState<string[]>([]);
-  const [executeCurrentTaskInstruction, setExecuteCurrentTaskInstruction] = useState<TaskInstruction | null>(null);
-  const [executeAllTasksInstructions, setExecuteAllTasksInstructions] = useState<Array<{ branchName: string; instruction: string | null }>>([]);
-  const [executeLoading, setExecuteLoading] = useState(false);
+  const [_executeCurrentTaskInstruction, setExecuteCurrentTaskInstruction] = useState<TaskInstruction | null>(null);
+  const [_executeAllTasksInstructions, setExecuteAllTasksInstructions] = useState<Array<{ branchName: string; instruction: string | null }>>([]);
+  const [_executeLoading, setExecuteLoading] = useState(false);
   const [executeEditMode, setExecuteEditMode] = useState(false);
   const executeEditModeRef = useRef(false);
   const [executeEditTitle, setExecuteEditTitle] = useState("");
@@ -332,8 +144,8 @@ export function PlanningPanel({
   const [planningSelectedBranches, setPlanningSelectedBranches] = useState<string[]>([]);
   const [planningCurrentBranchIndex, setPlanningCurrentBranchIndex] = useState(0); // AI's working branch
   const [userViewBranchIndex, setUserViewBranchIndex] = useState(0); // User's viewing branch (separate from AI)
-  const [planningLoading, setPlanningLoading] = useState(false);
-  const [claudeWorking, setClaudeWorking] = useState(false);
+  const [_planningLoading, setPlanningLoading] = useState(false);
+  const [_claudeWorking, setClaudeWorking] = useState(false);
 
   // Planning sidebar state - now managed by ExecuteSidebar
   // Keeping setters for useEffects, prefixing unused values with underscore
@@ -668,7 +480,7 @@ export function PlanningPanel({
       if (msg.data && typeof msg.data === "object" && "nodes" in msg.data && "edges" in msg.data) {
         const { nodes, edges } = msg.data as { nodes: TaskNode[]; edges: TaskEdge[] };
         // planningSessionId is at message top-level, not in data
-        const sessionId = msg.planningSessionId;
+        const sessionId = (msg as { planningSessionId?: string }).planningSessionId;
         if (sessionId) {
           setSessions((prev) => prev.map((s) => {
             if (s.id === sessionId) {
@@ -1284,7 +1096,7 @@ export function PlanningPanel({
     document.addEventListener("mouseup", handleMouseUp);
   }, [sidebarWidth]);
 
-  const handleConfirm = async () => {
+  const _handleConfirm = async () => {
     if (!selectedSession) return;
     if (selectedSession.type !== "planning" && selectedSession.nodes.length === 0) {
       setError("No tasks to confirm");
@@ -1302,7 +1114,7 @@ export function PlanningPanel({
     }
   };
 
-  const handleUnconfirm = async () => {
+  const _handleUnconfirm = async () => {
     if (!selectedSession) return;
     setLoading(true);
     try {
@@ -1316,7 +1128,7 @@ export function PlanningPanel({
     }
   };
 
-  const handleDiscard = async () => {
+  const _handleDiscard = async () => {
     if (!selectedSession) return;
     if (!confirm("このプランニングセッションを破棄しますか？")) return;
     setLoading(true);
@@ -1333,7 +1145,7 @@ export function PlanningPanel({
     }
   };
 
-  const handleDelete = async () => {
+  const _handleDelete = async () => {
     if (!selectedSession) return;
     if (!confirm("このプランニングセッションを完全に削除しますか？")) return;
     setLoading(true);
@@ -1358,7 +1170,7 @@ export function PlanningPanel({
   };
 
   // Finalize Planning Session
-  const handleFinalizePlanning = async () => {
+  const _handleFinalizePlanning = async () => {
     if (!selectedSession) return;
     try {
       const updated = await api.confirmPlanningSession(selectedSession.id);
@@ -1370,11 +1182,11 @@ export function PlanningPanel({
   };
 
   // Execute Session handlers
-  const handleExecuteBranchesChange = async (newBranches: string[]) => {
+  const _handleExecuteBranchesChange = async (newBranches: string[]) => {
     setExecuteSelectedBranches(newBranches);
   };
 
-  const handleStartExecution = async () => {
+  const _handleStartExecution = async () => {
     if (!selectedSession || executeSelectedBranches.length === 0) return;
     // Show worktree selector dialog
     setShowWorktreeSelector(true);
@@ -1402,11 +1214,11 @@ export function PlanningPanel({
   };
 
   // Planning Session handlers
-  const handlePlanningBranchesChange = (branches: string[]) => {
+  const _handlePlanningBranchesChange = (branches: string[]) => {
     setPlanningSelectedBranches(branches);
   };
 
-  const handleStartPlanning = async () => {
+  const _handleStartPlanning = async () => {
     if (!selectedSession || planningSelectedBranches.length === 0) return;
     setPlanningLoading(true);
     try {
@@ -1420,7 +1232,7 @@ export function PlanningPanel({
     }
   };
 
-  const handlePlanningBranchSwitch = (branchIndex: number) => {
+  const _handlePlanningBranchSwitch = (branchIndex: number) => {
     // Only change user's view, not AI's working branch
     setUserViewBranchIndex(branchIndex);
   };
@@ -1445,18 +1257,18 @@ export function PlanningPanel({
   };
 
   // Execute Session edit mode handlers
-  const handleStartExecuteEdit = () => {
+  const _handleStartExecuteEdit = () => {
     if (!selectedSession) return;
     setExecuteEditTitle(selectedSession.title);
     setExecuteEditBranches(selectedSession.executeBranches || []);
     setExecuteEditMode(true);
   };
 
-  const handleCancelExecuteEdit = () => {
+  const _handleCancelExecuteEdit = () => {
     setExecuteEditMode(false);
   };
 
-  const handleSaveExecuteEdit = async () => {
+  const _handleSaveExecuteEdit = async () => {
     if (!selectedSession) return;
     setExecuteLoading(true);
     try {
@@ -1479,7 +1291,7 @@ export function PlanningPanel({
 
   // Manual branch switch for Execute Session
   // TODO: Add API endpoint for setting currentExecuteIndex
-  const handleManualBranchSwitch = useCallback((_branchIndex: number) => {
+  const _handleManualBranchSwitch = useCallback((_branchIndex: number) => {
     if (!selectedSession || selectedSession.type !== "execute") return;
     // For now, manual branch switching is view-only (via preview)
     // Full implementation would require an API to update currentExecuteIndex
@@ -1490,7 +1302,7 @@ export function PlanningPanel({
 
   // Note: Branch completion and advancement is handled by MCP tool mark_branch_complete
   // Frontend only logs completion for debugging
-  const handleBranchCompleted = useCallback((branchName: string) => {
+  const _handleBranchCompleted = useCallback((branchName: string) => {
     console.log(`[PlanningPanel] Branch ${branchName} todos completed (MCP will handle advancement)`);
   }, []);
 
@@ -1506,7 +1318,7 @@ export function PlanningPanel({
   };
 
   // External link handlers
-  const handleAddLink = async () => {
+  const _handleAddLink = async () => {
     if (!newLinkUrl.trim() || !selectedSession || addingLinkCount > 0) return;
 
     // Capture session ID at start to handle session switching during async
@@ -1560,14 +1372,14 @@ export function PlanningPanel({
 
   const [linksCopied, setLinksCopied] = useState(false);
 
-  const handleCopyAllLinks = () => {
+  const _handleCopyAllLinks = () => {
     const urls = externalLinks.map((link) => link.url).join("\n");
     navigator.clipboard.writeText(urls);
     setLinksCopied(true);
     setTimeout(() => setLinksCopied(false), 2000);
   };
 
-  const handleRemoveLink = async (id: number) => {
+  const _handleRemoveLink = async (id: number) => {
     if (!selectedSession) return;
     const sessionId = selectedSession.id;
     try {
@@ -1630,7 +1442,7 @@ export function PlanningPanel({
   }, [onTasksChange]);
 
   // Task removal
-  const handleRemoveTask = async (taskId: string) => {
+  const _handleRemoveTask = async (taskId: string) => {
     if (!selectedSession) return;
     const updatedNodes = selectedSession.nodes.filter((n) => n.id !== taskId);
     const updatedEdges = selectedSession.edges.filter(
@@ -1648,89 +1460,19 @@ export function PlanningPanel({
     }
   };
 
-  // Drag and drop handlers for reordering tasks (serial order)
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveDragId(event.active.id as string);
-  };
-
-  const handleDragEnd = async (event: DragEndEvent) => {
-    setActiveDragId(null);
-    const { active, over } = event;
-    if (!over || !selectedSession) return;
-
-    const draggedId = active.id as string;
-    const overId = over.id as string;
-
-    // Don't reorder if dropped on self
-    if (draggedId === overId) return;
-
-    const oldIndex = selectedSession.nodes.findIndex((n) => n.id === draggedId);
-    const newIndex = selectedSession.nodes.findIndex((n) => n.id === overId);
-
-    if (oldIndex === -1 || newIndex === -1) return;
-
-    // Reorder nodes using arrayMove
-    const reorderedNodes = arrayMove(selectedSession.nodes, oldIndex, newIndex);
-
-    // Generate serial edges (each task depends on the previous one)
-    const serialEdges: TaskEdge[] = [];
-    for (let i = 0; i < reorderedNodes.length - 1; i++) {
-      const current = reorderedNodes[i];
-      const next = reorderedNodes[i + 1];
-      if (current && next) {
-        serialEdges.push({ parent: current.id, child: next.id });
-      }
+  // Callback for claude working state change from SessionDetail
+  // (Must be before early return to satisfy React hooks rules)
+  const handleClaudeWorkingChange = useCallback((sessionId: string, working: boolean) => {
+    // Update claudeWorking state if this is the selected session
+    if (sessionId === selectedSession?.id) {
+      setClaudeWorking(working);
     }
+  }, [selectedSession?.id]);
 
-    // Optimistic update
-    setSessions((prev) => prev.map((s) =>
-      s.id === selectedSession.id ? { ...s, nodes: reorderedNodes, edges: serialEdges } : s
-    ));
-    onTasksChange?.(reorderedNodes, serialEdges);
-
-    try {
-      await api.updatePlanningSession(selectedSession.id, {
-        nodes: reorderedNodes,
-        edges: serialEdges,
-      });
-    } catch (err) {
-      console.error("Failed to reorder tasks:", err);
-      // Revert on error
-      setSessions((prev) => prev.map((s) =>
-        s.id === selectedSession.id ? selectedSession : s
-      ));
-      onTasksChange?.(selectedSession.nodes, selectedSession.edges);
-    }
-  };
-
-  // Update branch name for a task
-  const handleBranchNameChange = async (taskId: string, newBranchName: string) => {
-    if (!selectedSession) return;
-    const updatedNodes = selectedSession.nodes.map((n) =>
-      n.id === taskId ? { ...n, branchName: newBranchName } : n
-    );
-    try {
-      const updated = await api.updatePlanningSession(selectedSession.id, {
-        nodes: updatedNodes,
-      });
-      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-      onTasksChange?.(updated.nodes, updated.edges);
-    } catch (err) {
-      console.error("Failed to update branch name:", err);
-    }
-  };
-
-  const getLinkTypeIcon = (type: string): { iconSrc: string; className: string } => {
-    switch (type) {
-      case "notion": return { iconSrc: notionIcon, className: "planning-panel__link-icon--notion" };
-      case "figma": return { iconSrc: figmaIcon, className: "planning-panel__link-icon--figma" };
-      case "github_issue": return { iconSrc: githubIcon, className: "planning-panel__link-icon--github" };
-      case "github_pr": return { iconSrc: githubIcon, className: "planning-panel__link-icon--github" };
-      default: return { iconSrc: linkIcon, className: "" };
-    }
-  };
-
-  const [showLinkInput, setShowLinkInput] = useState(false);
+  // Determine session type from type property (for detail view)
+  const sessionTypeValue = selectedSession?.type || "refinement";
+  const _sessionTypeLabel = sessionTypeValue === "refinement" ? "Refinement" : sessionTypeValue === "planning" ? "Planning" : "Execute";
+  const _sessionTypeIcon = sessionTypeValue === "refinement" ? "💭" : sessionTypeValue === "planning" ? "📋" : "⚡";
 
   if (loading && sessions.length === 0) {
     return (
@@ -2011,603 +1753,43 @@ export function PlanningPanel({
     </div>
   );
 
-  // Determine session type from type property (for detail view)
-  const sessionTypeValue = selectedSession?.type || "refinement";
-  const sessionTypeLabel = sessionTypeValue === "refinement" ? "Refinement" : sessionTypeValue === "planning" ? "Planning" : "Execute";
-  const sessionTypeIcon = sessionTypeValue === "refinement" ? "💭" : sessionTypeValue === "planning" ? "📋" : "⚡";
-
-  // Render session detail content
-  const renderSessionDetail = () => {
-    if (!selectedSession) return null;
-
-    // Execute Session header (read-only with edit button)
-    if (sessionTypeValue === "execute") {
-      const isInProgress = selectedSession.executeBranches && selectedSession.executeBranches.length > 0;
-      const executeStatus = isInProgress ? "in_progress" : "draft";
-      const executeStatusLabel = isInProgress ? "In Progress" : "Draft";
-
-      return (
-        <div className="planning-panel__detail-content">
-          <div className="planning-panel__header">
-            <span className={`planning-panel__session-type planning-panel__session-type--${sessionTypeValue}`}>
-              <span className="planning-panel__session-type-icon">{sessionTypeIcon}</span>
-              {sessionTypeLabel}
-            </span>
-            <span className={`planning-panel__execute-status planning-panel__execute-status--${executeStatus}`}>
-              {executeStatusLabel}
-            </span>
-            <span className={`planning-panel__header-title${!selectedSession.title ? " planning-panel__header-title--untitled" : ""}`}>
-              {selectedSession.title || "Untitled Session"}
-              {!executeEditMode && (
-                <button
-                  className={`planning-panel__generate-title-btn${generatingTitle ? " planning-panel__generate-title-btn--loading" : ""}`}
-                  onClick={handleGenerateTitle}
-                  disabled={generatingTitle}
-                  title="Generate title from conversation"
-                >
-                  ↻
-                </button>
-              )}
-            </span>
-            {executeEditMode ? (
-              <>
-                <button
-                  className="planning-panel__cancel-btn"
-                  onClick={handleCancelExecuteEdit}
-                  disabled={executeLoading}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="planning-panel__save-btn"
-                  onClick={handleSaveExecuteEdit}
-                  disabled={executeLoading}
-                >
-                  {executeLoading ? "Saving..." : "Save"}
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  className="planning-panel__edit-btn"
-                  onClick={handleStartExecuteEdit}
-                >
-                  Edit
-                </button>
-                <button
-                  className="planning-panel__delete-btn"
-                  onClick={handleDelete}
-                  title="Delete this session"
-                >
-                  Delete
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Edit Mode - Target Branches */}
-          {executeEditMode && (
-            <div className="planning-panel__execute-edit">
-              <ExecuteBranchSelector
-                nodes={graphNodes}
-                edges={graphEdges}
-                defaultBranch={defaultBranch}
-                selectedBranches={executeEditBranches}
-                onSelectionChange={setExecuteEditBranches}
-              />
-            </div>
-          )}
-
-          {/* Branch Selection Mode (initial setup) */}
-          {!executeEditMode && (!selectedSession.executeBranches || selectedSession.executeBranches.length === 0) && (
-            <div className="planning-panel__execute-selection">
-              <ExecuteBranchSelector
-                nodes={graphNodes}
-                edges={graphEdges}
-                defaultBranch={defaultBranch}
-                selectedBranches={executeSelectedBranches}
-                onSelectionChange={handleExecuteBranchesChange}
-                onStartExecution={handleStartExecution}
-                executeLoading={executeLoading}
-              />
-            </div>
-          )}
-
-          {/* Execution Mode */}
-          {!executeEditMode && selectedSession.executeBranches && selectedSession.executeBranches.length > 0 && (
-            <div className={`planning-panel__detail-main ${sidebarFullscreen ? "planning-panel__detail-main--fullscreen" : ""}`}>
-              {/* Chat - hidden when sidebar is fullscreen */}
-              {!sidebarFullscreen && (
-                <div className="planning-panel__chat">
-                  {/* Current branch indicator */}
-                  {selectedSession.executeBranches[selectedSession.currentExecuteIndex] && (
-                    <div className="planning-panel__branch-indicator">
-                      <span className="planning-panel__branch-indicator-label">
-                        {claudeWorking ? "🤖 Working on:" : "📍 Current:"}
-                      </span>
-                      <span className="planning-panel__branch-indicator-name">
-                        {selectedSession.executeBranches[selectedSession.currentExecuteIndex]}
-                      </span>
-                      <span className="planning-panel__branch-indicator-hint">
-                        Task {selectedSession.currentExecuteIndex + 1} of {selectedSession.executeBranches.length}
-                      </span>
-                    </div>
-                  )}
-                  {selectedSession.chatSessionId && (
-                    <ChatPanel
-                      sessionId={selectedSession.chatSessionId}
-                      onTaskSuggested={handleTaskSuggested}
-                      existingTaskLabels={selectedSession.nodes.map((n) => n.title)}
-                      disabled={false}
-                      executeMode={true}
-                      executeContext={{
-                        branchName: selectedSession.executeBranches[selectedSession.currentExecuteIndex],
-                        instruction: executeCurrentTaskInstruction?.instructionMd || null,
-                        taskIndex: selectedSession.currentExecuteIndex,
-                        totalTasks: selectedSession.executeBranches.length,
-                        allTasks: executeAllTasksInstructions.length > 0
-                          ? executeAllTasksInstructions
-                          : selectedSession.executeBranches.map(b => ({ branchName: b, instruction: null })),
-                      }}
-                    />
-                  )}
-                </div>
-              )}
-
-              {/* Resizer */}
-              {!sidebarFullscreen && (
-                <div
-                  className="planning-panel__resizer"
-                  onMouseDown={handleResizeStart}
-                />
-              )}
-
-              {/* Sidebar */}
-              <div
-                className={`planning-panel__sidebar ${sidebarFullscreen ? "planning-panel__sidebar--fullscreen" : ""}`}
-                style={sidebarFullscreen ? undefined : { width: sidebarWidth }}
-              >
-                <ExecuteSidebar
-                  repoId={repoId}
-                  executeBranches={selectedSession.executeBranches}
-                  currentExecuteIndex={selectedSession.currentExecuteIndex}
-                  planningSessionId={selectedSession.id}
-                  onManualBranchSwitch={handleManualBranchSwitch}
-                  onBranchCompleted={handleBranchCompleted}
-                  workingBranch={claudeWorking ? selectedSession.executeBranches[selectedSession.currentExecuteIndex] : null}
-                  onExpandToggle={() => setSidebarFullscreen(!sidebarFullscreen)}
-                  isExpanded={sidebarFullscreen}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // Planning Session
-    if (sessionTypeValue === "planning") {
-      const planningBranches = selectedSession.executeBranches || [];
-      const hasBranches = planningBranches.length > 0;
-      const planningStatus = hasBranches ? "in_progress" : "draft";
-      const planningStatusLabel = hasBranches ? "In Progress" : "Draft";
-      // User's viewing branch (separate from AI's working branch)
-      const currentPlanningBranch = hasBranches
-        ? planningBranches[userViewBranchIndex]
-        : null;
-
-      return (
-        <div className="planning-panel__detail-content">
-          <div className="planning-panel__header">
-            <span className={`planning-panel__session-type planning-panel__session-type--${sessionTypeValue}`}>
-              <span className="planning-panel__session-type-icon">{sessionTypeIcon}</span>
-              {sessionTypeLabel}
-            </span>
-            <span className={`planning-panel__execute-status planning-panel__execute-status--${planningStatus}`}>
-              {planningStatusLabel}
-            </span>
-            <span className={`planning-panel__header-title${!selectedSession.title ? " planning-panel__header-title--untitled" : ""}`}>
-              {selectedSession.title || "Untitled Session"}
-              <button
-                className={`planning-panel__generate-title-btn${generatingTitle ? " planning-panel__generate-title-btn--loading" : ""}`}
-                onClick={handleGenerateTitle}
-                disabled={generatingTitle}
-                title="Generate title from conversation"
-              >
-                ↻
-              </button>
-            </span>
-            {executeEditMode ? (
-              <>
-                <button
-                  className="planning-panel__cancel-btn"
-                  onClick={handleCancelExecuteEdit}
-                  disabled={planningLoading}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="planning-panel__save-btn"
-                  onClick={handleSaveExecuteEdit}
-                  disabled={planningLoading}
-                >
-                  {planningLoading ? "Saving..." : "Save"}
-                </button>
-              </>
-            ) : (
-              <>
-                {hasBranches && selectedSession.status !== "confirmed" && (
-                  <button
-                    className="planning-panel__finalize-btn"
-                    onClick={() => handleFinalizePlanning()}
-                    title="Finalize planning session"
-                  >
-                    Finalize
-                  </button>
-                )}
-                {selectedSession.status === "confirmed" && (
-                  <span className="planning-panel__finalized-badge">Finalized</span>
-                )}
-                {hasBranches && (
-                  <button
-                    className="planning-panel__edit-btn"
-                    onClick={handleStartExecuteEdit}
-                  >
-                    Edit
-                  </button>
-                )}
-                <button
-                  className="planning-panel__delete-btn"
-                  onClick={handleDelete}
-                  title="Delete this session"
-                >
-                  Delete
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Edit Mode - Target Branches */}
-          {executeEditMode && (
-            <div className="planning-panel__execute-edit">
-              <ExecuteBranchSelector
-                nodes={graphNodes}
-                edges={graphEdges}
-                defaultBranch={defaultBranch}
-                selectedBranches={executeEditBranches}
-                onSelectionChange={setExecuteEditBranches}
-              />
-            </div>
-          )}
-
-          {/* Branch Selection Mode (initial setup) */}
-          {!executeEditMode && !hasBranches && (
-            <div className="planning-panel__execute-selection">
-              <ExecuteBranchSelector
-                nodes={graphNodes}
-                edges={graphEdges}
-                defaultBranch={defaultBranch}
-                selectedBranches={planningSelectedBranches}
-                onSelectionChange={handlePlanningBranchesChange}
-                onStartExecution={handleStartPlanning}
-                executeLoading={planningLoading}
-              />
-            </div>
-          )}
-
-          {/* Planning Mode */}
-          {!executeEditMode && hasBranches && (
-            <div className={`planning-panel__detail-main ${sidebarFullscreen ? "planning-panel__detail-main--fullscreen" : ""}`}>
-              {/* Chat - hidden when sidebar is fullscreen */}
-              {!sidebarFullscreen && (
-                <div className="planning-panel__chat">
-                  {/* Current branch indicator */}
-                  {currentPlanningBranch && (
-                    <div className="planning-panel__branch-indicator">
-                      <span className="planning-panel__branch-indicator-label">
-                        {claudeWorking ? "🤖 Working on:" : "📍 Focused:"}
-                      </span>
-                      <span className="planning-panel__branch-indicator-name">
-                        {currentPlanningBranch}
-                      </span>
-                      <span className="planning-panel__branch-indicator-hint">
-                        Chat messages will reference this branch
-                      </span>
-                    </div>
-                  )}
-                  {selectedSession.chatSessionId && (
-                    <ChatPanel
-                      sessionId={selectedSession.chatSessionId}
-                      onTaskSuggested={handleTaskSuggested}
-                      existingTaskLabels={selectedSession.nodes.map((n) => n.title)}
-                      disabled={false}
-                    />
-                  )}
-                </div>
-              )}
-
-              {/* Resizer */}
-              {!sidebarFullscreen && (
-                <div
-                  className="planning-panel__resizer"
-                  onMouseDown={handleResizeStart}
-                />
-              )}
-
-              {/* Sidebar */}
-              <div
-                className={`planning-panel__sidebar ${sidebarFullscreen ? "planning-panel__sidebar--fullscreen" : ""}`}
-                style={sidebarFullscreen ? undefined : { width: sidebarWidth }}
-              >
-                <ExecuteSidebar
-                  repoId={repoId}
-                  executeBranches={planningBranches}
-                  currentExecuteIndex={userViewBranchIndex}
-                  planningSessionId={selectedSession.id}
-                  onManualBranchSwitch={handlePlanningBranchSwitch}
-                  workingBranch={claudeWorking ? planningBranches[planningCurrentBranchIndex] : null}
-                  sessionType="planning"
-                  onExpandToggle={() => setSidebarFullscreen(!sidebarFullscreen)}
-                  isExpanded={sidebarFullscreen}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // Non-Execute, Non-Planning Session (Refinement)
-    const refinementStatus = selectedSession.status === "confirmed" ? "confirmed" : "draft";
-    const refinementStatusLabel = selectedSession.status === "confirmed" ? "Confirmed" : "Draft";
-
-    return (
-      <div className="planning-panel__detail-content">
-        <div className="planning-panel__header">
-          <span className={`planning-panel__session-type planning-panel__session-type--${sessionTypeValue}`}>
-            <span className="planning-panel__session-type-icon">{sessionTypeIcon}</span>
-            {sessionTypeLabel}
-          </span>
-          <span className={`planning-panel__execute-status planning-panel__execute-status--${refinementStatus}`}>
-            {refinementStatusLabel}
-          </span>
-          <span className={`planning-panel__header-title${!selectedSession.title ? " planning-panel__header-title--untitled" : ""}`}>
-            {selectedSession.title || "Untitled Session"}
-            <button
-              className={`planning-panel__generate-title-btn${generatingTitle ? " planning-panel__generate-title-btn--loading" : ""}`}
-              onClick={handleGenerateTitle}
-              disabled={generatingTitle}
-              title="Generate title from conversation"
-            >
-              ↻
-            </button>
-          </span>
-          <button
-            className="planning-panel__delete-btn"
-            onClick={handleDelete}
-            title="Delete this session"
-          >
-            Delete
-          </button>
-        </div>
-
-      {/* Non-Execute Session: Original layout */}
-      <div className="planning-panel__detail-main">
-        {/* Chat section */}
-        <div className="planning-panel__chat">
-          {selectedSession.chatSessionId && (
-            <ChatPanel
-              sessionId={selectedSession.chatSessionId}
-              onTaskSuggested={handleTaskSuggested}
-              existingTaskLabels={selectedSession.nodes.map((n) => n.title)}
-              disabled={selectedSession.status !== "draft"}
-            />
-          )}
-        </div>
-
-        {/* Resizer */}
-        <div
-          className="planning-panel__resizer"
-          onMouseDown={handleResizeStart}
-        />
-
-        {/* Sidebar: Links + Tasks */}
-        <div className="planning-panel__sidebar" style={{ width: sidebarWidth }}>
-          {/* External Links */}
-          <div className="planning-panel__links">
-            <div className="planning-panel__links-header">
-              <h4>Links</h4>
-              {externalLinks.length > 0 && (
-                <button
-                  className={`planning-panel__links-copy-btn${linksCopied ? ' planning-panel__links-copy-btn--copied' : ''}`}
-                  onClick={handleCopyAllLinks}
-                  title="Copy all links"
-                >
-                  {linksCopied ? 'Copied!' : 'Copy All'}
-                </button>
-              )}
-            </div>
-            <div className="planning-panel__links-list">
-              {externalLinks.map((link) => {
-                const { iconSrc, className } = getLinkTypeIcon(link.linkType);
-                const isSessionLevel = link.branchName === null;
-                // Extract sub-issue count from contentCache
-                const subIssueMatch = link.contentCache?.match(/## Sub-Issues \((\d+)件\)/);
-                const subIssueCount = subIssueMatch ? parseInt(subIssueMatch[1], 10) : 0;
-                const linkTitle = link.branchName
-                  ? `${link.title || link.url} (Branch: ${link.branchName})${subIssueCount > 0 ? ` - ${subIssueCount} sub-issues` : ''}`
-                  : `${link.title || link.url}${subIssueCount > 0 ? ` - ${subIssueCount} sub-issues` : ''}`;
-                return (
-                  <a
-                    key={link.id}
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`planning-panel__link-icon ${className}${isSessionLevel ? ' planning-panel__link-icon--session' : ''}`}
-                    title={linkTitle}
-                  >
-                    <img src={iconSrc} alt={link.linkType} />
-                    {subIssueCount > 0 && (
-                      <span className="planning-panel__link-sub-badge">{subIssueCount}</span>
-                    )}
-                    {selectedSession.status === "draft" && (
-                      <span
-                        className="planning-panel__link-remove-overlay"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleRemoveLink(link.id);
-                        }}
-                      >
-                        ×
-                      </span>
-                    )}
-                  </a>
-                );
-              })}
-              {addingLinkCount > 0 && (
-                Array.from({ length: addingLinkCount }).map((_, i) => (
-                  <div key={`skeleton-${i}`} className="planning-panel__link-icon planning-panel__link-icon--loading">
-                    <div className="planning-panel__link-skeleton" />
-                  </div>
-                ))
-              )}
-              {selectedSession.status === "draft" && addingLinkCount === 0 && (
-                <button
-                  className="planning-panel__link-add-icon"
-                  onClick={() => setShowLinkInput(!showLinkInput)}
-                  title="Add link"
-                >
-                  +
-                </button>
-              )}
-            </div>
-            {showLinkInput && selectedSession.status === "draft" && (
-              <div className="planning-panel__link-add-container">
-                <textarea
-                  className="planning-panel__link-add-input"
-                  placeholder="Paste URLs (one per line)..."
-                  value={newLinkUrl}
-                  onChange={(e) => setNewLinkUrl(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                      e.preventDefault();
-                      handleAddLink();
-                      setShowLinkInput(false);
-                    } else if (e.key === "Escape") {
-                      setShowLinkInput(false);
-                      setNewLinkUrl("");
-                    }
-                  }}
-                  autoFocus
-                />
-                <button
-                  className="planning-panel__link-add-submit"
-                  onClick={() => {
-                    handleAddLink();
-                    setShowLinkInput(false);
-                  }}
-                  disabled={!newLinkUrl.trim()}
-                >
-                  Add (⌘+Enter)
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Task list - for Refinement sessions */}
-          <div className="planning-panel__tasks">
-              <h4>Tasks ({selectedSession.nodes.length})</h4>
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragStart={handleDragStart}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext
-                  items={selectedSession.nodes.map((n) => n.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {selectedSession.nodes.map((task, index) => (
-                    <SortableTaskItem
-                      key={task.id}
-                      task={task}
-                      index={index}
-                      isDraft={selectedSession.status === "draft"}
-                      onRemove={() => handleRemoveTask(task.id)}
-                      onBranchNameChange={(newName) => handleBranchNameChange(task.id, newName)}
-                      links={task.branchName ? taskBranchLinksMap[task.branchName] : []}
-                    />
-                  ))}
-                </SortableContext>
-                <DragOverlay>
-                  {activeDragId && (
-                    <div className="planning-panel__task-item planning-panel__task-item--dragging">
-                      {selectedSession.nodes.find((t) => t.id === activeDragId)?.title}
-                    </div>
-                  )}
-                </DragOverlay>
-              </DndContext>
-              {selectedSession.nodes.length === 0 && (
-                <div className="planning-panel__tasks-empty">
-                  Chat with AI to suggest tasks
-                </div>
-              )}
-            </div>
-
-          {/* Actions in sidebar */}
-          {selectedSession.status === "draft" && (
-            <div className="planning-panel__actions">
-              <button
-                className="planning-panel__discard-btn"
-                onClick={handleDiscard}
-                disabled={loading}
-              >
-                Discard
-              </button>
-              <button
-                className="planning-panel__confirm-btn"
-                onClick={handleConfirm}
-                disabled={loading || selectedSession.nodes.length === 0}
-              >
-                Confirm
-              </button>
-            </div>
-          )}
-
-          {selectedSession.status === "confirmed" && (
-            <div className="planning-panel__status-banner planning-panel__status-banner--confirmed">
-              Confirmed
-              <button onClick={handleUnconfirm} className="planning-panel__unconfirm-btn">
-                Unconfirm
-              </button>
-              <button onClick={handleDelete} className="planning-panel__delete-btn">
-                Delete
-              </button>
-            </div>
-          )}
-
-          {selectedSession.status === "discarded" && (
-            <div className="planning-panel__status-banner planning-panel__status-banner--discarded">
-              Discarded
-              <button onClick={handleDelete} className="planning-panel__delete-btn">
-                Delete
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-    );
-  };
-
   // Main render: Tab bar + content
   return (
     <div className="planning-panel">
       {error && <div className="planning-panel__error">{error}</div>}
       {renderTabBar()}
       <div className="planning-panel__content">
-        {selectedSession ? renderSessionDetail() : renderSessionList()}
+        {/* Render ALL sessions - each maintains its own state */}
+        {sessions.map((session) => (
+          <SessionDetail
+            key={session.id}
+            session={session}
+            repoId={repoId}
+            isActive={session.id === activeTabId}
+            sidebarWidth={sidebarWidth}
+            sidebarFullscreen={sidebarFullscreen}
+            onSidebarWidthChange={setSidebarWidth}
+            onSidebarFullscreenChange={setSidebarFullscreen}
+            onResizeStart={handleResizeStart}
+            onSessionUpdate={(updates) => {
+              // Update session in local state
+              setSessions((prev) =>
+                prev.map((s) => (s.id === session.id ? { ...s, ...updates } : s))
+              );
+            }}
+            onSessionDelete={() => handleDeleteFromList(session.id)}
+            onTaskSuggested={handleTaskSuggested}
+            onClaudeWorkingChange={handleClaudeWorkingChange}
+            onWorktreeSelect={() => setShowWorktreeSelector(true)}
+            generatingTitle={generatingTitle}
+            onGenerateTitle={handleGenerateTitle}
+            graphNodes={graphNodes}
+            graphEdges={graphEdges}
+            defaultBranch={defaultBranch}
+          />
+        ))}
+        {/* Session list when no session is selected */}
+        {!activeTabId && renderSessionList()}
       </div>
 
       {/* Worktree Selection Dialog */}

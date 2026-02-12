@@ -110,7 +110,11 @@ scanRouter.get("/snapshot/:pinId", async (c) => {
         }
       }
 
-      return c.json(cachedSnapshot);
+      // Return snapshot with version metadata
+      return c.json({
+        snapshot: cachedSnapshot,
+        version: repoPin.cachedSnapshotVersion ?? 0,
+      });
     } catch {
       // Fall through to build from DB tables
       console.log(`[Snapshot] Failed to parse cachedSnapshotJson for pin ${pinId}, falling back`);
@@ -343,7 +347,11 @@ scanRouter.get("/snapshot/:pinId", async (c) => {
     ...(treeSpec && { treeSpec }),
   };
 
-  return c.json(cachedSnapshot);
+  // Return snapshot with version metadata (fallback path has version 0)
+  return c.json({
+    snapshot: cachedSnapshot,
+    version: repoPin.cachedSnapshotVersion ?? 0,
+  });
 });
 
 // POST /api/scan - Start background scan, return immediately

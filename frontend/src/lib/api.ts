@@ -515,7 +515,7 @@ export const api = {
 
   // Scan
   getSnapshot: (pinId: number) =>
-    fetchJson<ScanSnapshot>(`${API_BASE}/scan/snapshot/${pinId}`),
+    fetchJson<{ snapshot: ScanSnapshot; version: number }>(`${API_BASE}/scan/snapshot/${pinId}`),
   startScan: (localPath: string) =>
     fetchJson<{ started: boolean; repoId: string }>(`${API_BASE}/scan`, {
       method: "POST",

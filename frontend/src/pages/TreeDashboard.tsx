@@ -162,9 +162,9 @@ export default function TreeDashboard() {
     setPendingScanUpdate(null); // Clear any pending update notification
     try {
       // Immediately load cached snapshot from DB (fast)
-      const cachedSnapshot = await api.getSnapshot(pinId);
+      const { snapshot: cachedSnapshot, version } = await api.getSnapshot(pinId);
       setSnapshot(cachedSnapshot);
-      currentSnapshotVersion.current = 0; // Will be updated when scan completes
+      currentSnapshotVersion.current = version; // Set version from DB
       setLoading(false);
 
       // Start background scan (don't await - updates come via WebSocket)
@@ -194,9 +194,9 @@ export default function TreeDashboard() {
     setIsApplyingUpdate(true);
     try {
       // Fetch from DB (SSOT) instead of using WS payload
-      const freshSnapshot = await api.getSnapshot(selectedPinId);
+      const { snapshot: freshSnapshot, version } = await api.getSnapshot(selectedPinId);
       setSnapshot(freshSnapshot);
-      currentSnapshotVersion.current = pendingScanUpdate.version;
+      currentSnapshotVersion.current = version;
       setPendingScanUpdate(null);
     } catch (err) {
       console.error("[TreeDashboard] Failed to apply update:", err);
@@ -216,8 +216,9 @@ export default function TreeDashboard() {
 
     setIsApplyingUpdate(true);
     try {
-      const freshSnapshot = await api.getSnapshot(selectedPinId);
+      const { snapshot: freshSnapshot, version } = await api.getSnapshot(selectedPinId);
       setSnapshot(freshSnapshot);
+      currentSnapshotVersion.current = version;
       setPendingScanUpdate(null);
     } catch (err) {
       console.error("[TreeDashboard] Failed to refresh:", err);

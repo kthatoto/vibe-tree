@@ -667,7 +667,8 @@ export function PlanningPanel({
     const unsubTasksUpdated = wsClient.on("planning.tasksUpdated", (msg) => {
       if (msg.data && typeof msg.data === "object" && "nodes" in msg.data && "edges" in msg.data) {
         const { nodes, edges } = msg.data as { nodes: TaskNode[]; edges: TaskEdge[] };
-        const sessionId = (msg.data as { planningSessionId?: string }).planningSessionId;
+        // planningSessionId is at message top-level, not in data
+        const sessionId = msg.planningSessionId;
         if (sessionId) {
           setSessions((prev) => prev.map((s) => {
             if (s.id === sessionId) {

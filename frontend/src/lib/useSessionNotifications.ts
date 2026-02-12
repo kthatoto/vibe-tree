@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { wsClient } from "./ws";
 import { api, type ChatMessage } from "./api";
-import { useStreamingStates, setStreamingState } from "./useStreamingState";
+import { useStreamingStates } from "./useStreamingState";
 
 interface SessionNotification {
   unreadCount: number;
@@ -69,16 +69,13 @@ export function useSessionNotifications(sessionIds: string[], activeSessionId?: 
             unreadCount = messages.filter((m) => m.role === "assistant").length - 1;
           }
 
-          // Check if thinking (last message is from user) and set global streaming state
-          const isThinking = lastMessage?.role === "user";
-          // Initialize global streaming state
-          setStreamingState(sessionId, isThinking);
-
+          // Note: streaming state is managed by global useStreamingState hook
+          // which fetches from API. Here we only track unread counts.
           return {
             sessionId,
             notification: {
               unreadCount: Math.max(0, unreadCount),
-              isThinking, // Still stored but will be overridden by global state in getNotification
+              isThinking: false, // Will be overridden by global streaming state in getNotification
               lastMessageAt: lastMessage?.createdAt || null,
             },
           };

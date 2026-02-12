@@ -6,7 +6,7 @@ import { extractTaskSuggestions, removeTaskTags, type TaskSuggestion } from "../
 import { extractAskUserQuestion } from "../lib/ask-user-question";
 import { AskUserQuestionUI } from "./AskUserQuestionUI";
 import { wsClient } from "../lib/ws";
-import { useIsStreaming, setStreamingState } from "../lib/useStreamingState";
+import { useIsStreaming } from "../lib/useStreamingState";
 import githubIcon from "../assets/github.svg";
 
 interface ExecuteTaskInfo {
@@ -113,7 +113,8 @@ export function ChatPanel({
         }
       }
 
-      // Restore streaming state if there's an active stream
+      // Restore streaming chunks if there's an active stream
+      // Note: streaming state (isStreaming) is managed by global useStreamingState hook
       if (streamingState.isStreaming && streamingState.chunks.length > 0) {
         const restoredChunks: StreamingChunk[] = streamingState.chunks.map((chunk) => ({
           type: chunk.type as StreamingChunk["type"],
@@ -123,21 +124,9 @@ export function ChatPanel({
         }));
         setStreamingChunks(restoredChunks);
         hasStreamingChunksRef.current = true;
-        setStreamingState(sessionId, true);
-      } else if (isStillStreaming) {
-        // Last message has streaming flag but no active streaming state
-        // This means the process crashed or was cancelled without cleanup
-        // Don't set streaming=true, treat as complete
-        setStreamingChunks([]);
-        hasStreamingChunksRef.current = false;
-        setStreamingState(sessionId, false);
       } else {
         setStreamingChunks([]);
         hasStreamingChunksRef.current = false;
-        // If last message is from user and no streaming state, AI might still be starting
-        if (msgs.length > 0 && msgs[msgs.length - 1].role === "user") {
-          setStreamingState(sessionId, true);
-        }
       }
     } catch (err) {
       console.error("Failed to load messages:", err);

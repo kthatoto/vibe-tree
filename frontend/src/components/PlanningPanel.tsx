@@ -1759,35 +1759,41 @@ export function PlanningPanel({
       {error && <div className="planning-panel__error">{error}</div>}
       {renderTabBar()}
       <div className="planning-panel__content">
-        {/* Render ALL sessions - each maintains its own state */}
-        {sessions.map((session) => (
-          <SessionDetail
-            key={session.id}
-            session={session}
-            repoId={repoId}
-            isActive={session.id === activeTabId}
-            sidebarWidth={sidebarWidth}
-            sidebarFullscreen={sidebarFullscreen}
-            onSidebarWidthChange={setSidebarWidth}
-            onSidebarFullscreenChange={setSidebarFullscreen}
-            onResizeStart={handleResizeStart}
-            onSessionUpdate={(updates) => {
-              // Update session in local state
-              setSessions((prev) =>
-                prev.map((s) => (s.id === session.id ? { ...s, ...updates } : s))
-              );
-            }}
-            onSessionDelete={() => handleDeleteFromList(session.id)}
-            onTaskSuggested={handleTaskSuggested}
-            onClaudeWorkingChange={handleClaudeWorkingChange}
-            onWorktreeSelect={() => setShowWorktreeSelector(true)}
-            generatingTitle={generatingTitle}
-            onGenerateTitle={handleGenerateTitle}
-            graphNodes={graphNodes}
-            graphEdges={graphEdges}
-            defaultBranch={defaultBranch}
-          />
-        ))}
+        {/* Render only sessions that are open in tabs */}
+        {openTabIds
+          .filter((tabId) => !isEmptyTab(tabId))
+          .map((tabId) => {
+            const session = sessions.find((s) => s.id === tabId);
+            if (!session) return null;
+            return (
+              <SessionDetail
+                key={session.id}
+                session={session}
+                repoId={repoId}
+                isActive={session.id === activeTabId}
+                sidebarWidth={sidebarWidth}
+                sidebarFullscreen={sidebarFullscreen}
+                onSidebarWidthChange={setSidebarWidth}
+                onSidebarFullscreenChange={setSidebarFullscreen}
+                onResizeStart={handleResizeStart}
+                onSessionUpdate={(updates) => {
+                  // Update session in local state
+                  setSessions((prev) =>
+                    prev.map((s) => (s.id === session.id ? { ...s, ...updates } : s))
+                  );
+                }}
+                onSessionDelete={() => handleDeleteFromList(session.id)}
+                onTaskSuggested={handleTaskSuggested}
+                onClaudeWorkingChange={handleClaudeWorkingChange}
+                onWorktreeSelect={() => setShowWorktreeSelector(true)}
+                generatingTitle={generatingTitle}
+                onGenerateTitle={handleGenerateTitle}
+                graphNodes={graphNodes}
+                graphEdges={graphEdges}
+                defaultBranch={defaultBranch}
+              />
+            );
+          })}
         {/* Session list when no session is selected or empty tab is active */}
         {(!activeTabId || isEmptyTab(activeTabId)) && renderSessionList()}
       </div>

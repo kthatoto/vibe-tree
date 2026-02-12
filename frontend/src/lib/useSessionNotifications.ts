@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { wsClient } from "./ws";
 import { api, type ChatMessage } from "./api";
+import { useStreamingStates, setStreamingState } from "./useStreamingState";
 
 interface SessionNotification {
   unreadCount: number;
@@ -36,6 +37,9 @@ export function useSessionNotifications(sessionIds: string[], activeSessionId?: 
   const activeSessionIdRef = useRef(activeSessionId);
   activeSessionIdRef.current = activeSessionId;
 
+  // Use global streaming state as single source of truth for isThinking
+  const streamingStates = useStreamingStates(sessionIds);
+
   // Initialize notification state for each session
   useEffect(() => {
     if (sessionIds.length === 0) {
@@ -65,14 +69,16 @@ export function useSessionNotifications(sessionIds: string[], activeSessionId?: 
             unreadCount = messages.filter((m) => m.role === "assistant").length - 1;
           }
 
-          // Check if thinking (last message is from user)
+          // Check if thinking (last message is from user) and set global streaming state
           const isThinking = lastMessage?.role === "user";
+          // Initialize global streaming state
+          setStreamingState(sessionId, isThinking);
 
           return {
             sessionId,
             notification: {
               unreadCount: Math.max(0, unreadCount),
-              isThinking,
+              isThinking, // Still stored but will be overridden by global state in getNotification
               lastMessageAt: lastMessage?.createdAt || null,
             },
           };
@@ -117,12 +123,9 @@ export function useSessionNotifications(sessionIds: string[], activeSessionId?: 
           lastMessageAt: data.createdAt,
         };
 
-        if (data.role === "user") {
-          // User sent a message, AI is now thinking
-          newNotification.isThinking = true;
-        } else if (data.role === "assistant") {
-          // AI responded
-          newNotification.isThinking = false;
+        // Note: isThinking is now handled by global streaming state
+        // Only handle unread count here
+        if (data.role === "assistant") {
           // Increment unread count only if not the active session
           if (data.sessionId !== activeSessionIdRef.current) {
             newNotification.unreadCount = current.unreadCount + 1;
@@ -133,46 +136,11 @@ export function useSessionNotifications(sessionIds: string[], activeSessionId?: 
       });
     });
 
-    // Listen for streaming start - AI is thinking
-    const unsubStreamingStart = wsClient.on("chat.streaming.start", (msg) => {
-      const data = msg.data as { sessionId: string } | undefined;
-      if (!data || !sessionIds.includes(data.sessionId)) return;
-
-      setNotifications((prev) => {
-        const current = prev.get(data.sessionId) || {
-          unreadCount: 0,
-          isThinking: false,
-          lastMessageAt: null,
-        };
-        return new Map(prev).set(data.sessionId, {
-          ...current,
-          isThinking: true,
-        });
-      });
-    });
-
-    // Listen for streaming end - AI finished thinking
-    const unsubStreamingEnd = wsClient.on("chat.streaming.end", (msg) => {
-      const data = msg.data as { sessionId: string } | undefined;
-      if (!data || !sessionIds.includes(data.sessionId)) return;
-
-      setNotifications((prev) => {
-        const current = prev.get(data.sessionId) || {
-          unreadCount: 0,
-          isThinking: false,
-          lastMessageAt: null,
-        };
-        return new Map(prev).set(data.sessionId, {
-          ...current,
-          isThinking: false,
-        });
-      });
-    });
+    // Note: streaming start/end is now handled by useStreamingState (global state)
+    // No need to listen to chat.streaming.start/end here
 
     return () => {
       unsubMessage();
-      unsubStreamingStart();
-      unsubStreamingEnd();
     };
   }, [initialized, sessionIds.join(",")]);
 
@@ -191,17 +159,21 @@ export function useSessionNotifications(sessionIds: string[], activeSessionId?: 
   }, []);
 
   // Get notification for a specific session
+  // Uses global streaming state for isThinking (single source of truth)
   const getNotification = useCallback(
     (sessionId: string): SessionNotification => {
-      return (
-        notifications.get(sessionId) || {
-          unreadCount: 0,
-          isThinking: false,
-          lastMessageAt: null,
-        }
-      );
+      const notification = notifications.get(sessionId) || {
+        unreadCount: 0,
+        isThinking: false,
+        lastMessageAt: null,
+      };
+      // Override isThinking with global streaming state
+      return {
+        ...notification,
+        isThinking: streamingStates.get(sessionId) ?? false,
+      };
     },
-    [notifications]
+    [notifications, streamingStates]
   );
 
   // Get total unread count across all sessions (for tab badge)
@@ -218,17 +190,17 @@ export function useSessionNotifications(sessionIds: string[], activeSessionId?: 
     [notifications]
   );
 
-  // Check if any session is thinking
+  // Check if any session is thinking (uses global streaming state)
   const hasThinking = useCallback(
     (filterSessionIds?: string[]): boolean => {
-      for (const [sessionId, notification] of notifications) {
+      for (const [sessionId, isStreaming] of streamingStates) {
         if (!filterSessionIds || filterSessionIds.includes(sessionId)) {
-          if (notification.isThinking) return true;
+          if (isStreaming) return true;
         }
       }
       return false;
     },
-    [notifications]
+    [streamingStates]
   );
 
   return {

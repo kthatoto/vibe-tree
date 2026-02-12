@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   api,
   type PlanningSession,
@@ -6,7 +6,7 @@ import {
   type TreeNode,
   type TreeEdge,
 } from "../../lib/api";
-import { wsClient } from "../../lib/ws";
+import { useIsStreaming } from "../../lib/useStreamingState";
 import { ChatPanel } from "../ChatPanel";
 import ExecuteBranchSelector from "../ExecuteBranchSelector";
 import ExecuteSidebar from "../ExecuteSidebar";
@@ -54,8 +54,8 @@ export function ExecuteSessionView({
   defaultBranch,
 }: ExecuteSessionViewProps) {
   // Session-specific state
-  const [claudeWorking, setClaudeWorking] = useState(false);
-  const claudeWorkingRunIdRef = useRef<number | null>(null);
+  // Use global streaming state as single source of truth
+  const claudeWorking = useIsStreaming(session.chatSessionId);
   const [executeLoading, setExecuteLoading] = useState(false);
   const [executeEditMode, setExecuteEditMode] = useState(false);
   const [executeEditBranches, setExecuteEditBranches] = useState<string[]>([]);
@@ -130,57 +130,6 @@ export function ExecuteSessionView({
       cancelled = true;
     };
   }, [session.id, session.executeBranches, repoId]);
-
-  // Track Claude working state
-  useEffect(() => {
-    if (!session.chatSessionId) {
-      setClaudeWorking(false);
-      return;
-    }
-
-    const capturedChatSessionId = session.chatSessionId;
-    let cancelled = false;
-
-    // Check initial streaming state
-    const checkInitialState = async () => {
-      try {
-        const streamingState = await api.getStreamingState(capturedChatSessionId);
-        if (!cancelled) {
-          setClaudeWorking(streamingState.isStreaming);
-        }
-      } catch (err) {
-        console.error("Failed to check streaming state:", err);
-      }
-    };
-    checkInitialState();
-
-    // Subscribe to streaming events
-    const unsubStart = wsClient.on("chat.streaming.start", (msg) => {
-      const data = msg.data as { sessionId: string; runId?: number };
-      if (data.sessionId === capturedChatSessionId) {
-        if (data.runId) {
-          claudeWorkingRunIdRef.current = data.runId;
-        }
-        setClaudeWorking(true);
-      }
-    });
-
-    const unsubEnd = wsClient.on("chat.streaming.end", (msg) => {
-      const data = msg.data as { sessionId: string; runId?: number };
-      if (data.sessionId === capturedChatSessionId) {
-        if (data.runId && claudeWorkingRunIdRef.current && data.runId !== claudeWorkingRunIdRef.current) {
-          return;
-        }
-        setClaudeWorking(false);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      unsubStart();
-      unsubEnd();
-    };
-  }, [session.chatSessionId]);
 
   // Handlers
   const handleTaskSuggestedInternal = useCallback((suggestion: TaskSuggestion) => {

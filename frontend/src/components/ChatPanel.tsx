@@ -6,6 +6,7 @@ import { extractTaskSuggestions, removeTaskTags, type TaskSuggestion } from "../
 import { extractAskUserQuestion } from "../lib/ask-user-question";
 import { AskUserQuestionUI } from "./AskUserQuestionUI";
 import { wsClient } from "../lib/ws";
+import { useIsStreaming, setStreamingState } from "../lib/useStreamingState";
 import githubIcon from "../assets/github.svg";
 
 interface ExecuteTaskInfo {
@@ -47,7 +48,12 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  // Use global streaming state as single source of truth
+  const isStreaming = useIsStreaming(sessionId);
+  // Local state for the brief period between sending and streaming.start
+  const [isSending, setIsSending] = useState(false);
+  // Combined loading state for UI
+  const loading = isStreaming || isSending;
   const [error, setError] = useState<string | null>(null);
   const [addedTasks, setAddedTasks] = useState<Set<string>>(new Set());
   // Streaming state
@@ -117,20 +123,20 @@ export function ChatPanel({
         }));
         setStreamingChunks(restoredChunks);
         hasStreamingChunksRef.current = true;
-        setLoading(true);
+        setStreamingState(sessionId, true);
       } else if (isStillStreaming) {
         // Last message has streaming flag but no active streaming state
         // This means the process crashed or was cancelled without cleanup
-        // Don't set loading=true, treat as complete
+        // Don't set streaming=true, treat as complete
         setStreamingChunks([]);
         hasStreamingChunksRef.current = false;
-        setLoading(false);
+        setStreamingState(sessionId, false);
       } else {
         setStreamingChunks([]);
         hasStreamingChunksRef.current = false;
         // If last message is from user and no streaming state, AI might still be starting
         if (msgs.length > 0 && msgs[msgs.length - 1].role === "user") {
-          setLoading(true);
+          setStreamingState(sessionId, true);
         }
       }
     } catch (err) {
@@ -182,7 +188,7 @@ export function ChatPanel({
     setMessages([]);
     setStreamingChunks([]);
     hasStreamingChunksRef.current = false;
-    setLoading(false);
+    // Note: streaming state is managed globally via useStreamingState
     setError(null);
     setHasMoreMessages(true);
   }, [sessionId]);
@@ -206,7 +212,7 @@ export function ChatPanel({
   // Cancel execution on Escape key (document-level listener)
   useEffect(() => {
     const handleEscapeKey = async (e: KeyboardEvent) => {
-      if (e.key === "Escape" && loading) {
+      if (e.key === "Escape" && isStreaming) {
         e.preventDefault();
         console.log("[ChatPanel] Escape pressed, cancelling...");
         try {
@@ -220,7 +226,7 @@ export function ChatPanel({
 
     document.addEventListener("keydown", handleEscapeKey);
     return () => document.removeEventListener("keydown", handleEscapeKey);
-  }, [sessionId, loading]);
+  }, [sessionId, isStreaming]);
 
   // Sync streamingChunksRef with streamingChunks state
   useEffect(() => {
@@ -231,16 +237,20 @@ export function ChatPanel({
   const currentRunIdRef = useRef<number | null>(null);
 
   // Listen for WebSocket streaming events
+  // Note: streaming state (start/end) is handled by useStreamingState hook
+  // Here we only handle chunks and message updates
   useEffect(() => {
     const unsubStart = wsClient.on("chat.streaming.start", (msg) => {
       const data = msg.data as { sessionId: string; runId?: number };
       console.log(`[ChatPanel] streaming.start received, msgSessionId=${data.sessionId}, currentSessionId=${sessionId}, match=${data.sessionId === sessionId}, runId=${data.runId}`);
       if (data.sessionId === sessionId) {
-        console.log(`[ChatPanel] streaming.start: setting loading=true, runId=${data.runId}`);
+        // Track runId to filter stale streaming.end events
         if (data.runId) {
           currentRunIdRef.current = data.runId;
         }
-        setLoading(true);
+        // Clear local sending state (streaming is now tracked globally)
+        setIsSending(false);
+        // Clear chunks for new stream
         setStreamingChunks([]);
         streamingChunksRef.current = [];
         hasStreamingChunksRef.current = false;
@@ -279,6 +289,7 @@ export function ChatPanel({
 
         // Add the message to messages list and clear streaming chunks
         // Note: Instruction/ToDo/Question updates are now handled via MCP tools and WebSocket broadcasts
+        // Note: streaming state is managed globally by useStreamingState
         if (data.message) {
           setMessages((prev) => {
             if (prev.some((m) => m.id === data.message!.id)) {
@@ -289,14 +300,11 @@ export function ChatPanel({
             return updated.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
           });
         }
+        // Clear local sending state
+        setIsSending(false);
         setStreamingChunks([]);
         streamingChunksRef.current = [];
         hasStreamingChunksRef.current = false;
-        // If interrupted, keep loading=true (new execution will start)
-        // Otherwise, set loading=false
-        if (!data.interrupted) {
-          setLoading(false);
-        }
       }
     });
 
@@ -409,18 +417,17 @@ export function ChatPanel({
 
     const userMessage = input.trim();
     setInput("");
-    const wasAlreadyLoading = loading;
+    const wasAlreadyStreaming = isStreaming;
 
     // If sending during streaming, clear chunks (backend will send streaming.end with the interrupted message)
-    if (wasAlreadyLoading && streamingChunks.length > 0) {
+    if (wasAlreadyStreaming && streamingChunks.length > 0) {
       setStreamingChunks([]);
       streamingChunksRef.current = [];
       hasStreamingChunksRef.current = false;
     }
 
-    if (!wasAlreadyLoading) {
-      setLoading(true);
-    }
+    // Set local sending state (will be cleared when streaming starts)
+    setIsSending(true);
     setError(null);
 
     // Optimistic update with temp user message
@@ -450,9 +457,7 @@ export function ChatPanel({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      if (!wasAlreadyLoading) {
-        setLoading(false);
-      }
+      setIsSending(false);
       inputRef.current?.focus();
     }
   };
@@ -461,7 +466,7 @@ export function ChatPanel({
   const sendQuestionAnswer = async (answer: string) => {
     if (loading) return;
 
-    setLoading(true);
+    setIsSending(true);
     setError(null);
 
     // Add user answer as a message
@@ -485,7 +490,7 @@ export function ChatPanel({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send answer");
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setLoading(false);
+      setIsSending(false);
     }
   };
 

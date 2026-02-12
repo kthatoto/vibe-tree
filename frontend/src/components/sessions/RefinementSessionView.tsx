@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -23,7 +23,7 @@ import {
   type ExternalLink,
   type BranchExternalLink,
 } from "../../lib/api";
-import { wsClient } from "../../lib/ws";
+import { useIsStreaming } from "../../lib/useStreamingState";
 import { ChatPanel } from "../ChatPanel";
 import type { TaskSuggestion } from "../../lib/task-parser";
 import { figmaIcon, githubIcon, notionIcon, linkIcon } from "../../lib/resourceIcons";
@@ -145,8 +145,8 @@ export function RefinementSessionView({
   onGenerateTitle,
 }: RefinementSessionViewProps) {
   // Session-specific state
-  const [claudeWorking, setClaudeWorking] = useState(false);
-  const claudeWorkingRunIdRef = useRef<number | null>(null);
+  // Use global streaming state as single source of truth
+  const claudeWorking = useIsStreaming(session.chatSessionId);
   const [loading, setLoading] = useState(false);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [externalLinks, setExternalLinks] = useState<ExternalLink[]>([]);
@@ -167,57 +167,6 @@ export function RefinementSessionView({
   useEffect(() => {
     onClaudeWorkingChange?.(session.id, claudeWorking);
   }, [session.id, claudeWorking, onClaudeWorkingChange]);
-
-  // Track Claude working state
-  useEffect(() => {
-    if (!session.chatSessionId) {
-      setClaudeWorking(false);
-      return;
-    }
-
-    const capturedChatSessionId = session.chatSessionId;
-    let cancelled = false;
-
-    // Check initial streaming state
-    const checkInitialState = async () => {
-      try {
-        const streamingState = await api.getStreamingState(capturedChatSessionId);
-        if (!cancelled) {
-          setClaudeWorking(streamingState.isStreaming);
-        }
-      } catch (err) {
-        console.error("Failed to check streaming state:", err);
-      }
-    };
-    checkInitialState();
-
-    // Subscribe to streaming events
-    const unsubStart = wsClient.on("chat.streaming.start", (msg) => {
-      const data = msg.data as { sessionId: string; runId?: number };
-      if (data.sessionId === capturedChatSessionId) {
-        if (data.runId) {
-          claudeWorkingRunIdRef.current = data.runId;
-        }
-        setClaudeWorking(true);
-      }
-    });
-
-    const unsubEnd = wsClient.on("chat.streaming.end", (msg) => {
-      const data = msg.data as { sessionId: string; runId?: number };
-      if (data.sessionId === capturedChatSessionId) {
-        if (data.runId && claudeWorkingRunIdRef.current && data.runId !== claudeWorkingRunIdRef.current) {
-          return;
-        }
-        setClaudeWorking(false);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      unsubStart();
-      unsubEnd();
-    };
-  }, [session.chatSessionId]);
 
   // Load external links
   useEffect(() => {

@@ -15,6 +15,7 @@ import {
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import { useSessionNotifications } from "../lib/useSessionNotifications";
+import { useStreamingStates } from "../lib/useStreamingState";
 import WorktreeSelector from "./WorktreeSelector";
 import { SessionDetail } from "./SessionDetail";
 import type { TaskSuggestion } from "../lib/task-parser";
@@ -125,6 +126,9 @@ export function PlanningPanel({
     getNotification,
     markAsSeen,
   } = useSessionNotifications(chatSessionIds, selectedSession?.chatSessionId);
+
+  // Streaming state for tabs (direct access to global state)
+  const streamingStates = useStreamingStates(chatSessionIds);
 
   // Branch external links for tasks (keyed by branchName)
   const [_taskBranchLinksMap, setTaskBranchLinksMap] = useState<Record<string, BranchExternalLink[]>>({});
@@ -1543,8 +1547,8 @@ export function PlanningPanel({
               const sessionType = session.type || "refinement";
               const typeIcon = sessionType === "refinement" ? "💭" : sessionType === "planning" ? "📋" : "⚡";
               const isActive = session.id === activeTabId;
-              const notification = session.chatSessionId ? getNotification(session.chatSessionId) : null;
-              const isThinking = notification?.isThinking;
+              // Use global streaming state directly for tab indicator
+              const isThinking = session.chatSessionId ? streamingStates.get(session.chatSessionId) ?? false : false;
               // Session tabs can always be closed (will be replaced with empty tab if last one)
               return (
                 <div

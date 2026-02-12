@@ -1788,8 +1788,8 @@ export function PlanningPanel({
             defaultBranch={defaultBranch}
           />
         ))}
-        {/* Session list when no session is selected */}
-        {!activeTabId && renderSessionList()}
+        {/* Session list when no session is selected or empty tab is active */}
+        {(!activeTabId || isEmptyTab(activeTabId)) && renderSessionList()}
       </div>
 
       {/* Worktree Selection Dialog */}

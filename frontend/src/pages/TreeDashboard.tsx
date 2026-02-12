@@ -22,7 +22,9 @@ import {
   type BranchLink,
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
+import { diff, formatDiffSummary } from "../lib/scanDiff";
 import BranchGraph from "../components/BranchGraph";
+import { ScanUpdateToast } from "../components/ScanUpdateToast";
 import { TerminalPanel } from "../components/TerminalPanel";
 import { TaskCard } from "../components/TaskCard";
 import { DraggableTask, DroppableTreeNode } from "../components/DndComponents";
@@ -102,8 +104,10 @@ export default function TreeDashboard() {
   const [pendingScanUpdate, setPendingScanUpdate] = useState<{
     version: number;
     snapshot: ScanSnapshot;
+    diffSummary: string;
   } | null>(null);
   const currentSnapshotVersion = useRef<number>(0);
+  const [isApplyingUpdate, setIsApplyingUpdate] = useState(false);
 
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
@@ -174,18 +178,53 @@ export default function TreeDashboard() {
   }, []);
 
   // Apply pending scan update (user explicitly clicks "Apply")
-  const applyPendingUpdate = useCallback(() => {
-    if (pendingScanUpdate) {
-      setSnapshot(pendingScanUpdate.snapshot);
+  // Fetches from DB (SSOT) instead of using WS payload directly
+  const applyPendingUpdate = useCallback(async () => {
+    if (!pendingScanUpdate || !selectedPinId) return;
+
+    // If in edit mode, require confirmation
+    if (branchGraphEditMode) {
+      const confirmed = window.confirm(
+        "You are in edit mode. Applying this update may change the graph layout. " +
+        "Your edits are saved in the database and won't be lost. Apply update?"
+      );
+      if (!confirmed) return;
+    }
+
+    setIsApplyingUpdate(true);
+    try {
+      // Fetch from DB (SSOT) instead of using WS payload
+      const freshSnapshot = await api.getSnapshot(selectedPinId);
+      setSnapshot(freshSnapshot);
       currentSnapshotVersion.current = pendingScanUpdate.version;
       setPendingScanUpdate(null);
+    } catch (err) {
+      console.error("[TreeDashboard] Failed to apply update:", err);
+    } finally {
+      setIsApplyingUpdate(false);
     }
-  }, [pendingScanUpdate]);
+  }, [pendingScanUpdate, selectedPinId, branchGraphEditMode]);
 
   // Dismiss pending scan update notification
   const dismissPendingUpdate = useCallback(() => {
     setPendingScanUpdate(null);
   }, []);
+
+  // Manual refresh from DB (explicit user action)
+  const refreshFromDB = useCallback(async () => {
+    if (!selectedPinId) return;
+
+    setIsApplyingUpdate(true);
+    try {
+      const freshSnapshot = await api.getSnapshot(selectedPinId);
+      setSnapshot(freshSnapshot);
+      setPendingScanUpdate(null);
+    } catch (err) {
+      console.error("[TreeDashboard] Failed to refresh:", err);
+    } finally {
+      setIsApplyingUpdate(false);
+    }
+  }, [selectedPinId]);
 
   // Trigger background scan without loading state
   const triggerScan = useCallback((localPath: string) => {
@@ -282,22 +321,34 @@ export default function TreeDashboard() {
     wsClient.connect(snapshot.repoId);
 
     const unsubScan = wsClient.on("scan.updated", (msg) => {
-      // SSOT: Don't auto-update from WebSocket. Show notification for final updates.
+      // SSOT: Don't auto-update from WebSocket. Show notification for final updates only.
       if (!msg.data || typeof msg.data !== "object") return;
 
       // Check if new format with version/stage/isFinal
       const data = msg.data as { version?: number; stage?: string; isFinal?: boolean; snapshot?: ScanSnapshot; repoId?: string };
 
-      if (data.isFinal !== undefined && data.snapshot) {
-        // New format: show notification instead of auto-update
+      // Verify repoId matches to prevent cross-project updates
+      const msgRepoId = data.snapshot?.repoId ?? data.repoId;
+      if (msgRepoId && msgRepoId !== snapshot.repoId) {
+        console.log("[TreeDashboard] Ignoring scan.updated for different repo:", msgRepoId);
+        return;
+      }
+
+      if (data.isFinal && data.snapshot) {
+        // Final scan result: calculate diff and show notification if there are changes
         const newVersion = data.version ?? 0;
         if (newVersion > currentSnapshotVersion.current) {
-          setPendingScanUpdate({ version: newVersion, snapshot: data.snapshot });
+          const diffResult = diff(snapshot, data.snapshot);
+          if (diffResult.hasChanges) {
+            const diffSummary = formatDiffSummary(diffResult);
+            setPendingScanUpdate({ version: newVersion, snapshot: data.snapshot, diffSummary });
+          } else {
+            // No changes, just update the version silently
+            currentSnapshotVersion.current = newVersion;
+          }
         }
-      } else if ("repoId" in data && !("isFinal" in data)) {
-        // Legacy format (for backwards compatibility): auto-update
-        setSnapshot(data as ScanSnapshot);
       }
+      // Ignore intermediate (isFinal=false) updates and legacy format
     });
 
     // Refetch branches when planning is confirmed
@@ -1083,11 +1134,14 @@ export default function TreeDashboard() {
     <div className="dashboard dashboard--with-sidebar">
       {/* Pending scan update notification (SSOT: user must explicitly apply) */}
       {pendingScanUpdate && (
-        <div className="scan-update-toast">
-          <span>New scan data available</span>
-          <button className="scan-update-toast__apply" onClick={applyPendingUpdate}>Apply</button>
-          <button className="scan-update-toast__dismiss" onClick={dismissPendingUpdate}>×</button>
-        </div>
+        <ScanUpdateToast
+          message="New scan data available"
+          diffSummary={pendingScanUpdate.diffSummary}
+          onApply={applyPendingUpdate}
+          onDismiss={dismissPendingUpdate}
+          isEditing={branchGraphEditMode}
+          isApplying={isApplyingUpdate}
+        />
       )}
 
       {/* Left Sidebar */}
@@ -1306,6 +1360,14 @@ export default function TreeDashboard() {
                             title="Fetch from remote"
                           >
                             {fetching ? (fetchProgress || "Fetching...") : "Fetch"}
+                          </button>
+                          <button
+                            className="btn-icon"
+                            onClick={refreshFromDB}
+                            disabled={isApplyingUpdate}
+                            title="Refresh from database"
+                          >
+                            {isApplyingUpdate ? "..." : "Refresh"}
                           </button>
                           <button
                             className="btn-icon"

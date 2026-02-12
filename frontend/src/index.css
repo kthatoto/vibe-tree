@@ -349,3 +349,66 @@ pre {
 .settings-section p {
   font-size: 12px;
 }
+
+/* Scan update notification toast */
+.scan-update-toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #1e3a5f;
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 2000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.scan-update-toast span {
+  color: #e5e7eb;
+  font-size: 14px;
+}
+
+.scan-update-toast__apply {
+  background-color: #3b82f6;
+  border: none;
+  color: white;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.scan-update-toast__apply:hover {
+  background-color: #2563eb;
+}
+
+.scan-update-toast__dismiss {
+  background-color: transparent;
+  border: none;
+  color: #9ca3af;
+  padding: 4px 8px;
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.scan-update-toast__dismiss:hover {
+  color: #e5e7eb;
+}

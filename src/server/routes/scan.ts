@@ -40,6 +40,84 @@ scanRouter.get("/snapshot/:pinId", async (c) => {
   const repoId = repoPin.repoId;
   const savedBaseBranch = repoPin.baseBranch ?? "main";
 
+  // SSOT: If cachedSnapshotJson exists, use it as the primary source (fast path)
+  if (repoPin.cachedSnapshotJson) {
+    try {
+      const cachedSnapshot = JSON.parse(repoPin.cachedSnapshotJson) as ScanSnapshot;
+
+      // Overlay designed edges from treeSpec and planningSessions
+      const [treeSpecs, confirmedSessions] = await Promise.all([
+        db.select().from(schema.treeSpecs).where(eq(schema.treeSpecs.repoId, repoId)),
+        db.select().from(schema.planningSessions).where(
+          and(
+            eq(schema.planningSessions.repoId, repoId),
+            eq(schema.planningSessions.status, "confirmed")
+          )
+        ),
+      ]);
+
+      const branchSet = new Set(cachedSnapshot.branches);
+
+      // Merge planning session edges
+      for (const session of confirmedSessions) {
+        const sessionNodes = JSON.parse(session.nodesJson) as Array<{ id: string; branchName?: string }>;
+        const sessionEdges = JSON.parse(session.edgesJson) as Array<{ parent: string; child: string }>;
+        const taskToBranch = new Map<string, string>();
+        for (const node of sessionNodes) {
+          if (node.branchName) taskToBranch.set(node.id, node.branchName);
+        }
+        const effectiveBaseBranch = branchSet.has(session.baseBranch) ? session.baseBranch : cachedSnapshot.defaultBranch;
+        for (const edge of sessionEdges) {
+          let parentBranch = taskToBranch.get(edge.parent) ?? edge.parent;
+          const childBranch = taskToBranch.get(edge.child) ?? edge.child;
+          if (!branchSet.has(parentBranch)) parentBranch = effectiveBaseBranch;
+          if (parentBranch && childBranch && branchSet.has(childBranch)) {
+            const idx = cachedSnapshot.edges.findIndex((e) => e.child === childBranch);
+            if (idx >= 0) cachedSnapshot.edges[idx] = { parent: parentBranch, child: childBranch, confidence: "high", isDesigned: true };
+            else cachedSnapshot.edges.push({ parent: parentBranch, child: childBranch, confidence: "high", isDesigned: true });
+          }
+        }
+        const childTaskIds = new Set(sessionEdges.map((e) => e.child));
+        for (const node of sessionNodes) {
+          if (node.branchName && !childTaskIds.has(node.id) && branchSet.has(node.branchName)) {
+            const idx = cachedSnapshot.edges.findIndex((e) => e.child === node.branchName);
+            if (idx >= 0) cachedSnapshot.edges[idx] = { parent: effectiveBaseBranch, child: node.branchName, confidence: "high", isDesigned: true };
+            else cachedSnapshot.edges.push({ parent: effectiveBaseBranch, child: node.branchName, confidence: "high", isDesigned: true });
+          }
+        }
+      }
+
+      // Merge treeSpec edges
+      if (treeSpecs[0]) {
+        const treeSpec = {
+          id: treeSpecs[0].id,
+          repoId: treeSpecs[0].repoId,
+          baseBranch: treeSpecs[0].baseBranch ?? savedBaseBranch,
+          status: (treeSpecs[0].status ?? "draft") as TreeSpec["status"],
+          specJson: JSON.parse(treeSpecs[0].specJson),
+          createdAt: treeSpecs[0].createdAt,
+          updatedAt: treeSpecs[0].updatedAt,
+        };
+        cachedSnapshot.treeSpec = treeSpec;
+
+        for (const designedEdge of treeSpec.specJson.edges as Array<{ parent: string; child: string }>) {
+          const parentBranch = branchSet.has(designedEdge.parent) ? designedEdge.parent : cachedSnapshot.defaultBranch;
+          if (branchSet.has(designedEdge.child)) {
+            const idx = cachedSnapshot.edges.findIndex((e) => e.child === designedEdge.child);
+            if (idx >= 0) cachedSnapshot.edges[idx] = { parent: parentBranch, child: designedEdge.child, confidence: "high", isDesigned: true };
+            else cachedSnapshot.edges.push({ parent: parentBranch, child: designedEdge.child, confidence: "high", isDesigned: true });
+          }
+        }
+      }
+
+      return c.json(cachedSnapshot);
+    } catch {
+      // Fall through to build from DB tables
+      console.log(`[Snapshot] Failed to parse cachedSnapshotJson for pin ${pinId}, falling back`);
+    }
+  }
+
+  // Fallback: Build snapshot from DB tables (slower path, used when no cached snapshot)
   // Use cached branches from last scan if available
   let cachedBranchNames: Set<string>;
   if (repoPin.cachedBranchesJson) {
@@ -453,8 +531,18 @@ scanRouter.post("/", async (c) => {
       let currentWorktrees: import("../../shared/types").WorktreeInfo[] = [];
       let currentWarnings: import("../../shared/types").Warning[] = [];
 
-      console.log(`[Scan] First broadcast: ${currentEdges.length} edges from DB cache`);
-      broadcast({ type: "scan.updated", repoId, data: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings) });
+      console.log(`[Scan] Step 1 complete: ${currentEdges.length} edges from DB cache`);
+      // Note: Intermediate broadcasts are for progress indication only, UI should NOT auto-update from these
+      broadcast({
+        type: "scan.updated",
+        repoId,
+        data: {
+          version: (repoPin?.cachedSnapshotVersion ?? 0),
+          stage: "edges_cached",
+          isFinal: false,
+          snapshot: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings),
+        },
+      });
 
       // Step 2: Get worktrees
       const worktrees = await getWorktrees(localPath);
@@ -465,7 +553,16 @@ scanRouter.post("/", async (c) => {
         if (wt) node.worktree = wt;
       }
 
-      broadcast({ type: "scan.updated", repoId, data: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings) });
+      broadcast({
+        type: "scan.updated",
+        repoId,
+        data: {
+          version: (repoPin?.cachedSnapshotVersion ?? 0),
+          stage: "worktrees",
+          isFinal: false,
+          snapshot: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings),
+        },
+      });
 
       // Step 3: Build tree structure
       const cachedPrs = await db.select().from(schema.branchLinks).where(
@@ -529,15 +626,42 @@ scanRouter.post("/", async (c) => {
         }
       }
 
-      broadcast({ type: "scan.updated", repoId, data: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings) });
+      broadcast({
+        type: "scan.updated",
+        repoId,
+        data: {
+          version: (repoPin?.cachedSnapshotVersion ?? 0),
+          stage: "tree",
+          isFinal: false,
+          snapshot: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings),
+        },
+      });
 
       // Step 4: Calculate ahead/behind
       await calculateAheadBehind(currentNodes, currentEdges, localPath, currentDefaultBranch);
-      broadcast({ type: "scan.updated", repoId, data: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings) });
+      broadcast({
+        type: "scan.updated",
+        repoId,
+        data: {
+          version: (repoPin?.cachedSnapshotVersion ?? 0),
+          stage: "aheadBehind",
+          isFinal: false,
+          snapshot: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings),
+        },
+      });
 
       // Step 5: Calculate remote ahead/behind
       await calculateRemoteAheadBehind(currentNodes, localPath);
-      broadcast({ type: "scan.updated", repoId, data: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings) });
+      broadcast({
+        type: "scan.updated",
+        repoId,
+        data: {
+          version: (repoPin?.cachedSnapshotVersion ?? 0),
+          stage: "remoteAheadBehind",
+          isFinal: false,
+          snapshot: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings),
+        },
+      });
 
       // Step 6: Calculate warnings
       currentWarnings = calculateWarnings(currentNodes, currentEdges, branchNaming, currentDefaultBranch, treeSpec);
@@ -548,23 +672,38 @@ scanRouter.post("/", async (c) => {
         ...buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings),
         restart: activeWorktree ? generateRestartInfo(activeWorktree, currentNodes, currentWarnings, branchNaming) : null,
       };
-      broadcast({ type: "scan.updated", repoId, data: finalSnapshot });
-
       // Update repoId if changed
       if (repoPin && repoPin.repoId !== repoId) {
         await db.update(schema.repoPins).set({ repoId }).where(eq(schema.repoPins.id, repoPin.id));
       }
 
-      console.log(`[Scan] Background scan completed for ${repoId}`);
-
-      // Cache branches and edges in DB for next snapshot
+      // Cache full snapshot and branches/edges in DB (SSOT)
+      const now = new Date().toISOString();
+      const newVersion = (repoPin?.cachedSnapshotVersion ?? 0) + 1;
       if (repoPin) {
         await db.update(schema.repoPins).set({
           cachedBranchesJson: JSON.stringify(branchNames),
           cachedEdgesJson: JSON.stringify(currentEdges),
+          cachedSnapshotJson: JSON.stringify(finalSnapshot),
+          cachedSnapshotUpdatedAt: now,
+          cachedSnapshotVersion: newVersion,
         }).where(eq(schema.repoPins.id, repoPin.id));
-        console.log(`[Scan] Cached ${branchNames.length} branches and ${currentEdges.length} edges for ${repoId}`);
+        console.log(`[Scan] Cached full snapshot (v${newVersion}) for ${repoId}`);
       }
+
+      // Broadcast final result with metadata (UI uses this for notification, not auto-update)
+      broadcast({
+        type: "scan.updated",
+        repoId,
+        data: {
+          version: newVersion,
+          stage: "final",
+          isFinal: true,
+          snapshot: finalSnapshot,
+        },
+      });
+
+      console.log(`[Scan] Background scan completed for ${repoId}`);
 
       // Step 7: Fetch PR info from GitHub
       try {

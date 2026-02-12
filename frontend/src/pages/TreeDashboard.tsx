@@ -98,6 +98,13 @@ export default function TreeDashboard() {
   const [fetchProgress, setFetchProgress] = useState<string | null>(null);
   const [originalTreeSpecEdges, setOriginalTreeSpecEdges] = useState<TreeSpecEdge[] | null>(null);
 
+  // Pending scan update notification (SSOT: don't auto-update, show notification instead)
+  const [pendingScanUpdate, setPendingScanUpdate] = useState<{
+    version: number;
+    snapshot: ScanSnapshot;
+  } | null>(null);
+  const currentSnapshotVersion = useRef<number>(0);
+
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
   const [settingsRule, setSettingsRule] = useState<BranchNamingRule | null>(null);
@@ -148,10 +155,12 @@ export default function TreeDashboard() {
   // Load cached snapshot immediately, then start background scan
   const loadSnapshot = useCallback(async (pinId: number, localPath: string) => {
     setError(null);
+    setPendingScanUpdate(null); // Clear any pending update notification
     try {
       // Immediately load cached snapshot from DB (fast)
       const cachedSnapshot = await api.getSnapshot(pinId);
       setSnapshot(cachedSnapshot);
+      currentSnapshotVersion.current = 0; // Will be updated when scan completes
       setLoading(false);
 
       // Start background scan (don't await - updates come via WebSocket)
@@ -162,6 +171,20 @@ export default function TreeDashboard() {
       setError((err as Error).message);
       setLoading(false);
     }
+  }, []);
+
+  // Apply pending scan update (user explicitly clicks "Apply")
+  const applyPendingUpdate = useCallback(() => {
+    if (pendingScanUpdate) {
+      setSnapshot(pendingScanUpdate.snapshot);
+      currentSnapshotVersion.current = pendingScanUpdate.version;
+      setPendingScanUpdate(null);
+    }
+  }, [pendingScanUpdate]);
+
+  // Dismiss pending scan update notification
+  const dismissPendingUpdate = useCallback(() => {
+    setPendingScanUpdate(null);
   }, []);
 
   // Trigger background scan without loading state
@@ -259,9 +282,21 @@ export default function TreeDashboard() {
     wsClient.connect(snapshot.repoId);
 
     const unsubScan = wsClient.on("scan.updated", (msg) => {
-      // Use the snapshot data from the broadcast directly (don't re-scan to avoid infinite loop)
-      if (msg.data && typeof msg.data === "object" && "repoId" in msg.data) {
-        setSnapshot(msg.data as ScanSnapshot);
+      // SSOT: Don't auto-update from WebSocket. Show notification for final updates.
+      if (!msg.data || typeof msg.data !== "object") return;
+
+      // Check if new format with version/stage/isFinal
+      const data = msg.data as { version?: number; stage?: string; isFinal?: boolean; snapshot?: ScanSnapshot; repoId?: string };
+
+      if (data.isFinal !== undefined && data.snapshot) {
+        // New format: show notification instead of auto-update
+        const newVersion = data.version ?? 0;
+        if (newVersion > currentSnapshotVersion.current) {
+          setPendingScanUpdate({ version: newVersion, snapshot: data.snapshot });
+        }
+      } else if ("repoId" in data && !("isFinal" in data)) {
+        // Legacy format (for backwards compatibility): auto-update
+        setSnapshot(data as ScanSnapshot);
       }
     });
 
@@ -1046,6 +1081,15 @@ export default function TreeDashboard() {
 
   return (
     <div className="dashboard dashboard--with-sidebar">
+      {/* Pending scan update notification (SSOT: user must explicitly apply) */}
+      {pendingScanUpdate && (
+        <div className="scan-update-toast">
+          <span>New scan data available</span>
+          <button className="scan-update-toast__apply" onClick={applyPendingUpdate}>Apply</button>
+          <button className="scan-update-toast__dismiss" onClick={dismissPendingUpdate}>×</button>
+        </div>
+      )}
+
       {/* Left Sidebar */}
       <aside className="sidebar">
         <div className="sidebar__header">

@@ -98,6 +98,10 @@ export const repoPins = sqliteTable("repo_pins", {
   baseBranch: text("base_branch"), // user-selected base branch
   cachedBranchesJson: text("cached_branches_json"), // cached branch names from last scan
   cachedEdgesJson: text("cached_edges_json"), // cached edges from last scan
+  // Full scan snapshot cache (SSOT)
+  cachedSnapshotJson: text("cached_snapshot_json"), // full ScanSnapshot JSON
+  cachedSnapshotUpdatedAt: text("cached_snapshot_updated_at"), // ISO timestamp
+  cachedSnapshotVersion: integer("cached_snapshot_version").default(0), // version counter (nullable for migration)
   lastUsedAt: text("last_used_at").notNull(),
   createdAt: text("created_at").notNull(),
 });

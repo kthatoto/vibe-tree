@@ -153,13 +153,14 @@ export interface TreeNode {
   remoteAheadBehind?: { ahead: number; behind: number }; // vs origin
 }
 
-export type EdgeConfidence = "high" | "medium" | "low";
+export type EdgeConfidence = "high" | "medium" | "low" | "unknown";
 
 export interface TreeEdge {
   parent: string;
   child: string;
   confidence: EdgeConfidence;
   isDesigned?: boolean; // true if from tree_specs (設計ツリー)
+  isInferred?: boolean; // true if auto-inferred for new branches
 }
 
 export interface RestartInfo {

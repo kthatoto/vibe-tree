@@ -23,6 +23,13 @@ import {
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import { diff, formatDiffSummary } from "../lib/scanDiff";
+import {
+  mergeNodeAttributes,
+  createInferredEdgesForNewBranches,
+  analyzeChanges,
+  formatPendingChangesSummary,
+  type PendingChanges,
+} from "../lib/snapshotMerge";
 import BranchGraph from "../components/BranchGraph";
 import { ScanUpdateToast } from "../components/ScanUpdateToast";
 import { TerminalPanel } from "../components/TerminalPanel";
@@ -30,6 +37,7 @@ import { TaskCard } from "../components/TaskCard";
 import { DraggableTask, DroppableTreeNode } from "../components/DndComponents";
 import { PlanningPanel } from "../components/PlanningPanel";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
+import { useSmartPolling } from "../hooks/useSmartPolling";
 import type { PlanningSession, TaskNode, TaskEdge } from "../lib/api";
 
 export default function TreeDashboard() {
@@ -100,14 +108,11 @@ export default function TreeDashboard() {
   const [fetchProgress, setFetchProgress] = useState<string | null>(null);
   const [originalTreeSpecEdges, setOriginalTreeSpecEdges] = useState<TreeSpecEdge[] | null>(null);
 
-  // Pending scan update notification (SSOT: don't auto-update, show notification instead)
-  const [pendingScanUpdate, setPendingScanUpdate] = useState<{
-    version: number;
-    snapshot: ScanSnapshot;
-    diffSummary: string;
-  } | null>(null);
+  // Smart update: pending changes that require user confirmation (unsafe changes)
+  const [pendingChanges, setPendingChanges] = useState<PendingChanges | null>(null);
   const currentSnapshotVersion = useRef<number>(0);
   const [isApplyingUpdate, setIsApplyingUpdate] = useState(false);
+  const isScanningRef = useRef<boolean>(false);
 
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
@@ -159,7 +164,7 @@ export default function TreeDashboard() {
   // Load cached snapshot immediately, then start background scan
   const loadSnapshot = useCallback(async (pinId: number, localPath: string) => {
     setError(null);
-    setPendingScanUpdate(null); // Clear any pending update notification
+    setPendingChanges(null); // Clear any pending changes
     try {
       // Immediately load cached snapshot from DB (fast)
       const { snapshot: cachedSnapshot, version } = await api.getSnapshot(pinId);
@@ -168,19 +173,24 @@ export default function TreeDashboard() {
       setLoading(false);
 
       // Start background scan (don't await - updates come via WebSocket)
-      api.startScan(localPath).catch((err) => {
-        console.warn("[TreeDashboard] Background scan failed:", err);
-      });
+      if (!isScanningRef.current) {
+        isScanningRef.current = true;
+        api.startScan(localPath).catch((err) => {
+          console.warn("[TreeDashboard] Background scan failed:", err);
+        }).finally(() => {
+          isScanningRef.current = false;
+        });
+      }
     } catch (err) {
       setError((err as Error).message);
       setLoading(false);
     }
   }, []);
 
-  // Apply pending scan update (user explicitly clicks "Apply")
-  // Fetches from DB (SSOT) instead of using WS payload directly
-  const applyPendingUpdate = useCallback(async () => {
-    if (!pendingScanUpdate || !selectedPinId) return;
+  // Apply pending changes (user explicitly clicks "Apply")
+  // Fetches from DB (SSOT) instead of using cached payload
+  const applyPendingChanges = useCallback(async () => {
+    if (!pendingChanges || !selectedPinId) return;
 
     // If in edit mode, require confirmation
     if (branchGraphEditMode) {
@@ -193,21 +203,21 @@ export default function TreeDashboard() {
 
     setIsApplyingUpdate(true);
     try {
-      // Fetch from DB (SSOT) instead of using WS payload
+      // Fetch from DB (SSOT) instead of using cached payload
       const { snapshot: freshSnapshot, version } = await api.getSnapshot(selectedPinId);
       setSnapshot(freshSnapshot);
       currentSnapshotVersion.current = version;
-      setPendingScanUpdate(null);
+      setPendingChanges(null);
     } catch (err) {
       console.error("[TreeDashboard] Failed to apply update:", err);
     } finally {
       setIsApplyingUpdate(false);
     }
-  }, [pendingScanUpdate, selectedPinId, branchGraphEditMode]);
+  }, [pendingChanges, selectedPinId, branchGraphEditMode]);
 
-  // Dismiss pending scan update notification
-  const dismissPendingUpdate = useCallback(() => {
-    setPendingScanUpdate(null);
+  // Dismiss pending changes notification
+  const dismissPendingChanges = useCallback(() => {
+    setPendingChanges(null);
   }, []);
 
   // Manual refresh from DB (explicit user action)
@@ -219,7 +229,7 @@ export default function TreeDashboard() {
       const { snapshot: freshSnapshot, version } = await api.getSnapshot(selectedPinId);
       setSnapshot(freshSnapshot);
       currentSnapshotVersion.current = version;
-      setPendingScanUpdate(null);
+      setPendingChanges(null);
     } catch (err) {
       console.error("[TreeDashboard] Failed to refresh:", err);
     } finally {
@@ -227,10 +237,14 @@ export default function TreeDashboard() {
     }
   }, [selectedPinId]);
 
-  // Trigger background scan without loading state
+  // Trigger background scan without loading state (with debounce protection)
   const triggerScan = useCallback((localPath: string) => {
+    if (isScanningRef.current) return; // Prevent multiple concurrent scans
+    isScanningRef.current = true;
     api.startScan(localPath).catch((err) => {
       console.warn("[TreeDashboard] Background scan failed:", err);
+    }).finally(() => {
+      isScanningRef.current = false;
     });
   }, []);
 
@@ -248,6 +262,16 @@ export default function TreeDashboard() {
       setFetching(false);
     }
   }, []);
+
+  // Smart polling: auto-refresh based on activity and visibility
+  const hasDirtyWorktree = snapshot?.worktrees.some((w) => w.dirty) ?? false;
+  useSmartPolling({
+    localPath: selectedPin?.localPath ?? null,
+    isEditingEdge: branchGraphEditMode,
+    hasDirtyWorktree,
+    onTriggerScan: triggerScan,
+    enabled: !!snapshot, // Only poll when we have a snapshot
+  });
 
   // Auto-load when pin is selected
   useEffect(() => {
@@ -322,10 +346,9 @@ export default function TreeDashboard() {
     wsClient.connect(snapshot.repoId);
 
     const unsubScan = wsClient.on("scan.updated", (msg) => {
-      // SSOT: Don't auto-update from WebSocket. Show notification for final updates only.
+      // Smart update: auto-merge safe changes, queue unsafe changes for user confirmation
       if (!msg.data || typeof msg.data !== "object") return;
 
-      // Check if new format with version/stage/isFinal
       const data = msg.data as { version?: number; stage?: string; isFinal?: boolean; snapshot?: ScanSnapshot; repoId?: string };
 
       // Verify repoId matches to prevent cross-project updates
@@ -335,21 +358,63 @@ export default function TreeDashboard() {
         return;
       }
 
-      if (data.isFinal && data.snapshot) {
-        // Final scan result: calculate diff and show notification if there are changes
-        const newVersion = data.version ?? 0;
-        if (newVersion > currentSnapshotVersion.current) {
-          const diffResult = diff(snapshot, data.snapshot);
-          if (diffResult.hasChanges) {
-            const diffSummary = formatDiffSummary(diffResult);
-            setPendingScanUpdate({ version: newVersion, snapshot: data.snapshot, diffSummary });
-          } else {
-            // No changes, just update the version silently
-            currentSnapshotVersion.current = newVersion;
-          }
+      if (!data.snapshot) return;
+      const newVersion = data.version ?? 0;
+
+      // Skip if version is not newer (prevent out-of-order updates)
+      if (newVersion < currentSnapshotVersion.current) {
+        console.log("[TreeDashboard] Ignoring older version:", newVersion, "< current:", currentSnapshotVersion.current);
+        return;
+      }
+
+      // For intermediate updates (aheadBehind, remoteAheadBehind): auto-merge node attributes only
+      if (!data.isFinal && (data.stage === "aheadBehind" || data.stage === "remoteAheadBehind")) {
+        // Don't update during edit mode
+        if (branchGraphEditMode) return;
+
+        setSnapshot((prev) => {
+          if (!prev) return prev;
+          return mergeNodeAttributes(prev, data.snapshot!);
+        });
+        return;
+      }
+
+      // For final updates: analyze and handle safe vs unsafe changes
+      if (data.isFinal) {
+        const analysis = analyzeChanges(snapshot, data.snapshot, newVersion);
+
+        if (analysis.hasSafeChanges && !branchGraphEditMode) {
+          // Auto-merge safe changes (node attributes + new branches)
+          setSnapshot((prev) => {
+            if (!prev) return data.snapshot!;
+
+            // Merge node attributes
+            let merged = mergeNodeAttributes(prev, data.snapshot!);
+
+            // Add inferred edges for new branches
+            if (analysis.pendingChanges?.newBranches.length) {
+              const newEdges = createInferredEdgesForNewBranches(
+                merged.edges,
+                analysis.pendingChanges.newBranches,
+                data.snapshot!.edges,
+                merged.defaultBranch
+              );
+              merged = { ...merged, edges: newEdges };
+            }
+
+            return merged;
+          });
+        }
+
+        if (analysis.hasUnsafeChanges && analysis.pendingChanges) {
+          // Queue unsafe changes for user confirmation
+          setPendingChanges(analysis.pendingChanges);
+        } else {
+          // No unsafe changes, clear any pending and update version
+          setPendingChanges(null);
+          currentSnapshotVersion.current = newVersion;
         }
       }
-      // Ignore intermediate (isFinal=false) updates and legacy format
     });
 
     // Refetch branches when planning is confirmed
@@ -1133,13 +1198,13 @@ export default function TreeDashboard() {
 
   return (
     <div className="dashboard dashboard--with-sidebar">
-      {/* Pending scan update notification (SSOT: user must explicitly apply) */}
-      {pendingScanUpdate && (
+      {/* Pending unsafe changes notification (requires user confirmation) */}
+      {pendingChanges && (
         <ScanUpdateToast
-          message="New scan data available"
-          diffSummary={pendingScanUpdate.diffSummary}
-          onApply={applyPendingUpdate}
-          onDismiss={dismissPendingUpdate}
+          message="Structure changes detected"
+          diffSummary={formatPendingChangesSummary(pendingChanges)}
+          onApply={applyPendingChanges}
+          onDismiss={dismissPendingChanges}
           isEditing={branchGraphEditMode}
           isApplying={isApplyingUpdate}
         />

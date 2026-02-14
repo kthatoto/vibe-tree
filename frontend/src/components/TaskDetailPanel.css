@@ -336,6 +336,37 @@
   opacity: 0.6;
 }
 
+.task-detail-panel__description-text {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #e5e7eb;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.task-detail-panel__description-text:hover {
+  background: #1f2937;
+}
+
+.task-detail-panel__description-text--empty {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.task-detail-panel__saved-check {
+  color: #4ade80;
+  font-size: 14px;
+  animation: fadeInOut 1.5s ease-out;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* Branch Links Section */
 .task-detail-panel__links-section {
   padding: 8px 16px;

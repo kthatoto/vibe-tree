@@ -259,7 +259,10 @@ export function TaskDetailPanel({
   // Branch description state
   const [branchDescription, setBranchDescription] = useState<BranchDescription | null>(null);
   const [descriptionDraft, setDescriptionDraft] = useState("");
+  const [editingDescription, setEditingDescription] = useState(false);
   const [savingDescription, setSavingDescription] = useState(false);
+  const [descriptionSaved, setDescriptionSaved] = useState(false);
+  const descriptionInputRef = useRef<HTMLInputElement>(null);
 
   // The working path is either the worktree path or localPath if checked out
   const workingPath = worktreePath || (checkedOut ? localPath : null);
@@ -576,6 +579,8 @@ export function TaskDetailPanel({
   };
 
   const handleSaveDescription = async () => {
+    setEditingDescription(false);
+    descriptionInputRef.current?.blur();
     // Only save if changed
     if (descriptionDraft === (branchDescription?.description || "")) return;
     setSavingDescription(true);
@@ -583,6 +588,9 @@ export function TaskDetailPanel({
       const updated = await api.updateBranchDescription(repoId, branchName, descriptionDraft);
       setBranchDescription(updated);
       onDescriptionChange?.(branchName, descriptionDraft);
+      // Show saved feedback
+      setDescriptionSaved(true);
+      setTimeout(() => setDescriptionSaved(false), 1500);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -895,16 +903,35 @@ export function TaskDetailPanel({
       {/* Description Section - inline single line */}
       <div className="task-detail-panel__description-row">
         <label>Description:</label>
-        <input
-          type="text"
-          className="task-detail-panel__description-input"
-          value={descriptionDraft}
-          onChange={(e) => setDescriptionDraft(e.target.value)}
-          onBlur={handleSaveDescription}
-          placeholder="Branch description..."
-          disabled={savingDescription}
-        />
+        {editingDescription ? (
+          <input
+            ref={descriptionInputRef}
+            type="text"
+            className="task-detail-panel__description-input"
+            value={descriptionDraft}
+            onChange={(e) => setDescriptionDraft(e.target.value)}
+            onBlur={handleSaveDescription}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleSaveDescription();
+              } else if (e.key === "Escape") {
+                setDescriptionDraft(branchDescription?.description || "");
+                setEditingDescription(false);
+              }
+            }}
+            placeholder="Branch description..."
+            autoFocus
+          />
+        ) : (
+          <span
+            className={`task-detail-panel__description-text ${!descriptionDraft ? "task-detail-panel__description-text--empty" : ""}`}
+            onClick={() => setEditingDescription(true)}
+          >
+            {descriptionDraft || "Click to add..."}
+          </span>
+        )}
         {savingDescription && <span className="task-detail-panel__spinner" />}
+        {descriptionSaved && <span className="task-detail-panel__saved-check">✓</span>}
       </div>
 
       {/* Working Path Section */}

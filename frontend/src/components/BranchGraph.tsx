@@ -1253,10 +1253,9 @@ export default function BranchGraph({
 
     // Check if this node should be minimized
     const nodeIsMinimized = !isTentative && isMinimized(id);
-    const nodeIsAlwaysMinimized = !isTentative && isAlwaysMinimized(id);
     const nodeWidth = nodeIsMinimized ? MINIMIZED_NODE_WIDTH : NODE_WIDTH;
-    // Only always-minimized branches (develop/defaultBranch) get reduced height
-    const nodeHeight = isTentative ? TENTATIVE_NODE_HEIGHT : (nodeIsAlwaysMinimized ? MINIMIZED_NODE_HEIGHT : NODE_HEIGHT);
+    // Only defaultBranch gets reduced height
+    const nodeHeight = isTentative ? TENTATIVE_NODE_HEIGHT : (isDefault ? MINIMIZED_NODE_HEIGHT : NODE_HEIGHT);
     const isChecked = checkedBranches.has(id);
 
     // Get description label (first word/token before whitespace)
@@ -1350,8 +1349,8 @@ export default function BranchGraph({
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "flex-start",
-                justifyContent: "center",
-                gap: 1,
+                justifyContent: isDefault ? "center" : "flex-start",
+                gap: isDefault ? 1 : 4,
                 overflow: "hidden",
               }}
             >

@@ -95,15 +95,6 @@ export default function BranchGraph({
     };
   }, [zoom]);
 
-  // Handle wheel event for zooming (no Ctrl required)
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (!onZoomChange) return;
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-    const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom + delta));
-    onZoomChange(newZoom);
-  }, [zoom, onZoomChange]);
-
   // Handle drag start from node
   const handleDragStart = useCallback((
     branchName: string,
@@ -930,7 +921,6 @@ export default function BranchGraph({
           cursor: dragState ? "grabbing" : undefined,
           userSelect: dragState ? "none" : undefined,
         }}
-        onWheel={handleWheel}
       >
         {/* Zoom wrapper */}
         <g transform={`scale(${zoom})`}>

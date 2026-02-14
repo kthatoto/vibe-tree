@@ -749,34 +749,20 @@ export default function BranchGraph({
                 overflow: "hidden",
               }}
             >
-              {/* Row 1: Description label + PR badge */}
-              <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                {descriptionLabel && (
-                  <span style={{
-                    fontSize: 10,
-                    padding: "1px 4px",
-                    borderRadius: 3,
-                    background: "#1e3a5f",
-                    border: "1px solid #3b82f6",
-                    color: "#93c5fd",
-                    whiteSpace: "nowrap",
-                  }}>{descriptionLabel}</span>
-                )}
-                {/* PR badge */}
-                {hasPR && (
-                  <span style={{
-                    fontSize: 10,
-                    padding: "1px 4px",
-                    borderRadius: 3,
-                    background: isMerged ? "#3b0764" : "#374151",
-                    border: isMerged ? "1px solid #9333ea" : "1px solid #4b5563",
-                    color: isMerged ? "#c084fc" : "#e5e7eb",
-                    whiteSpace: "nowrap",
-                  }}>PR</span>
-                )}
-              </div>
-              {/* Row 2: R + CI badges */}
-              <div style={{ display: "flex", gap: 3 }}>
+              {/* Row 1: Description label */}
+              {descriptionLabel && (
+                <span style={{
+                  fontSize: 10,
+                  padding: "1px 4px",
+                  borderRadius: 3,
+                  background: "#1e3a5f",
+                  border: "1px solid #3b82f6",
+                  color: "#93c5fd",
+                  whiteSpace: "nowrap",
+                }}>{descriptionLabel}</span>
+              )}
+              {/* Row 2: R + CI + PR badges (no wrap, may overflow) */}
+              <div style={{ display: "flex", gap: 3, flexWrap: "nowrap" }}>
                 {/* R (Review) badge */}
                 {(prLink?.reviewDecision === "APPROVED" || prLink?.reviewDecision === "CHANGES_REQUESTED" || prLink?.reviewDecision === "REVIEW_REQUIRED" || (prLink?.reviewers && (() => {
                   const reviewers = JSON.parse(prLink.reviewers) as string[];
@@ -803,6 +789,18 @@ export default function BranchGraph({
                     color: prLink.checksStatus === "success" ? "#4ade80" : prLink.checksStatus === "failure" ? "#f87171" : "#fbbf24",
                     whiteSpace: "nowrap",
                   }}>{prLink.checksStatus === "success" ? "CI✔" : prLink.checksStatus === "failure" ? "CI✗" : "CI"}</span>
+                )}
+                {/* PR badge */}
+                {hasPR && (
+                  <span style={{
+                    fontSize: 10,
+                    padding: "1px 4px",
+                    borderRadius: 3,
+                    background: isMerged ? "#3b0764" : "#374151",
+                    border: isMerged ? "1px solid #9333ea" : "1px solid #4b5563",
+                    color: isMerged ? "#c084fc" : "#e5e7eb",
+                    whiteSpace: "nowrap",
+                  }}>PR</span>
                 )}
               </div>
               {/* Row 3: Branch name (single line, no ellipsis) */}

@@ -37,8 +37,65 @@ import { TaskCard } from "../components/TaskCard";
 import { DraggableTask, DroppableTreeNode } from "../components/DndComponents";
 import { PlanningPanel } from "../components/PlanningPanel";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
-import { useSmartPolling } from "../hooks/useSmartPolling";
+import { useSmartPolling, INTERVALS } from "../hooks/useSmartPolling";
 import type { PlanningSession, TaskNode, TaskEdge } from "../lib/api";
+
+// Scan progress bar component
+function ScanProgressBar({ nextScanTime, interval, isScanning }: {
+  nextScanTime: number;
+  interval: number;
+  isScanning: boolean;
+}) {
+  const [progress, setProgress] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(0);
+
+  useEffect(() => {
+    const updateProgress = () => {
+      const now = Date.now();
+      const remaining = Math.max(0, nextScanTime - now);
+      const elapsed = interval - remaining;
+      setProgress(Math.min(100, (elapsed / interval) * 100));
+      setTimeLeft(Math.ceil(remaining / 1000));
+    };
+
+    updateProgress();
+    const timer = setInterval(updateProgress, 1000);
+    return () => clearInterval(timer);
+  }, [nextScanTime, interval]);
+
+  const intervalLabel = interval === INTERVALS.ACTIVE_DIRTY ? "30s"
+    : interval === INTERVALS.ACTIVE_CLEAN ? "60s"
+    : "5m";
+
+  return (
+    <div style={{ padding: "4px 8px", marginTop: 8 }}>
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        fontSize: 10,
+        color: "#6b7280",
+        marginBottom: 2,
+      }}>
+        <span>{isScanning ? "Scanning..." : `Next scan`}</span>
+        <span>{isScanning ? "" : `${timeLeft}s (${intervalLabel})`}</span>
+      </div>
+      <div style={{
+        height: 3,
+        background: "#374151",
+        borderRadius: 2,
+        overflow: "hidden",
+      }}>
+        <div style={{
+          height: "100%",
+          width: isScanning ? "100%" : `${progress}%`,
+          background: isScanning ? "#60a5fa" : "#4b5563",
+          transition: isScanning ? "none" : "width 1s linear",
+          animation: isScanning ? "pulse 1s infinite" : "none",
+        }} />
+      </div>
+    </div>
+  );
+}
 
 export default function TreeDashboard() {
   const { pinId: urlPinId, sessionId: urlSessionId } = useParams<{ pinId?: string; sessionId?: string }>();
@@ -358,7 +415,7 @@ export default function TreeDashboard() {
 
   // Smart polling: auto-refresh based on activity and visibility
   const hasDirtyWorktree = snapshot?.worktrees.some((w) => w.dirty) ?? false;
-  useSmartPolling({
+  const pollingState = useSmartPolling({
     localPath: selectedPin?.localPath ?? null,
     isEditingEdge: branchGraphEditMode,
     hasDirtyWorktree,
@@ -446,11 +503,17 @@ export default function TreeDashboard() {
 
       // Log scan progress
       if (data.stage) {
+        // Log scan start on first stage
+        if (data.stage === "edges_cached") {
+          addLog("scan", "Scan start");
+        }
         setScanStage(data.stage);
-        addLog("scan", data.isFinal ? `Scan complete` : `Scan: ${data.stage}`);
-      }
-      if (data.isFinal) {
-        setScanStage(null);
+        if (data.isFinal) {
+          addLog("scan", "Scan complete");
+          setScanStage(null);
+        } else {
+          addLog("scan", `Scan: ${data.stage}`);
+        }
       }
 
       // Verify repoId matches to prevent cross-project updates
@@ -1444,6 +1507,15 @@ export default function TreeDashboard() {
               )}
             </div>
           </div>
+        )}
+
+        {/* Next scan progress bar */}
+        {pollingState.nextScanTime && (
+          <ScanProgressBar
+            nextScanTime={pollingState.nextScanTime}
+            interval={pollingState.interval}
+            isScanning={scanStage !== null}
+          />
         )}
 
         {/* Logs section - fills all remaining space */}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 
 interface SmartPollingOptions {
   /** Local path of the repository */
@@ -13,10 +13,21 @@ interface SmartPollingOptions {
   enabled?: boolean;
 }
 
+interface SmartPollingState {
+  /** Current polling interval in ms */
+  interval: number;
+  /** Time of last scan */
+  lastScanTime: number;
+  /** Time of next scheduled scan */
+  nextScanTime: number | null;
+  /** Whether currently scanning */
+  isScanning: boolean;
+}
+
 /**
  * Polling intervals in milliseconds
  */
-const INTERVALS = {
+export const INTERVALS = {
   /** Active window + dirty worktree: more frequent updates */
   ACTIVE_DIRTY: 30 * 1000, // 30s
   /** Active window + clean: moderate updates */
@@ -37,9 +48,14 @@ export function useSmartPolling({
   hasDirtyWorktree,
   onTriggerScan,
   enabled = true,
-}: SmartPollingOptions) {
+}: SmartPollingOptions): SmartPollingState {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastScanTimeRef = useRef<number>(0);
+  const [state, setState] = useState<SmartPollingState>({
+    interval: INTERVALS.ACTIVE_CLEAN,
+    lastScanTime: 0,
+    nextScanTime: null,
+    isScanning: false,
+  });
 
   /**
    * Calculate the appropriate polling interval based on current state
@@ -68,10 +84,14 @@ export function useSmartPolling({
     }
 
     if (!enabled || !localPath || isEditingEdge) {
+      setState(prev => ({ ...prev, nextScanTime: null }));
       return;
     }
 
     const interval = getInterval();
+    const nextScanTime = Date.now() + interval;
+    setState(prev => ({ ...prev, interval, nextScanTime }));
+
     timerRef.current = setTimeout(() => {
       // Don't scan if we're editing
       if (isEditingEdge) {
@@ -81,7 +101,7 @@ export function useSmartPolling({
 
       // Trigger scan
       const now = Date.now();
-      lastScanTimeRef.current = now;
+      setState(prev => ({ ...prev, lastScanTime: now, isScanning: true }));
       onTriggerScan(localPath);
 
       // Schedule next
@@ -90,18 +110,26 @@ export function useSmartPolling({
   }, [enabled, localPath, isEditingEdge, getInterval, onTriggerScan]);
 
   /**
+   * Mark scan as complete (call this from parent when scan finishes)
+   */
+  useEffect(() => {
+    // This will be handled by the parent component listening to scan.updated
+  }, []);
+
+  /**
    * Handle visibility change - reschedule with appropriate interval
    */
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         // Window became visible - check if we should scan immediately
-        const timeSinceLastScan = Date.now() - lastScanTimeRef.current;
+        const timeSinceLastScan = Date.now() - state.lastScanTime;
         const interval = getInterval();
 
         if (timeSinceLastScan >= interval && localPath && !isEditingEdge) {
           // It's been long enough, scan now
-          lastScanTimeRef.current = Date.now();
+          const now = Date.now();
+          setState(prev => ({ ...prev, lastScanTime: now, isScanning: true }));
           onTriggerScan(localPath);
         }
       }
@@ -113,7 +141,7 @@ export function useSmartPolling({
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [getInterval, localPath, isEditingEdge, onTriggerScan, scheduleNextPoll]);
+  }, [getInterval, localPath, isEditingEdge, onTriggerScan, scheduleNextPoll, state.lastScanTime]);
 
   /**
    * Start/stop polling when dependencies change
@@ -126,6 +154,7 @@ export function useSmartPolling({
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
+      setState(prev => ({ ...prev, nextScanTime: null }));
     }
 
     return () => {
@@ -142,4 +171,6 @@ export function useSmartPolling({
   useEffect(() => {
     scheduleNextPoll();
   }, [hasDirtyWorktree, scheduleNextPoll]);
+
+  return state;
 }

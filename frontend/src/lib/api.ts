@@ -87,6 +87,7 @@ export interface TreeNode {
   lastCommitAt: string;
   aheadBehind?: { ahead: number; behind: number };
   remoteAheadBehind?: { ahead: number; behind: number };
+  description?: string;
 }
 
 export interface TreeEdge {

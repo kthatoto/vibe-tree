@@ -151,6 +151,7 @@ export interface TreeNode {
   lastCommitAt: string;
   aheadBehind?: { ahead: number; behind: number };
   remoteAheadBehind?: { ahead: number; behind: number }; // vs origin
+  description?: string; // git branch description
 }
 
 export type EdgeConfidence = "high" | "medium" | "low" | "unknown";

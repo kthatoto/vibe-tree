@@ -542,16 +542,20 @@ export default function TreeDashboard() {
       .catch(console.error);
   }, [snapshot?.repoId, snapshot?.nodes.length]);
 
-  // Load branchDescriptions when snapshot is available
+  // Extract branchDescriptions from snapshot nodes (no separate API call needed)
   useEffect(() => {
-    if (!snapshot?.repoId || snapshot.nodes.length === 0) return;
-    const branchNames = snapshot.nodes.map((n) => n.branchName);
-    api.getBranchDescriptionsBatch(snapshot.repoId, branchNames)
-      .then((result) => {
-        setBranchDescriptions(new Map(Object.entries(result)));
-      })
-      .catch(console.error);
-  }, [snapshot?.repoId, snapshot?.nodes.length]);
+    if (!snapshot?.nodes) {
+      setBranchDescriptions(new Map());
+      return;
+    }
+    const descriptions = new Map<string, string>();
+    for (const node of snapshot.nodes) {
+      if (node.description) {
+        descriptions.set(node.branchName, node.description);
+      }
+    }
+    setBranchDescriptions(descriptions);
+  }, [snapshot?.nodes]);
 
   // Bottom panel resize handlers
   const handleResizeStart = useCallback((e: React.MouseEvent) => {

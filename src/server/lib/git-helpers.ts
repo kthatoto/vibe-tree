@@ -335,6 +335,31 @@ export async function findBestParent(
   return { parent: bestMatch, confidence: "low" };
 }
 
+/**
+ * Get git branch descriptions for all branches in parallel.
+ */
+async function getBranchDescriptions(
+  branchNames: string[],
+  repoPath: string
+): Promise<Map<string, string>> {
+  const descriptions = new Map<string, string>();
+  await Promise.all(
+    branchNames.map(async (branchName) => {
+      try {
+        const desc = (await execAsync(
+          `cd "${repoPath}" && git config branch.${branchName}.description 2>/dev/null`
+        )).trim();
+        if (desc) {
+          descriptions.set(branchName, desc);
+        }
+      } catch {
+        // No description for this branch
+      }
+    })
+  );
+  return descriptions;
+}
+
 export async function buildTree(
   branches: BranchInfo[],
   worktrees: WorktreeInfo[],
@@ -346,11 +371,15 @@ export async function buildTree(
   const edges: TreeEdge[] = [];
   const branchNames = branches.map((b) => b.name);
 
+  // Get all branch descriptions in parallel
+  const descriptions = await getBranchDescriptions(branchNames, repoPath);
+
   const baseBranch = branches.find((b) => b.name === defaultBranch);
 
   for (const branch of branches) {
     const worktree = worktrees.find((w) => w.branch === branch.name);
     const pr = prs.find((p) => p.branch === branch.name);
+    const description = descriptions.get(branch.name);
 
     const badges: string[] = [];
     if (worktree?.dirty) badges.push("dirty");
@@ -371,6 +400,7 @@ export async function buildTree(
     };
     if (pr) node.pr = pr;
     if (worktree) node.worktree = worktree;
+    if (description) node.description = description;
     nodes.push(node);
 
     if (baseBranch && branch.name !== defaultBranch) {

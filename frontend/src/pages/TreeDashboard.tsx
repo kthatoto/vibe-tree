@@ -148,7 +148,10 @@ export default function TreeDashboard() {
   // Fetch state
   const [fetching, setFetching] = useState(false);
   const [fetchProgress, setFetchProgress] = useState<string | null>(null);
-  const [originalTreeSpecEdges, setOriginalTreeSpecEdges] = useState<TreeSpecEdge[] | null>(null);
+  const [originalTreeSpecState, setOriginalTreeSpecState] = useState<{
+    edges: TreeSpecEdge[];
+    siblingOrder?: Record<string, string[]>;
+  } | null>(null);
 
   // Smart update: pending changes that require user confirmation (unsafe changes)
   const [pendingChanges, setPendingChanges] = useState<PendingChanges | null>(null);
@@ -1401,14 +1404,13 @@ export default function TreeDashboard() {
                           <button
                             className="btn-icon btn-icon--danger"
                             onClick={() => {
-                              // Discard: restore original edges (optimistic)
-                              if (selectedPin && snapshot?.repoId && originalTreeSpecEdges !== null) {
-                                // Optimistic update: restore edges immediately
+                              // Discard: restore original state (frontend only, no DB call)
+                              if (originalTreeSpecState !== null) {
                                 setSnapshot((prev) => {
                                   if (!prev) return prev;
-                                  // Rebuild edges: remove designed edges that weren't in original, add back original designed edges
+                                  // Rebuild edges: remove designed edges, add back original designed edges
                                   const nonDesignedEdges = prev.edges.filter((e) => !e.isDesigned);
-                                  const originalDesignedEdges = originalTreeSpecEdges.map((e) => ({
+                                  const originalDesignedEdges = originalTreeSpecState.edges.map((e) => ({
                                     parent: e.parent,
                                     child: e.child,
                                     confidence: "high" as const,
@@ -1421,29 +1423,14 @@ export default function TreeDashboard() {
                                       ...prev.treeSpec,
                                       specJson: {
                                         nodes: prev.treeSpec.specJson.nodes,
-                                        edges: originalTreeSpecEdges,
-                                        siblingOrder: prev.treeSpec.specJson.siblingOrder,
+                                        edges: originalTreeSpecState.edges,
+                                        siblingOrder: originalTreeSpecState.siblingOrder,
                                       },
-                                      updatedAt: new Date().toISOString(),
                                     } : prev.treeSpec,
                                   };
                                 });
-
-                                // Save to server in background
-                                api.updateTreeSpec({
-                                  repoId: snapshot.repoId,
-                                  baseBranch: snapshot.treeSpec?.baseBranch ?? snapshot.defaultBranch,
-                                  nodes: snapshot.treeSpec?.specJson.nodes ?? [],
-                                  edges: originalTreeSpecEdges,
-                                  siblingOrder: snapshot.treeSpec?.specJson.siblingOrder,
-                                }).then(() => {
-                                  // Background rescan to ensure consistency
-                                  triggerScan(selectedPin.localPath);
-                                }).catch((err) => {
-                                  console.error("Failed to discard:", err);
-                                });
                               }
-                              setOriginalTreeSpecEdges(null);
+                              setOriginalTreeSpecState(null);
                               setBranchGraphEditMode(false);
                             }}
                             title="Discard changes"
@@ -1453,10 +1440,25 @@ export default function TreeDashboard() {
                           <button
                             className="btn-icon btn-icon--active"
                             onClick={() => {
-                              setOriginalTreeSpecEdges(null);
+                              // Done: save current state to DB
+                              if (selectedPin && snapshot?.repoId) {
+                                api.updateTreeSpec({
+                                  repoId: snapshot.repoId,
+                                  baseBranch: snapshot.treeSpec?.baseBranch ?? snapshot.defaultBranch,
+                                  nodes: snapshot.treeSpec?.specJson.nodes ?? [],
+                                  edges: snapshot.treeSpec?.specJson.edges ?? [],
+                                  siblingOrder: snapshot.treeSpec?.specJson.siblingOrder,
+                                }).then(() => {
+                                  triggerScan(selectedPin.localPath);
+                                }).catch((err) => {
+                                  console.error("Failed to save:", err);
+                                  setError((err as Error).message);
+                                });
+                              }
+                              setOriginalTreeSpecState(null);
                               setBranchGraphEditMode(false);
                             }}
-                            title="Exit edit mode"
+                            title="Save and exit edit mode"
                           >
                             Done
                           </button>
@@ -1465,8 +1467,11 @@ export default function TreeDashboard() {
                         <button
                           className="btn-icon"
                           onClick={() => {
-                            // Save current edges before entering edit mode
-                            setOriginalTreeSpecEdges(snapshot.treeSpec?.specJson.edges ?? []);
+                            // Save current state before entering edit mode
+                            setOriginalTreeSpecState({
+                              edges: snapshot.treeSpec?.specJson.edges ?? [],
+                              siblingOrder: snapshot.treeSpec?.specJson.siblingOrder,
+                            });
                             setBranchGraphEditMode(true);
                           }}
                           title="Edit branch structure"
@@ -1612,41 +1617,22 @@ export default function TreeDashboard() {
                       filterEnabled={filterEnabled}
                       onEdgeCreate={(parentBranch, childBranch) => {
                         // Create a new edge from parent to child (reparent operation)
-                        if (!selectedPin || !snapshot?.repoId) return;
-
-                        // Optimistic update with functional setState to use latest prev values
+                        // Frontend-only update during edit mode - DB save happens on Done
                         setSnapshot((prev) => {
                           if (!prev) return prev;
 
-                          // Check if this exact edge already exists in UI edges only
-                          // (specJson.edges may be out of sync with UI)
+                          // Check if this exact edge already exists
                           const edgeExists = prev.edges.some(
                             (e) => e.parent === parentBranch && e.child === childBranch
                           );
                           if (edgeExists) return prev;
 
-                          // Prepare new edges (using prev)
+                          // Prepare new edges
                           const currentEdges = prev.treeSpec?.specJson.edges ?? [];
                           const filteredTreeSpecEdges = currentEdges.filter((e) => e.child !== childBranch);
                           const newTreeSpecEdges = [...filteredTreeSpecEdges, { parent: parentBranch, child: childBranch }];
                           const latestNodes = prev.treeSpec?.specJson.nodes ?? [];
                           const currentSiblingOrder = prev.treeSpec?.specJson.siblingOrder;
-
-                          // Save to server and rescan to ensure consistency
-                          api.updateTreeSpec({
-                            repoId: prev.repoId,
-                            baseBranch: prev.treeSpec?.baseBranch ?? prev.defaultBranch,
-                            nodes: latestNodes,
-                            edges: newTreeSpecEdges,
-                            siblingOrder: currentSiblingOrder,
-                          }).then(() => {
-                            // Rescan after treeSpec is saved to ensure edges are applied
-                            triggerScan(selectedPin.localPath);
-                          }).catch((err) => {
-                            console.error("Failed to save edge:", err);
-                            setError((err as Error).message);
-                            triggerScan(selectedPin.localPath);
-                          });
 
                           return {
                             ...prev,
@@ -1658,20 +1644,14 @@ export default function TreeDashboard() {
                                 confidence: "high" as const,
                                 isDesigned: true,
                               }),
-                            treeSpec: {
+                            treeSpec: prev.treeSpec ? {
                               ...prev.treeSpec,
-                              id: prev.treeSpec?.id ?? 0,
-                              repoId: prev.repoId,
-                              baseBranch: prev.treeSpec?.baseBranch ?? prev.defaultBranch,
-                              status: prev.treeSpec?.status ?? "draft" as const,
                               specJson: {
                                 nodes: latestNodes,
                                 edges: newTreeSpecEdges,
                                 siblingOrder: currentSiblingOrder,
                               },
-                              createdAt: prev.treeSpec?.createdAt ?? new Date().toISOString(),
-                              updatedAt: new Date().toISOString(),
-                            },
+                            } : prev.treeSpec,
                           };
                         });
                       }}
@@ -1684,43 +1664,19 @@ export default function TreeDashboard() {
                       onZoomChange={setGraphZoom}
                       siblingOrder={snapshot.treeSpec?.specJson.siblingOrder ?? {}}
                       onSiblingOrderChange={(newSiblingOrder) => {
-                        if (!selectedPin || !snapshot?.repoId) return;
-
-                        // Optimistic update
+                        // Frontend-only update during edit mode - DB save happens on Done
                         setSnapshot((prev) => {
                           if (!prev) return prev;
 
-                          const currentNodes = prev.treeSpec?.specJson.nodes ?? [];
-                          const currentEdges = prev.treeSpec?.specJson.edges ?? [];
-
-                          // Save to server
-                          api.updateTreeSpec({
-                            repoId: prev.repoId,
-                            baseBranch: prev.treeSpec?.baseBranch ?? prev.defaultBranch,
-                            nodes: currentNodes,
-                            edges: currentEdges,
-                            siblingOrder: newSiblingOrder,
-                          }).catch((err) => {
-                            console.error("Failed to save sibling order:", err);
-                            setError((err as Error).message);
-                          });
-
                           return {
                             ...prev,
-                            treeSpec: {
+                            treeSpec: prev.treeSpec ? {
                               ...prev.treeSpec,
-                              id: prev.treeSpec?.id ?? 0,
-                              repoId: prev.repoId,
-                              baseBranch: prev.treeSpec?.baseBranch ?? prev.defaultBranch,
-                              status: prev.treeSpec?.status ?? "draft" as const,
                               specJson: {
-                                nodes: currentNodes,
-                                edges: currentEdges,
+                                ...prev.treeSpec.specJson,
                                 siblingOrder: newSiblingOrder,
                               },
-                              createdAt: prev.treeSpec?.createdAt ?? new Date().toISOString(),
-                              updatedAt: new Date().toISOString(),
-                            },
+                            } : prev.treeSpec,
                           };
                         });
                       }}

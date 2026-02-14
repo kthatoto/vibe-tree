@@ -543,8 +543,13 @@ export function calculateWarnings(
 
   if (treeSpec) {
     const gitEdgeSet = new Set(edges.map((e) => `${e.parent}->${e.child}`));
+    const existingBranches = new Set(nodes.map((n) => n.branchName));
 
     for (const edge of treeSpec.specJson.edges) {
+      // Skip if either branch doesn't exist anymore
+      if (!existingBranches.has(edge.parent) || !existingBranches.has(edge.child)) {
+        continue;
+      }
       const key = `${edge.parent}->${edge.child}`;
       if (!gitEdgeSet.has(key)) {
         warnings.push({

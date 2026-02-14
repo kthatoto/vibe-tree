@@ -758,39 +758,96 @@ export default function BranchGraph({
       const dragLeftEdge = dragCenterX - draggingInfo.width / 2;
       const dragRightEdge = dragCenterX + draggingInfo.width / 2;
 
-      // Swap detection based on edge overlap
-      let newInsertIndex = currentInsertIndex;
+      // For root siblings, include separator as a virtual element
+      const isRootSiblings = columnDragState.parentBranch === defaultBranch;
+      const currentSepIndex = focusSeparatorIndex ?? columnDragState.siblings.length;
 
-      // Left swap: when dragging column's left edge passes left neighbor's left edge
-      if (currentInsertIndex > 0) {
-        const leftNeighborLeft = visualPositions[currentInsertIndex - 1].left;
-        if (dragLeftEdge < leftNeighborLeft) {
-          newInsertIndex = currentInsertIndex - 1;
+      // Build positions including separator as a virtual element
+      type PositionItem = { id: string; left: number; right: number; centerX: number; isSeparator?: boolean };
+      let positionsWithSeparator: PositionItem[] = visualPositions.map(p => ({ ...p }));
+      let adjustedInsertIndex = currentInsertIndex;
+
+      if (isRootSiblings) {
+        // Insert separator at its current position
+        const SEPARATOR_WIDTH = 16; // Virtual width for separator
+        // Find where separator should be inserted visually
+        let sepVisualLeft: number;
+        if (currentSepIndex <= 0) {
+          sepVisualLeft = (positionsWithSeparator[0]?.left ?? 0) - HORIZONTAL_GAP - SEPARATOR_WIDTH;
+        } else if (currentSepIndex >= positionsWithSeparator.length) {
+          const lastPos = positionsWithSeparator[positionsWithSeparator.length - 1];
+          sepVisualLeft = (lastPos?.right ?? 0) + HORIZONTAL_GAP;
+        } else {
+          // Between two columns
+          const leftCol = positionsWithSeparator[currentSepIndex - 1];
+          const rightCol = positionsWithSeparator[currentSepIndex];
+          sepVisualLeft = ((leftCol?.right ?? 0) + (rightCol?.left ?? 0)) / 2 - SEPARATOR_WIDTH / 2;
+        }
+
+        const separatorItem: PositionItem = {
+          id: "__separator__",
+          left: sepVisualLeft,
+          right: sepVisualLeft + SEPARATOR_WIDTH,
+          centerX: sepVisualLeft + SEPARATOR_WIDTH / 2,
+          isSeparator: true,
+        };
+
+        // Insert separator at the right position
+        positionsWithSeparator.splice(currentSepIndex, 0, separatorItem);
+
+        // Adjust insert index if dragging column is after separator
+        if (currentInsertIndex >= currentSepIndex) {
+          adjustedInsertIndex = currentInsertIndex + 1;
         }
       }
 
-      // Right swap: when dragging column's right edge passes right neighbor's right edge
-      if (currentInsertIndex < visualPositions.length - 1) {
-        const rightNeighborRight = visualPositions[currentInsertIndex + 1].right;
-        if (dragRightEdge > rightNeighborRight) {
-          newInsertIndex = currentInsertIndex + 1;
+      // Swap detection based on edge overlap (now including separator)
+      let newAdjustedInsertIndex = adjustedInsertIndex;
+
+      // Left swap
+      if (adjustedInsertIndex > 0) {
+        const leftNeighbor = positionsWithSeparator[adjustedInsertIndex - 1];
+        if (dragLeftEdge < leftNeighbor.left) {
+          newAdjustedInsertIndex = adjustedInsertIndex - 1;
         }
       }
 
-      // Check if dragging column crossed separator boundary (for root siblings only)
-      if (columnDragState.parentBranch === defaultBranch && onFocusSeparatorIndexChange) {
-        const currentSepIndex = focusSeparatorIndex ?? columnDragState.siblings.length;
-        const originalIdx = siblingBounds.findIndex(s => s.id === columnDragState.draggingBranch);
-
-        // Column moving from focused to unfocused (crossing right over separator)
-        if (originalIdx < currentSepIndex && newInsertIndex >= currentSepIndex) {
-          // Column moved to the right past separator, separator moves left
-          onFocusSeparatorIndexChange(currentSepIndex - 1);
+      // Right swap
+      if (adjustedInsertIndex < positionsWithSeparator.length - 1) {
+        const rightNeighbor = positionsWithSeparator[adjustedInsertIndex + 1];
+        if (dragRightEdge > rightNeighbor.right) {
+          newAdjustedInsertIndex = adjustedInsertIndex + 1;
         }
-        // Column moving from unfocused to focused (crossing left over separator)
-        else if (originalIdx >= currentSepIndex && newInsertIndex < currentSepIndex) {
-          // Column moved to the left past separator, separator moves right
-          onFocusSeparatorIndexChange(currentSepIndex + 1);
+      }
+
+      // Convert back to column-only index and update separator if needed
+      let newInsertIndex = newAdjustedInsertIndex;
+      if (isRootSiblings) {
+        // Check if we swapped with separator
+        if (newAdjustedInsertIndex !== adjustedInsertIndex) {
+          const swappedWith = positionsWithSeparator[
+            newAdjustedInsertIndex < adjustedInsertIndex
+              ? adjustedInsertIndex - 1
+              : adjustedInsertIndex + 1
+          ];
+          if (swappedWith?.isSeparator && onFocusSeparatorIndexChange) {
+            // Swapped with separator - update separator index
+            if (newAdjustedInsertIndex < adjustedInsertIndex) {
+              // Moved left past separator - separator moves right
+              onFocusSeparatorIndexChange(currentSepIndex + 1);
+            } else {
+              // Moved right past separator - separator moves left
+              onFocusSeparatorIndexChange(currentSepIndex - 1);
+            }
+          }
+        }
+
+        // Convert adjusted index back to column-only index
+        const newSepIndex = focusSeparatorIndex ?? columnDragState.siblings.length;
+        if (newAdjustedInsertIndex > newSepIndex) {
+          newInsertIndex = newAdjustedInsertIndex - 1;
+        } else {
+          newInsertIndex = newAdjustedInsertIndex;
         }
       }
 
@@ -992,8 +1049,9 @@ export default function BranchGraph({
 
   // Helper to check if a node belongs to a specific sibling's column
   const getColumnRoot = useCallback((nodeId: string): string | null => {
-    if (!columnDragState) return null;
-    const { siblings } = columnDragState;
+    // Get siblings from column drag state or root siblings for separator drag
+    const siblings = columnDragState?.siblings ?? (separatorDragState ? rootSiblings : null);
+    if (!siblings) return null;
 
     // If this node is a sibling root, return it
     if (siblings.includes(nodeId)) return nodeId;
@@ -1006,7 +1064,7 @@ export default function BranchGraph({
     };
     const ancestors = getAncestors(nodeId);
     return siblings.find(s => ancestors.includes(s)) ?? null;
-  }, [columnDragState, edges]);
+  }, [columnDragState, separatorDragState, rootSiblings, edges]);
 
   // Helper to check if a node is in the dragging column
   const isInDraggingColumn = useCallback((nodeId: string): boolean => {
@@ -1014,61 +1072,106 @@ export default function BranchGraph({
     return getColumnRoot(nodeId) === columnDragState.draggingBranch;
   }, [columnDragState, getColumnRoot]);
 
-  // Calculate column offsets for swapping animation
+  // Calculate column offsets for swapping animation (works for both column drag and separator drag)
   const columnOffsets = useMemo(() => {
-    if (!columnDragState) return new Map<string, number>();
-
-    const { draggingBranch, siblings, currentX, offsetX, currentInsertIndex } = columnDragState;
-
-    // Get column bounds for all siblings, sorted by left edge
-    const siblingBounds = siblings.map(s => {
-      const bounds = getColumnBoundsHelper(s);
-      return {
-        id: s,
-        left: bounds?.left ?? 0,
-        right: bounds?.right ?? NODE_WIDTH,
-        width: bounds?.width ?? NODE_WIDTH,
-        centerX: bounds?.centerX ?? NODE_WIDTH / 2,
-      };
-    }).sort((a, b) => a.left - b.left);
-
-    // Current drag position (center of dragging column)
-    const dragCenterX = currentX - offsetX;
-    const draggingInfo = siblingBounds.find(s => s.id === draggingBranch);
-    if (!draggingInfo) return new Map<string, number>();
-
-    const draggingOriginalCenterX = draggingInfo.centerX;
-    const draggingWidth = draggingInfo.width;
-
-    // Original index of dragging column
-    const originalIndex = siblingBounds.findIndex(s => s.id === draggingBranch);
-    const insertIndex = currentInsertIndex;
-
-    // Calculate offsets based on insertIndex (from state)
     const offsets = new Map<string, number>();
-    const shiftAmount = draggingWidth + HORIZONTAL_GAP;
 
-    for (let i = 0; i < siblingBounds.length; i++) {
-      const sibling = siblingBounds[i];
-      if (sibling.id === draggingBranch) {
-        // Dragging column follows mouse
-        offsets.set(sibling.id, dragCenterX - draggingOriginalCenterX);
-      } else {
-        // Other columns shift based on insert position
-        let offset = 0;
-        if (i < originalIndex && i >= insertIndex) {
-          // Columns between insert and original: shift right
-          offset = shiftAmount;
-        } else if (i > originalIndex && i <= insertIndex) {
-          // Columns between original and insert: shift left
-          offset = -shiftAmount;
+    // Handle column drag
+    if (columnDragState) {
+      const { draggingBranch, siblings, currentX, offsetX, currentInsertIndex } = columnDragState;
+
+      // Get column bounds for all siblings, sorted by left edge
+      const siblingBounds = siblings.map(s => {
+        const bounds = getColumnBoundsHelper(s);
+        return {
+          id: s,
+          left: bounds?.left ?? 0,
+          right: bounds?.right ?? NODE_WIDTH,
+          width: bounds?.width ?? NODE_WIDTH,
+          centerX: bounds?.centerX ?? NODE_WIDTH / 2,
+        };
+      }).sort((a, b) => a.left - b.left);
+
+      // Current drag position (center of dragging column)
+      const dragCenterX = currentX - offsetX;
+      const draggingInfo = siblingBounds.find(s => s.id === draggingBranch);
+      if (!draggingInfo) return offsets;
+
+      const draggingOriginalCenterX = draggingInfo.centerX;
+      const draggingWidth = draggingInfo.width;
+
+      // Original index of dragging column
+      const originalIndex = siblingBounds.findIndex(s => s.id === draggingBranch);
+      const insertIndex = currentInsertIndex;
+
+      // Calculate offsets based on insertIndex (from state)
+      const shiftAmount = draggingWidth + HORIZONTAL_GAP;
+
+      for (let i = 0; i < siblingBounds.length; i++) {
+        const sibling = siblingBounds[i];
+        if (sibling.id === draggingBranch) {
+          // Dragging column follows mouse
+          offsets.set(sibling.id, dragCenterX - draggingOriginalCenterX);
+        } else {
+          // Other columns shift based on insert position
+          let offset = 0;
+          if (i < originalIndex && i >= insertIndex) {
+            // Columns between insert and original: shift right
+            offset = shiftAmount;
+          } else if (i > originalIndex && i <= insertIndex) {
+            // Columns between original and insert: shift left
+            offset = -shiftAmount;
+          }
+          offsets.set(sibling.id, offset);
         }
-        offsets.set(sibling.id, offset);
+      }
+    }
+
+    // Handle separator drag - shift columns based on separator's current position
+    if (separatorDragState && rootSiblings.length > 0) {
+      const { currentIndex } = separatorDragState;
+      const originalSepIndex = focusSeparatorIndex ?? rootSiblings.length;
+
+      // Get column bounds sorted by left edge
+      const siblingBounds = rootSiblings.map(s => {
+        const bounds = getColumnBoundsHelper(s);
+        return {
+          id: s,
+          left: bounds?.left ?? 0,
+          right: bounds?.right ?? NODE_WIDTH,
+          width: bounds?.width ?? NODE_WIDTH,
+        };
+      }).sort((a, b) => a.left - b.left);
+
+      // Calculate shift amount (average column width + gap)
+      const avgWidth = siblingBounds.reduce((sum, b) => sum + b.width, 0) / siblingBounds.length;
+      const shiftAmount = avgWidth + HORIZONTAL_GAP;
+
+      // Columns between original and current separator position shift
+      for (let i = 0; i < siblingBounds.length; i++) {
+        const sibling = siblingBounds[i];
+        let offset = 0;
+
+        if (currentIndex < originalSepIndex) {
+          // Separator moved left - columns between currentIndex and originalSepIndex shift right
+          if (i >= currentIndex && i < originalSepIndex) {
+            offset = shiftAmount;
+          }
+        } else if (currentIndex > originalSepIndex) {
+          // Separator moved right - columns between originalSepIndex and currentIndex shift left
+          if (i >= originalSepIndex && i < currentIndex) {
+            offset = -shiftAmount;
+          }
+        }
+
+        if (offset !== 0) {
+          offsets.set(sibling.id, offset);
+        }
       }
     }
 
     return offsets;
-  }, [columnDragState, getColumnBoundsHelper]);
+  }, [columnDragState, separatorDragState, getColumnBoundsHelper, rootSiblings, focusSeparatorIndex]);
 
   // Get offset for a specific node based on its column
   const getNodeOffset = useCallback((nodeId: string): number => {

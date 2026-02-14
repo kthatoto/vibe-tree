@@ -112,14 +112,25 @@ export default function BranchGraph({
     currentX: number;
   } | null>(null);
 
-  // Prevent browser back/forward gesture on horizontal scroll
+  // Prevent browser back/forward gesture on horizontal scroll (only when at scroll boundary)
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return;
 
     const handleWheel = (e: WheelEvent) => {
-      // Prevent browser back/forward when scrolling horizontally
-      if (Math.abs(e.deltaX) > 0) {
+      // Only prevent default at scroll boundaries to avoid browser gestures
+      // while still allowing normal scrolling
+      const container = svg.closest(".graph-container") as HTMLElement | null;
+      if (!container) return;
+
+      const { scrollLeft, scrollWidth, clientWidth } = container;
+      const atLeftEdge = scrollLeft <= 0;
+      const atRightEdge = scrollLeft >= scrollWidth - clientWidth - 1;
+
+      // Prevent browser back/forward only when scrolling beyond boundaries
+      if (e.deltaX < 0 && atLeftEdge) {
+        e.preventDefault();
+      } else if (e.deltaX > 0 && atRightEdge) {
         e.preventDefault();
       }
     };

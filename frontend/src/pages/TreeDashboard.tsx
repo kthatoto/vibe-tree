@@ -1662,12 +1662,14 @@ export default function TreeDashboard() {
                           display: "flex",
                           alignItems: "center",
                           gap: 8,
-                          padding: "4px 12px",
+                          height: 24,
+                          padding: "0 12px",
                           background: paintMode === "check" ? "#14532d" : "#7f1d1d",
                           border: `1px solid ${paintMode === "check" ? "#22c55e" : "#ef4444"}`,
                           borderRadius: 6,
+                          boxSizing: "border-box",
                         }}>
-                          <span style={{ fontSize: 12, lineHeight: 1, color: paintMode === "check" ? "#4ade80" : "#f87171" }}>
+                          <span style={{ fontSize: 12, color: paintMode === "check" ? "#4ade80" : "#f87171" }}>
                             🖌 Paint {paintMode === "check" ? "Check" : "Uncheck"} Mode
                           </span>
                           <button

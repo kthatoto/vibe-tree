@@ -27,6 +27,9 @@ interface BranchGraphProps {
   checkedBranches?: Set<string>;
   onCheckedChange?: (branchName: string, checked: boolean) => void;
   filterEnabled?: boolean;
+  // Paint mode (Pattern C: paint mode)
+  paintMode?: "check" | "uncheck" | null;
+  onExitPaintMode?: () => void;
   // Sibling order for column reordering (parent branchName -> ordered child branchNames)
   siblingOrder?: Record<string, string[]>;
   onSiblingOrderChange?: (siblingOrder: Record<string, string[]>) => void;
@@ -103,6 +106,8 @@ export default function BranchGraph({
   checkedBranches = new Set(),
   onCheckedChange,
   filterEnabled = false,
+  paintMode = null,
+  onExitPaintMode,
   siblingOrder = {},
   onSiblingOrderChange,
   focusSeparatorIndex = null,
@@ -129,6 +134,30 @@ export default function BranchGraph({
     currentX: number;
     currentIndex: number; // current position during drag (updates on swap)
   } | null>(null);
+
+  // Paint mode range selection drag state
+  const [paintModeDragState, setPaintModeDragState] = useState<{
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+  } | null>(null);
+
+  // ESC key handler to exit paint mode
+  useEffect(() => {
+    if (!paintMode) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onExitPaintMode?.();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [paintMode, onExitPaintMode]);
+
+  // Store refs for paint mode drag handlers
+  const paintModeDragStateRef = useRef(paintModeDragState);
+  paintModeDragStateRef.current = paintModeDragState;
 
   // Prevent browser back/forward gesture on horizontal scroll (only when at scroll boundary)
   useEffect(() => {
@@ -1000,6 +1029,62 @@ export default function BranchGraph({
     };
   }, [separatorDragState, getSVGCoords, edges, defaultBranch, layoutNodes, getColumnBoundsHelper, onFocusSeparatorIndexChange]);
 
+  // Handle paint mode range selection drag
+  useEffect(() => {
+    if (!paintModeDragState) return;
+
+    const originalUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const coords = getSVGCoords(e);
+      setPaintModeDragState(prev => prev ? {
+        ...prev,
+        currentX: coords.x,
+        currentY: coords.y,
+      } : null);
+    };
+
+    const handleMouseUp = () => {
+      const dragState = paintModeDragStateRef.current;
+      if (dragState && paintMode && onCheckedChange) {
+        // Calculate selection rectangle bounds
+        const minX = Math.min(dragState.startX, dragState.currentX);
+        const maxX = Math.max(dragState.startX, dragState.currentX);
+        const minY = Math.min(dragState.startY, dragState.currentY);
+        const maxY = Math.max(dragState.startY, dragState.currentY);
+
+        // Find all nodes within the selection rectangle
+        const selectedNodes = layoutNodes.filter(node => {
+          if (node.id === defaultBranch || node.isTentative) return false;
+          const nodeX = node.x;
+          const nodeY = node.y;
+          const nodeRight = nodeX + node.width;
+          const nodeBottom = nodeY + node.height;
+
+          // Check if node overlaps with selection rectangle
+          return !(nodeRight < minX || nodeX > maxX || nodeBottom < minY || nodeY > maxY);
+        });
+
+        // Apply paint action to all selected nodes
+        const shouldCheck = paintMode === "check";
+        selectedNodes.forEach(node => {
+          onCheckedChange(node.id, shouldCheck);
+        });
+      }
+      setPaintModeDragState(null);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.userSelect = originalUserSelect;
+    };
+  }, [paintModeDragState, getSVGCoords, layoutNodes, defaultBranch, paintMode, onCheckedChange]);
+
   // Get root siblings (children of default branch) sorted by X position
   const rootSiblings = useMemo(() => {
     const children = edges.filter(e => e.parent === defaultBranch).map(e => e.child);
@@ -1273,10 +1358,18 @@ export default function BranchGraph({
     const baseNodeOpacity = isTentative ? 0.8 : isDragging ? 0.5 : isMerged ? 0.6 : 1;
     const nodeOpacity = nodeUnfocused ? baseNodeOpacity * 0.3 : baseNodeOpacity;
 
+    // Determine cursor style
+    const getCursorStyle = () => {
+      if (paintMode && !isDefault && !isTentative) return "pointer";
+      if (canDrag) return isDragging ? "grabbing" : "grab";
+      if (isTentative) return "default";
+      return "pointer";
+    };
+
     return (
       <g
         key={id}
-        style={{ cursor: canDrag ? (isDragging ? "grabbing" : "grab") : (isTentative ? "default" : "pointer") }}
+        style={{ cursor: getCursorStyle() }}
         opacity={nodeOpacity}
         onMouseEnter={() => {
           if (dragState && dragState.fromBranch !== id && !isTentative) {
@@ -1302,7 +1395,15 @@ export default function BranchGraph({
           stroke={strokeColor}
           strokeWidth={isSelected || isDropTarget ? 2 : 1.5}
           strokeDasharray={strokeDash}
-          onClick={() => !isTentative && !dragState && onSelectBranch(id)}
+          onClick={() => {
+            if (isTentative || dragState) return;
+            if (paintMode && !isDefault) {
+              // In paint mode, apply the paint action
+              onCheckedChange?.(id, paintMode === "check");
+            } else {
+              onSelectBranch(id);
+            }
+          }}
         />
 
         {/* Checkbox for filtering - only for non-tentative, non-default nodes (including minimized) */}
@@ -1718,8 +1819,8 @@ export default function BranchGraph({
           );
         })()}
 
-        {/* Add branch button - positioned at bottom right of node */}
-        {onBranchCreate && !isTentative && !isMerged && (
+        {/* Add branch button - positioned at bottom right of node (hidden in paint mode) */}
+        {onBranchCreate && !isTentative && !isMerged && !paintMode && (
           <g
             style={{ cursor: "pointer" }}
             onClick={(e) => {
@@ -1773,8 +1874,20 @@ export default function BranchGraph({
           height: "100%",
           minWidth: width * zoom,
           minHeight: height * zoom,
-          cursor: dragState ? "grabbing" : undefined,
-          userSelect: dragState ? "none" : undefined,
+          cursor: paintModeDragState ? "crosshair" : dragState ? "grabbing" : paintMode ? "crosshair" : undefined,
+          userSelect: (dragState || paintModeDragState) ? "none" : undefined,
+        }}
+        onMouseDown={(e) => {
+          // Start range selection in paint mode
+          if (paintMode && !paintModeDragState) {
+            const coords = getSVGCoords(e);
+            setPaintModeDragState({
+              startX: coords.x,
+              startY: coords.y,
+              currentX: coords.x,
+              currentY: coords.y,
+            });
+          }
         }}
       >
         {/* Zoom wrapper */}
@@ -1835,6 +1948,21 @@ export default function BranchGraph({
                 {dropTarget ? `Set parent: ${dropTarget}` : "Drop on new parent"}
               </text>
             </g>
+          )}
+
+          {/* Render paint mode range selection rectangle */}
+          {paintModeDragState && (
+            <rect
+              x={Math.min(paintModeDragState.startX, paintModeDragState.currentX)}
+              y={Math.min(paintModeDragState.startY, paintModeDragState.currentY)}
+              width={Math.abs(paintModeDragState.currentX - paintModeDragState.startX)}
+              height={Math.abs(paintModeDragState.currentY - paintModeDragState.startY)}
+              fill={paintMode === "check" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)"}
+              stroke={paintMode === "check" ? "#22c55e" : "#ef4444"}
+              strokeWidth={1}
+              strokeDasharray="4,4"
+              pointerEvents="none"
+            />
           )}
 
           {/* Render nodes */}

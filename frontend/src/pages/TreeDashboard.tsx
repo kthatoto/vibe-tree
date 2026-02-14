@@ -171,6 +171,8 @@ export default function TreeDashboard() {
     return localStorage.getItem("branchGraph.filterEnabled") === "true";
   });
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  // Paint mode state (Pattern C: paint mode)
+  const [paintMode, setPaintMode] = useState<"check" | "uncheck" | null>(null);
   useEffect(() => {
     localStorage.setItem("branchGraph.checkedBranches", JSON.stringify([...checkedBranches]));
   }, [checkedBranches]);
@@ -1606,9 +1608,77 @@ export default function TreeDashboard() {
                             >
                               Toggle All Checkboxes
                             </button>
+                            <div style={{ height: 1, background: "#374151", margin: "4px 0" }} />
+                            <button
+                              style={{
+                                display: "block",
+                                width: "100%",
+                                padding: "8px 12px",
+                                background: paintMode === "check" ? "#14532d" : "transparent",
+                                border: "none",
+                                color: paintMode === "check" ? "#4ade80" : "#e5e7eb",
+                                textAlign: "left",
+                                cursor: "pointer",
+                                borderRadius: 4,
+                                whiteSpace: "nowrap",
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = paintMode === "check" ? "#166534" : "#374151")}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = paintMode === "check" ? "#14532d" : "transparent")}
+                              onClick={() => {
+                                setPaintMode(paintMode === "check" ? null : "check");
+                                setShowMoreMenu(false);
+                              }}
+                            >
+                              🖌 Paint Check
+                            </button>
+                            <button
+                              style={{
+                                display: "block",
+                                width: "100%",
+                                padding: "8px 12px",
+                                background: paintMode === "uncheck" ? "#7f1d1d" : "transparent",
+                                border: "none",
+                                color: paintMode === "uncheck" ? "#f87171" : "#e5e7eb",
+                                textAlign: "left",
+                                cursor: "pointer",
+                                borderRadius: 4,
+                                whiteSpace: "nowrap",
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = paintMode === "uncheck" ? "#991b1b" : "#374151")}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = paintMode === "uncheck" ? "#7f1d1d" : "transparent")}
+                              onClick={() => {
+                                setPaintMode(paintMode === "uncheck" ? null : "uncheck");
+                                setShowMoreMenu(false);
+                              }}
+                            >
+                              🖌 Paint Uncheck
+                            </button>
                           </div>
                         )}
                       </div>
+                      {/* Paint Mode Bar */}
+                      {paintMode && (
+                        <div style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "4px 12px",
+                          background: paintMode === "check" ? "#14532d" : "#7f1d1d",
+                          border: `1px solid ${paintMode === "check" ? "#22c55e" : "#ef4444"}`,
+                          borderRadius: 6,
+                        }}>
+                          <span style={{ fontSize: 12, color: paintMode === "check" ? "#4ade80" : "#f87171" }}>
+                            🖌 Paint {paintMode === "check" ? "Check" : "Uncheck"} Mode
+                          </span>
+                          <button
+                            className="btn-icon btn-icon--small"
+                            onClick={() => setPaintMode(null)}
+                            title="Exit paint mode (ESC)"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
                       {/* Zoom controls */}
                       <span className="zoom-controls">
                         <button
@@ -1672,6 +1742,8 @@ export default function TreeDashboard() {
                         });
                       }}
                       filterEnabled={filterEnabled}
+                      paintMode={paintMode}
+                      onExitPaintMode={() => setPaintMode(null)}
                       onEdgeCreate={(parentBranch, childBranch) => {
                         // Create a new edge from parent to child (reparent operation)
                         // Frontend-only update during edit mode - DB save happens on Done

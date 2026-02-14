@@ -37,7 +37,7 @@ describe("summarize", () => {
         { parent: "main", child: "feature-2", confidence: "high" },
       ],
       warnings: [
-        { code: "TEST", severity: "warning", message: "test", branchName: "main" },
+        { code: "TEST", severity: "warn", message: "test" },
       ],
       worktrees: [
         { path: "/path", branch: "main", commit: "abc", dirty: true },
@@ -101,8 +101,8 @@ describe("diff", () => {
     const before = createSnapshot({ warnings: [] });
     const after = createSnapshot({
       warnings: [
-        { code: "W1", severity: "warning", message: "test", branchName: "main" },
-        { code: "W2", severity: "error", message: "test2", branchName: "main" },
+        { code: "W1", severity: "warn", message: "test" },
+        { code: "W2", severity: "error", message: "test2" },
       ],
     });
 
@@ -115,7 +115,7 @@ describe("diff", () => {
     const snapshot = createSnapshot({
       branches: ["main", "feature-1"],
       edges: [{ parent: "main", child: "feature-1", confidence: "high" }],
-      warnings: [{ code: "W1", severity: "warning", message: "test", branchName: "main" }],
+      warnings: [{ code: "W1", severity: "warn", message: "test" }],
     });
 
     const result = diff(snapshot, snapshot);

@@ -92,8 +92,9 @@ export interface TreeNode {
 export interface TreeEdge {
   parent: string;
   child: string;
-  confidence: "high" | "medium" | "low";
+  confidence: "high" | "medium" | "low" | "unknown";
   isDesigned?: boolean;
+  isInferred?: boolean;
 }
 
 export type TaskStatus = "todo" | "doing" | "done";
@@ -124,6 +125,7 @@ export interface TreeSpec {
   specJson: {
     nodes: TreeSpecNode[];
     edges: TreeSpecEdge[];
+    siblingOrder?: Record<string, string[]>; // parent branchName -> ordered child branchNames
   };
   createdAt: string;
   updatedAt: string;

@@ -30,7 +30,7 @@ import {
   formatPendingChangesSummary,
   type PendingChanges,
 } from "../lib/snapshotMerge";
-import BranchGraph from "../components/BranchGraph";
+import BranchGraph, { MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from "../components/BranchGraph";
 import { ScanUpdateToast } from "../components/ScanUpdateToast";
 import { TerminalPanel } from "../components/TerminalPanel";
 import { TaskCard } from "../components/TaskCard";
@@ -97,6 +97,9 @@ export default function TreeDashboard() {
 
   // Branch graph fullscreen mode
   const [graphFullscreen, setGraphFullscreen] = useState(false);
+
+  // Branch graph zoom
+  const [graphZoom, setGraphZoom] = useState(1);
 
   // Create branch dialog
   const [createBranchBase, setCreateBranchBase] = useState<string | null>(null);
@@ -1435,6 +1438,32 @@ export default function TreeDashboard() {
                           >
                             {isApplyingUpdate ? "..." : "Refresh"}
                           </button>
+                          {/* Zoom controls */}
+                          <span className="zoom-controls">
+                            <button
+                              className="btn-icon btn-icon--small"
+                              onClick={() => setGraphZoom((z) => Math.max(MIN_ZOOM, z - ZOOM_STEP))}
+                              disabled={graphZoom <= MIN_ZOOM}
+                              title="Zoom out"
+                            >
+                              −
+                            </button>
+                            <button
+                              className="btn-icon btn-icon--small zoom-controls__value"
+                              onClick={() => setGraphZoom(1)}
+                              title="Reset zoom"
+                            >
+                              {Math.round(graphZoom * 100)}%
+                            </button>
+                            <button
+                              className="btn-icon btn-icon--small"
+                              onClick={() => setGraphZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP))}
+                              disabled={graphZoom >= MAX_ZOOM}
+                              title="Zoom in"
+                            >
+                              +
+                            </button>
+                          </span>
                           <button
                             className="btn-icon"
                             onClick={() => setGraphFullscreen(!graphFullscreen)}
@@ -1525,6 +1554,8 @@ export default function TreeDashboard() {
                         setCreateBranchBase(baseBranch);
                         setCreateBranchName("");
                       }}
+                      zoom={graphZoom}
+                      onZoomChange={setGraphZoom}
                     />
                   </div>
                 </div>

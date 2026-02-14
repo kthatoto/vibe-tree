@@ -18,6 +18,9 @@ interface BranchGraphProps {
   onBranchCreate?: (baseBranch: string) => void;
   // Branch links for PR info (single source of truth)
   branchLinks?: Map<string, BranchLink[]>;
+  // Zoom control (external)
+  zoom?: number;
+  onZoomChange?: (zoom: number) => void;
 }
 
 interface DragState {
@@ -56,10 +59,10 @@ const TOP_PADDING = 30;
 const LEFT_PADDING = 16;
 
 
-// Zoom constraints
-const MIN_ZOOM = 0.25;
-const MAX_ZOOM = 2;
-const ZOOM_STEP = 0.1;
+// Zoom constraints (exported for external use)
+export const MIN_ZOOM = 0.5;
+export const MAX_ZOOM = 1;
+export const ZOOM_STEP = 0.1;
 
 export default function BranchGraph({
   nodes,
@@ -74,11 +77,12 @@ export default function BranchGraph({
   onEdgeCreate,
   onBranchCreate,
   branchLinks = new Map(),
+  zoom = 1,
+  onZoomChange,
 }: BranchGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(1);
 
   // Get SVG coordinates from mouse event (accounting for zoom)
   const getSVGCoords = useCallback((e: React.MouseEvent | MouseEvent) => {
@@ -91,28 +95,14 @@ export default function BranchGraph({
     };
   }, [zoom]);
 
-  // Handle wheel event for zooming
+  // Handle wheel event for zooming (no Ctrl required)
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    // Only zoom when Ctrl/Cmd is pressed, or always if not editing
-    if (!e.ctrlKey && !e.metaKey) return;
-
+    if (!onZoomChange) return;
     e.preventDefault();
     const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-    setZoom((prev) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta)));
-  }, []);
-
-  // Zoom controls
-  const handleZoomIn = useCallback(() => {
-    setZoom((prev) => Math.min(MAX_ZOOM, prev + ZOOM_STEP));
-  }, []);
-
-  const handleZoomOut = useCallback(() => {
-    setZoom((prev) => Math.max(MIN_ZOOM, prev - ZOOM_STEP));
-  }, []);
-
-  const handleZoomReset = useCallback(() => {
-    setZoom(1);
-  }, []);
+    const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom + delta));
+    onZoomChange(newZoom);
+  }, [zoom, onZoomChange]);
 
   // Handle drag start from node
   const handleDragStart = useCallback((
@@ -905,84 +895,7 @@ export default function BranchGraph({
   }
 
   return (
-    <div className="branch-graph" style={{ width: "100%", height: "100%", position: "relative" }}>
-      {/* Zoom controls */}
-      <div
-        style={{
-          position: "absolute",
-          top: 8,
-          right: 8,
-          display: "flex",
-          gap: 4,
-          zIndex: 10,
-          background: "#1f2937",
-          borderRadius: 6,
-          padding: 4,
-          border: "1px solid #374151",
-        }}
-      >
-        <button
-          onClick={handleZoomOut}
-          disabled={zoom <= MIN_ZOOM}
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 4,
-            border: "1px solid #4b5563",
-            background: zoom <= MIN_ZOOM ? "#1f2937" : "#374151",
-            color: zoom <= MIN_ZOOM ? "#6b7280" : "#e5e7eb",
-            cursor: zoom <= MIN_ZOOM ? "not-allowed" : "pointer",
-            fontSize: 16,
-            fontWeight: "bold",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          title="Zoom out (Ctrl+Scroll)"
-        >
-          −
-        </button>
-        <button
-          onClick={handleZoomReset}
-          style={{
-            minWidth: 48,
-            height: 28,
-            borderRadius: 4,
-            border: "1px solid #4b5563",
-            background: "#374151",
-            color: "#e5e7eb",
-            cursor: "pointer",
-            fontSize: 12,
-            fontWeight: 500,
-            padding: "0 8px",
-          }}
-          title="Reset zoom"
-        >
-          {Math.round(zoom * 100)}%
-        </button>
-        <button
-          onClick={handleZoomIn}
-          disabled={zoom >= MAX_ZOOM}
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 4,
-            border: "1px solid #4b5563",
-            background: zoom >= MAX_ZOOM ? "#1f2937" : "#374151",
-            color: zoom >= MAX_ZOOM ? "#6b7280" : "#e5e7eb",
-            cursor: zoom >= MAX_ZOOM ? "not-allowed" : "pointer",
-            fontSize: 16,
-            fontWeight: "bold",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          title="Zoom in (Ctrl+Scroll)"
-        >
-          +
-        </button>
-      </div>
-
+    <div className="branch-graph" style={{ width: "100%", height: "100%" }}>
       <svg
         ref={svgRef}
         className="branch-graph__svg"

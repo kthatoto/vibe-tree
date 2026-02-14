@@ -198,9 +198,21 @@ export async function getPRs(repoPath: string): Promise<PRInfo[]> {
         deletions: pr.deletions,
         changedFiles: pr.changedFiles,
       };
-      const conclusion = pr.statusCheckRollup?.[0]?.conclusion;
-      if (conclusion) {
-        prInfo.checks = conclusion;
+      // Compute overall check status from all checks
+      if (pr.statusCheckRollup && pr.statusCheckRollup.length > 0) {
+        const hasFailure = pr.statusCheckRollup.some(
+          (c) => c.conclusion === "FAILURE" || c.conclusion === "ERROR"
+        );
+        const allSuccess = pr.statusCheckRollup.every(
+          (c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED"
+        );
+        if (hasFailure) {
+          prInfo.checks = "FAILURE";
+        } else if (allSuccess) {
+          prInfo.checks = "SUCCESS";
+        } else {
+          prInfo.checks = "PENDING";
+        }
       }
       return prInfo;
     });

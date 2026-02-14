@@ -116,12 +116,19 @@ export default function TreeDashboard() {
   const [filterEnabled, setFilterEnabled] = useState(() => {
     return localStorage.getItem("branchGraph.filterEnabled") === "true";
   });
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   useEffect(() => {
     localStorage.setItem("branchGraph.checkedBranches", JSON.stringify([...checkedBranches]));
   }, [checkedBranches]);
   useEffect(() => {
     localStorage.setItem("branchGraph.filterEnabled", String(filterEnabled));
   }, [filterEnabled]);
+  useEffect(() => {
+    if (!showMoreMenu) return;
+    const handleClickOutside = () => setShowMoreMenu(false);
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [showMoreMenu]);
 
   // Create branch dialog
   const [createBranchBase, setCreateBranchBase] = useState<string | null>(null);
@@ -1383,6 +1390,7 @@ export default function TreeDashboard() {
                 <div className="panel panel--graph">
                   <div className="panel__header">
                     <h3>Branch Graph</h3>
+                    <span className="panel__count" style={{ marginRight: "auto" }}>{snapshot.nodes.length} branches</span>
                     <div className="panel__header-actions">
                       {branchGraphEditMode ? (
                         <>
@@ -1484,25 +1492,63 @@ export default function TreeDashboard() {
                           >
                             {filterEnabled ? "Filter ON" : "Filter"}
                           </button>
-                          <button
-                            className="btn-icon"
-                            onClick={() => {
-                              if (!snapshot) return;
-                              const nonDefaultBranches = snapshot.nodes
-                                .filter((n) => n.branchName !== snapshot.defaultBranch)
-                                .map((n) => n.branchName);
-                              // Toggle: if all checked, uncheck all; otherwise check all
-                              const allChecked = nonDefaultBranches.every((b) => checkedBranches.has(b));
-                              if (allChecked) {
-                                setCheckedBranches(new Set());
-                              } else {
-                                setCheckedBranches(new Set(nonDefaultBranches));
-                              }
-                            }}
-                            title="Toggle all checkboxes"
-                          >
-                            Toggle
-                          </button>
+                          <div style={{ position: "relative" }}>
+                            <button
+                              className="btn-icon"
+                              onClick={(e) => { e.stopPropagation(); setShowMoreMenu(!showMoreMenu); }}
+                              title="More options"
+                            >
+                              ⋮
+                            </button>
+                            {showMoreMenu && (
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  position: "absolute",
+                                  top: "100%",
+                                  right: 0,
+                                  background: "#1f2937",
+                                  border: "1px solid #374151",
+                                  borderRadius: 6,
+                                  padding: 4,
+                                  zIndex: 100,
+                                  minWidth: 150,
+                                }}
+                              >
+                                <button
+                                  style={{
+                                    display: "block",
+                                    width: "100%",
+                                    padding: "8px 12px",
+                                    background: "transparent",
+                                    border: "none",
+                                    color: "#e5e7eb",
+                                    textAlign: "left",
+                                    cursor: "pointer",
+                                    borderRadius: 4,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.background = "#374151")}
+                                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                                  onClick={() => {
+                                    if (!snapshot) return;
+                                    const nonDefaultBranches = snapshot.nodes
+                                      .filter((n) => n.branchName !== snapshot.defaultBranch)
+                                      .map((n) => n.branchName);
+                                    const allChecked = nonDefaultBranches.every((b) => checkedBranches.has(b));
+                                    if (allChecked) {
+                                      setCheckedBranches(new Set());
+                                    } else {
+                                      setCheckedBranches(new Set(nonDefaultBranches));
+                                    }
+                                    setShowMoreMenu(false);
+                                  }}
+                                >
+                                  Toggle All Checkboxes
+                                </button>
+                              </div>
+                            )}
+                          </div>
                           {/* Zoom controls */}
                           <span className="zoom-controls">
                             <button
@@ -1538,7 +1584,6 @@ export default function TreeDashboard() {
                           </button>
                         </>
                       )}
-                      <span className="panel__count">{snapshot.nodes.length} branches</span>
                     </div>
                   </div>
                   <div className="graph-container">

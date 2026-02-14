@@ -124,7 +124,7 @@ export default function BranchGraph({
   const [separatorDragState, setSeparatorDragState] = useState<{
     startX: number;
     currentX: number;
-    startIndex: number;
+    currentIndex: number; // current position during drag (updates on swap)
   } | null>(null);
 
   // Prevent browser back/forward gesture on horizontal scroll (only when at scroll boundary)
@@ -837,42 +837,52 @@ export default function BranchGraph({
       const childNodes = layoutNodes.filter(n => children.includes(n.id));
       const sortedSiblings = childNodes.sort((a, b) => a.x - b.x);
 
-      // Calculate new index based on position
-      let newIndex = separatorDragState.startIndex;
+      const currentIndex = separatorDragState.currentIndex;
+      let newIndex = currentIndex;
 
-      // Check if we should move left
-      if (newIndex > 0) {
-        const leftSibling = sortedSiblings[newIndex - 1];
+      // Calculate visual positions for boundary checking
+      // Separator is between column at currentIndex-1 and currentIndex
+
+      // Check if we should move left (drag passed left column's left edge)
+      if (currentIndex > 0) {
+        const leftSibling = sortedSiblings[currentIndex - 1];
         if (leftSibling) {
           const leftBounds = getColumnBoundsHelper(leftSibling.id);
-          const leftCenter = leftBounds ? (leftBounds.left + leftBounds.right) / 2 : leftSibling.x + NODE_WIDTH / 2;
-          if (newX < leftCenter) {
-            newIndex = newIndex - 1;
+          const leftEdge = leftBounds?.left ?? leftSibling.x;
+          if (newX < leftEdge) {
+            newIndex = currentIndex - 1;
           }
         }
       }
 
-      // Check if we should move right
-      if (newIndex < sortedSiblings.length) {
-        const rightSibling = sortedSiblings[newIndex];
+      // Check if we should move right (drag passed right column's right edge)
+      if (currentIndex < sortedSiblings.length) {
+        const rightSibling = sortedSiblings[currentIndex];
         if (rightSibling) {
           const rightBounds = getColumnBoundsHelper(rightSibling.id);
-          const rightCenter = rightBounds ? (rightBounds.left + rightBounds.right) / 2 : rightSibling.x + NODE_WIDTH / 2;
-          if (newX > rightCenter) {
-            newIndex = newIndex + 1;
+          const rightEdge = rightBounds?.right ?? (rightSibling.x + NODE_WIDTH);
+          if (newX > rightEdge) {
+            newIndex = currentIndex + 1;
           }
         }
       }
 
-      setSeparatorDragState(prev => prev ? {
-        ...prev,
-        currentX: newX,
-        startIndex: newIndex,
-      } : null);
+      // Only update if index changed
+      if (newIndex !== currentIndex) {
+        setSeparatorDragState(prev => prev ? {
+          ...prev,
+          currentX: newX,
+          currentIndex: newIndex,
+        } : null);
 
-      // Update parent state if index changed
-      if (newIndex !== separatorDragState.startIndex && onFocusSeparatorIndexChange) {
-        onFocusSeparatorIndexChange(newIndex);
+        if (onFocusSeparatorIndexChange) {
+          onFocusSeparatorIndexChange(newIndex);
+        }
+      } else {
+        setSeparatorDragState(prev => prev ? {
+          ...prev,
+          currentX: newX,
+        } : null);
       }
     };
 
@@ -1879,7 +1889,7 @@ export default function BranchGraph({
                         setSeparatorDragState({
                           startX: coords.x,
                           currentX: coords.x,
-                          startIndex: effectiveSeparatorIndex,
+                          currentIndex: effectiveSeparatorIndex,
                         });
                       }}
                     />

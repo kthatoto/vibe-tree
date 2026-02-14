@@ -1814,11 +1814,15 @@ export default function BranchGraph({
           {editMode && !columnDragState && (
             <g className="branch-graph__drag-handles">
               {layoutNodes.map((node) => {
-                const { id, x, y, width: nodeWidth = NODE_WIDTH, isTentative, parentBranch, siblings } = node;
+                const { id, x: originalX, y, width: nodeWidth = NODE_WIDTH, isTentative, parentBranch, siblings } = node;
                 const isDefault = id === defaultBranch;
                 const canReorder = !isTentative && !isDefault && parentBranch && siblings && siblings.length > 1;
 
                 if (!canReorder) return null;
+
+                // Apply separator offset for unfocused branches
+                const separatorOffset = isUnfocusedBranch(id) ? SEPARATOR_HALF_WIDTH * 2 : 0;
+                const x = originalX + separatorOffset;
 
                 // Calculate original index by sorting siblings by X position
                 const siblingPositions = siblings!.map(s => {

@@ -9,6 +9,7 @@ function App() {
       <Routes>
         <Route path="/" element={<TreeDashboard />} />
         <Route path="/projects/:pinId" element={<TreeDashboard />} />
+        <Route path="/projects/:pinId/sessions/:sessionId" element={<TreeDashboard />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -41,7 +41,7 @@ import { useSmartPolling } from "../hooks/useSmartPolling";
 import type { PlanningSession, TaskNode, TaskEdge } from "../lib/api";
 
 export default function TreeDashboard() {
-  const { pinId: urlPinId } = useParams<{ pinId?: string }>();
+  const { pinId: urlPinId, sessionId: urlSessionId } = useParams<{ pinId?: string; sessionId?: string }>();
   const navigate = useNavigate();
 
   // Repo pins state
@@ -1777,6 +1777,15 @@ export default function TreeDashboard() {
                   graphEdges={snapshot.edges}
                   chatFullscreen={chatFullscreen}
                   onToggleFullscreen={() => setChatFullscreen(!chatFullscreen)}
+                  initialSessionId={urlSessionId}
+                  onActiveSessionChange={(sessionId) => {
+                    if (sessionId) {
+                      navigate(`/projects/${urlPinId}/sessions/${sessionId}`, { replace: true });
+                    } else if (urlSessionId) {
+                      // Session was deselected, go back to project URL
+                      navigate(`/projects/${urlPinId}`, { replace: true });
+                    }
+                  }}
                 />
               </div>
             </div>

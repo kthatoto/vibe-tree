@@ -36,6 +36,9 @@ interface PlanningPanelProps {
   // Fullscreen mode
   chatFullscreen?: boolean;
   onToggleFullscreen?: () => void;
+  // URL-based session selection
+  initialSessionId?: string;
+  onActiveSessionChange?: (sessionId: string | null) => void;
 }
 
 export function PlanningPanel({
@@ -49,6 +52,8 @@ export function PlanningPanel({
   graphEdges = [],
   chatFullscreen = false,
   onToggleFullscreen,
+  initialSessionId,
+  onActiveSessionChange,
 }: PlanningPanelProps) {
   const [sessions, setSessions] = useState<PlanningSession[]>([]);
   const [loading, setLoading] = useState(false);
@@ -950,6 +955,26 @@ export function PlanningPanel({
   useEffect(() => {
     onSessionSelect?.(selectedSession);
   }, [selectedSession, onSessionSelect]);
+
+  // Notify parent when active tab changes (for URL updates)
+  useEffect(() => {
+    // Only call if activeTabId is a real session ID (not an empty tab)
+    if (activeTabId && !isEmptyTab(activeTabId)) {
+      onActiveSessionChange?.(activeTabId);
+    } else {
+      onActiveSessionChange?.(null);
+    }
+  }, [activeTabId, onActiveSessionChange]);
+
+  // Initialize active tab from URL when sessions load
+  useEffect(() => {
+    if (!initialSessionId || sessions.length === 0) return;
+    // Check if the session exists
+    const session = sessions.find(s => s.id === initialSessionId);
+    if (session && activeTabId !== initialSessionId) {
+      openTab(session);
+    }
+  }, [initialSessionId, sessions]);
 
   // Mark active session as seen when messages arrive
   useEffect(() => {

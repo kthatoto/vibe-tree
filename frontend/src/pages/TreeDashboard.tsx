@@ -1629,7 +1629,7 @@ export default function TreeDashboard() {
                                 setShowMoreMenu(false);
                               }}
                             >
-                              🖌 Paint Check
+                              ✅ Paint Check
                             </button>
                             <button
                               style={{
@@ -1651,35 +1651,33 @@ export default function TreeDashboard() {
                                 setShowMoreMenu(false);
                               }}
                             >
-                              🖌 Paint Uncheck
+                              ❌ Paint Uncheck
                             </button>
                           </div>
                         )}
                       </div>
                       {/* Paint Mode Bar */}
                       {paintMode && (
-                        <div style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          height: 24,
-                          padding: "0 12px",
-                          background: paintMode === "check" ? "#14532d" : "#7f1d1d",
-                          border: `1px solid ${paintMode === "check" ? "#22c55e" : "#ef4444"}`,
-                          borderRadius: 6,
-                          boxSizing: "border-box",
-                        }}>
-                          <span style={{ fontSize: 12, color: paintMode === "check" ? "#4ade80" : "#f87171" }}>
-                            🖌 Paint {paintMode === "check" ? "Check" : "Uncheck"} Mode
-                          </span>
-                          <button
-                            className="btn-icon btn-icon--small"
-                            onClick={() => setPaintMode(null)}
-                            title="Exit paint mode (ESC)"
-                          >
-                            ×
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => setPaintMode(null)}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            height: 25,
+                            padding: "0 10px",
+                            background: paintMode === "check" ? "#14532d" : "#7f1d1d",
+                            border: `1px solid ${paintMode === "check" ? "#22c55e" : "#ef4444"}`,
+                            borderRadius: 6,
+                            cursor: "pointer",
+                            fontSize: 12,
+                            color: paintMode === "check" ? "#4ade80" : "#f87171",
+                          }}
+                          title="Click or press ESC to exit"
+                        >
+                          {paintMode === "check" ? "✅" : "❌"} {paintMode === "check" ? "Check" : "Uncheck"}
+                          <span style={{ color: "#9ca3af", fontSize: 10, background: "rgba(255,255,255,0.15)", padding: "2px 4px", borderRadius: 3 }}>ESC</span>
+                        </button>
                       )}
                       {/* Zoom controls */}
                       <span className="zoom-controls">

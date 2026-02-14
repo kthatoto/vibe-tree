@@ -102,6 +102,10 @@ export default function TreeDashboard() {
   // Branch graph zoom
   const [graphZoom, setGraphZoom] = useState(1);
 
+  // Branch graph filter
+  const [checkedBranches, setCheckedBranches] = useState<Set<string>>(new Set());
+  const [filterEnabled, setFilterEnabled] = useState(false);
+
   // Create branch dialog
   const [createBranchBase, setCreateBranchBase] = useState<string | null>(null);
   const [createBranchName, setCreateBranchName] = useState("");
@@ -481,6 +485,26 @@ export default function TreeDashboard() {
       unsubFetchError();
     };
   }, [snapshot?.repoId, selectedPin, triggerScan]);
+
+  // Update checkedBranches when nodes change (add new branches as checked)
+  useEffect(() => {
+    if (!snapshot?.nodes) return;
+    setCheckedBranches((prev) => {
+      const newSet = new Set(prev);
+      let changed = false;
+      snapshot.nodes.forEach((n) => {
+        if (!newSet.has(n.branchName)) {
+          newSet.add(n.branchName);
+          changed = true;
+        }
+      });
+      // Initialize all as checked if empty
+      if (prev.size === 0 && snapshot.nodes.length > 0) {
+        return new Set(snapshot.nodes.map((n) => n.branchName));
+      }
+      return changed ? newSet : prev;
+    });
+  }, [snapshot?.nodes]);
 
   // Load branchLinks when snapshot is available
   useEffect(() => {
@@ -1450,6 +1474,13 @@ export default function TreeDashboard() {
                           >
                             {isApplyingUpdate ? "..." : "Refresh"}
                           </button>
+                          <button
+                            className={`btn-icon${filterEnabled ? " btn-icon--active" : ""}`}
+                            onClick={() => setFilterEnabled(!filterEnabled)}
+                            title={filterEnabled ? "Disable filter" : "Enable filter"}
+                          >
+                            {filterEnabled ? "Filter ON" : "Filter"}
+                          </button>
                           {/* Zoom controls */}
                           <span className="zoom-controls">
                             <button
@@ -1503,6 +1534,19 @@ export default function TreeDashboard() {
                       editMode={branchGraphEditMode}
                       branchLinks={branchLinks}
                       branchDescriptions={branchDescriptions}
+                      checkedBranches={checkedBranches}
+                      onCheckedChange={(branchName, checked) => {
+                        setCheckedBranches((prev) => {
+                          const newSet = new Set(prev);
+                          if (checked) {
+                            newSet.add(branchName);
+                          } else {
+                            newSet.delete(branchName);
+                          }
+                          return newSet;
+                        });
+                      }}
+                      filterEnabled={filterEnabled}
                       onEdgeCreate={(parentBranch, childBranch) => {
                         // Create a new edge from parent to child (reparent operation)
                         if (!selectedPin || !snapshot?.repoId) return;

@@ -53,14 +53,13 @@ interface LayoutEdge {
 }
 
 const NODE_WIDTH = 200;
-const NODE_HEIGHT = 70;
+const NODE_HEIGHT = 80;
 const MINIMIZED_NODE_HEIGHT = 28;
 const TENTATIVE_NODE_HEIGHT = 60;
 const HORIZONTAL_GAP = 28;
 const VERTICAL_GAP = 50;
 const TOP_PADDING = 30;
 const LEFT_PADDING = 16;
-const FILTER_TOOLBAR_HEIGHT = 36;
 
 
 // Zoom constraints (exported for external use)
@@ -84,51 +83,13 @@ export default function BranchGraph({
   branchDescriptions = new Map(),
   zoom = 1,
   onZoomChange,
+  checkedBranches = new Set(),
+  onCheckedChange,
+  filterEnabled = false,
 }: BranchGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
-
-  // Filter state: checked branches and filter toggle
-  const [checkedBranches, setCheckedBranches] = useState<Set<string>>(() => {
-    // Initialize all branches as checked
-    return new Set(nodes.map(n => n.branchName));
-  });
-  const [filterEnabled, setFilterEnabled] = useState(false);
-
-  // Update checked branches when nodes change (add new branches as checked)
-  useEffect(() => {
-    setCheckedBranches(prev => {
-      const newSet = new Set(prev);
-      nodes.forEach(n => {
-        if (!newSet.has(n.branchName)) {
-          newSet.add(n.branchName);
-        }
-      });
-      return newSet;
-    });
-  }, [nodes]);
-
-  const handleCheckChange = useCallback((branchName: string, checked: boolean) => {
-    setCheckedBranches(prev => {
-      const newSet = new Set(prev);
-      if (checked) {
-        newSet.add(branchName);
-      } else {
-        newSet.delete(branchName);
-      }
-      return newSet;
-    });
-  }, []);
-
-  const handleCheckAll = useCallback(() => {
-    setCheckedBranches(new Set(nodes.map(n => n.branchName)));
-  }, [nodes]);
-
-  const handleUncheckAll = useCallback(() => {
-    // Keep default branch checked
-    setCheckedBranches(new Set([defaultBranch]));
-  }, [defaultBranch]);
 
   // Helper to check if a node should be minimized
   const isMinimized = useCallback((branchName: string) => {
@@ -652,11 +613,11 @@ export default function BranchGraph({
           onClick={() => !isTentative && !dragState && onSelectBranch(id)}
         />
 
-        {/* Checkbox for filtering - only for non-tentative nodes */}
-        {!isTentative && (
+        {/* Checkbox for filtering - only for non-tentative, non-minimized nodes */}
+        {!isTentative && !nodeIsMinimized && (
           <foreignObject
             x={x + 4}
-            y={y + 4}
+            y={y + nodeHeight - 20}
             width={20}
             height={20}
             style={{ overflow: "visible" }}
@@ -666,7 +627,7 @@ export default function BranchGraph({
               checked={isChecked}
               onChange={(e) => {
                 e.stopPropagation();
-                handleCheckChange(id, e.target.checked);
+                onCheckedChange?.(id, e.target.checked);
               }}
               onClick={(e) => e.stopPropagation()}
               style={{
@@ -681,9 +642,9 @@ export default function BranchGraph({
 
         {/* Node content using foreignObject */}
         <foreignObject
-          x={x + (isTentative ? 8 : 24)}
+          x={x + 8}
           y={y + 4}
-          width={NODE_WIDTH - (isTentative ? 16 : 32)}
+          width={NODE_WIDTH - 16}
           height={nodeHeight - 8}
           style={{ pointerEvents: "none", overflow: "visible" }}
         >
@@ -691,7 +652,7 @@ export default function BranchGraph({
             /* Minimized view - just branch name */
             <div
               style={{
-                width: NODE_WIDTH - 32,
+                width: NODE_WIDTH - 16,
                 height: "100%",
                 display: "flex",
                 alignItems: "center",
@@ -714,7 +675,7 @@ export default function BranchGraph({
           ) : (
           <div
             style={{
-              width: NODE_WIDTH - (isTentative ? 16 : 32),
+              width: NODE_WIDTH - 16,
               height: "100%",
               display: "flex",
               flexDirection: "column",
@@ -1044,79 +1005,14 @@ export default function BranchGraph({
     );
   }
 
-  const uncheckedCount = nodes.length - checkedBranches.size;
-
   return (
-    <div className="branch-graph" style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
-      {/* Filter toolbar */}
-      <div
-        style={{
-          height: FILTER_TOOLBAR_HEIGHT,
-          minHeight: FILTER_TOOLBAR_HEIGHT,
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "0 12px",
-          background: "#1f2937",
-          borderBottom: "1px solid #374151",
-        }}
-      >
-        <button
-          onClick={() => setFilterEnabled(!filterEnabled)}
-          style={{
-            padding: "4px 10px",
-            fontSize: 12,
-            background: filterEnabled ? "#3b82f6" : "#374151",
-            color: filterEnabled ? "#fff" : "#9ca3af",
-            border: "1px solid",
-            borderColor: filterEnabled ? "#3b82f6" : "#4b5563",
-            borderRadius: 4,
-            cursor: "pointer",
-          }}
-        >
-          {filterEnabled ? "Filter ON" : "Filter OFF"}
-        </button>
-        {filterEnabled && uncheckedCount > 0 && (
-          <span style={{ fontSize: 11, color: "#9ca3af" }}>
-            {uncheckedCount} minimized
-          </span>
-        )}
-        <div style={{ flex: 1 }} />
-        <button
-          onClick={handleCheckAll}
-          style={{
-            padding: "4px 8px",
-            fontSize: 11,
-            background: "#374151",
-            color: "#9ca3af",
-            border: "1px solid #4b5563",
-            borderRadius: 4,
-            cursor: "pointer",
-          }}
-        >
-          Check All
-        </button>
-        <button
-          onClick={handleUncheckAll}
-          style={{
-            padding: "4px 8px",
-            fontSize: 11,
-            background: "#374151",
-            color: "#9ca3af",
-            border: "1px solid #4b5563",
-            borderRadius: 4,
-            cursor: "pointer",
-          }}
-        >
-          Uncheck All
-        </button>
-      </div>
+    <div className="branch-graph" style={{ width: "100%", height: "100%" }}>
       <svg
         ref={svgRef}
         className="branch-graph__svg"
         style={{
           width: "100%",
-          flex: 1,
+          height: "100%",
           minWidth: width * zoom,
           minHeight: height * zoom,
           cursor: dragState ? "grabbing" : undefined,

@@ -1349,26 +1349,19 @@ export default function TreeDashboard() {
         {/* Spacer to push warnings to bottom */}
         <div className="sidebar__spacer" />
 
-        {/* Warnings & Fetch - always at bottom */}
+        {/* Warnings - always at bottom */}
         {snapshot && (
           <div className="sidebar__section sidebar__section--bottom">
             <button
               className="sidebar__warnings-btn"
               onClick={() => setShowWarnings(true)}
+              style={{ justifyContent: "flex-start" }}
             >
               <span className="sidebar__warnings-icon">⚠</span>
-              <span>Warnings</span>
+              <span style={{ flex: 1, textAlign: "left" }}>Warnings</span>
               {snapshot.warnings.length > 0 && (
                 <span className="sidebar__warnings-count">{snapshot.warnings.length}</span>
               )}
-            </button>
-            <button
-              className="sidebar__fetch-btn"
-              onClick={() => selectedPin && handleFetch(selectedPin.localPath)}
-              disabled={fetching || !selectedPin}
-              title="Fetch from remote"
-            >
-              {fetching ? "Fetching..." : "Fetch"}
             </button>
           </div>
         )}
@@ -2019,7 +2012,7 @@ export default function TreeDashboard() {
 
         return (
         <div className="modal-overlay" onClick={() => setShowWarnings(false)}>
-          <div className="modal modal--warnings" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal--warnings" onClick={(e) => e.stopPropagation()} style={{ height: 500 }}>
             <div className="modal__header">
               <h2>Warnings ({snapshot.warnings.length})</h2>
               <button onClick={() => setShowWarnings(false)}>×</button>
@@ -2067,7 +2060,14 @@ export default function TreeDashboard() {
                 <div className="modal__empty">No warnings match the filter</div>
               )}
             </div>
-            <div className="modal__footer">
+            <div className="modal__footer" style={{ display: "flex", justifyContent: "space-between" }}>
+              <button
+                className="btn-secondary"
+                onClick={() => selectedPin && handleFetch(selectedPin.localPath)}
+                disabled={fetching || !selectedPin}
+              >
+                {fetching ? "Fetching..." : "↻ Fetch"}
+              </button>
               <button className="btn-secondary" onClick={() => setShowWarnings(false)}>
                 Close
               </button>

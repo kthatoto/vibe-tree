@@ -311,13 +311,24 @@ export function TaskDetailPanel({
         }
 
         // Auto-refresh links from GitHub sequentially (to avoid API overload)
+        // Only update state if data actually changed
         const linksToRefresh = links.filter(l => l.number);
         for (const link of linksToRefresh) {
           try {
             const refreshed = await api.refreshBranchLink(link.id);
-            setBranchLinks((prev) =>
-              prev.map((l) => (l.id === refreshed.id ? refreshed : l))
-            );
+            // Compare relevant fields to detect actual changes
+            const hasChanged =
+              link.title !== refreshed.title ||
+              link.status !== refreshed.status ||
+              link.labels !== refreshed.labels ||
+              link.reviewDecision !== refreshed.reviewDecision ||
+              link.checksStatus !== refreshed.checksStatus ||
+              link.projectStatus !== refreshed.projectStatus;
+            if (hasChanged) {
+              setBranchLinks((prev) =>
+                prev.map((l) => (l.id === refreshed.id ? refreshed : l))
+              );
+            }
           } catch (err) {
             console.error(`Failed to refresh link ${link.id}:`, err);
           }

@@ -56,6 +56,11 @@ const TOP_PADDING = 30;
 const LEFT_PADDING = 16;
 
 
+// Zoom constraints
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 2;
+const ZOOM_STEP = 0.1;
+
 export default function BranchGraph({
   nodes,
   edges,
@@ -73,16 +78,40 @@ export default function BranchGraph({
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
 
-  // Get SVG coordinates from mouse event
+  // Get SVG coordinates from mouse event (accounting for zoom)
   const getSVGCoords = useCallback((e: React.MouseEvent | MouseEvent) => {
     if (!svgRef.current) return { x: 0, y: 0 };
     const svg = svgRef.current;
     const rect = svg.getBoundingClientRect();
     return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
+      x: (e.clientX - rect.left) / zoom,
+      y: (e.clientY - rect.top) / zoom,
     };
+  }, [zoom]);
+
+  // Handle wheel event for zooming
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    // Only zoom when Ctrl/Cmd is pressed, or always if not editing
+    if (!e.ctrlKey && !e.metaKey) return;
+
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+    setZoom((prev) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta)));
+  }, []);
+
+  // Zoom controls
+  const handleZoomIn = useCallback(() => {
+    setZoom((prev) => Math.min(MAX_ZOOM, prev + ZOOM_STEP));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setZoom((prev) => Math.max(MIN_ZOOM, prev - ZOOM_STEP));
+  }, []);
+
+  const handleZoomReset = useCallback(() => {
+    setZoom(1);
   }, []);
 
   // Handle drag start from node
@@ -876,81 +905,161 @@ export default function BranchGraph({
   }
 
   return (
-    <div className="branch-graph" style={{ width: "100%", height: "100%" }}>
+    <div className="branch-graph" style={{ width: "100%", height: "100%", position: "relative" }}>
+      {/* Zoom controls */}
+      <div
+        style={{
+          position: "absolute",
+          top: 8,
+          right: 8,
+          display: "flex",
+          gap: 4,
+          zIndex: 10,
+          background: "#1f2937",
+          borderRadius: 6,
+          padding: 4,
+          border: "1px solid #374151",
+        }}
+      >
+        <button
+          onClick={handleZoomOut}
+          disabled={zoom <= MIN_ZOOM}
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 4,
+            border: "1px solid #4b5563",
+            background: zoom <= MIN_ZOOM ? "#1f2937" : "#374151",
+            color: zoom <= MIN_ZOOM ? "#6b7280" : "#e5e7eb",
+            cursor: zoom <= MIN_ZOOM ? "not-allowed" : "pointer",
+            fontSize: 16,
+            fontWeight: "bold",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          title="Zoom out (Ctrl+Scroll)"
+        >
+          −
+        </button>
+        <button
+          onClick={handleZoomReset}
+          style={{
+            minWidth: 48,
+            height: 28,
+            borderRadius: 4,
+            border: "1px solid #4b5563",
+            background: "#374151",
+            color: "#e5e7eb",
+            cursor: "pointer",
+            fontSize: 12,
+            fontWeight: 500,
+            padding: "0 8px",
+          }}
+          title="Reset zoom"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <button
+          onClick={handleZoomIn}
+          disabled={zoom >= MAX_ZOOM}
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 4,
+            border: "1px solid #4b5563",
+            background: zoom >= MAX_ZOOM ? "#1f2937" : "#374151",
+            color: zoom >= MAX_ZOOM ? "#6b7280" : "#e5e7eb",
+            cursor: zoom >= MAX_ZOOM ? "not-allowed" : "pointer",
+            fontSize: 16,
+            fontWeight: "bold",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          title="Zoom in (Ctrl+Scroll)"
+        >
+          +
+        </button>
+      </div>
+
       <svg
         ref={svgRef}
         className="branch-graph__svg"
         style={{
           width: "100%",
           height: "100%",
-          minWidth: width,
-          minHeight: height,
+          minWidth: width * zoom,
+          minHeight: height * zoom,
           cursor: dragState ? "grabbing" : undefined,
           userSelect: dragState ? "none" : undefined,
         }}
+        onWheel={handleWheel}
       >
-
-        {/* Render edges first (behind nodes) */}
-        <g className="branch-graph__edges">
-          {layoutEdges.map((edge, i) => renderEdge(edge, i))}
-        </g>
-
-        {/* Render drag line while dragging */}
-        {dragState && (
-          <g pointerEvents="none">
-            {/* Glow effect */}
-            <line
-              x1={dragState.fromX}
-              y1={dragState.fromY}
-              x2={dragState.currentX}
-              y2={dragState.currentY}
-              stroke={dropTarget ? "#22c55e" : "#6366f1"}
-              strokeWidth={6}
-              opacity={0.3}
-            />
-            {/* Main line */}
-            <line
-              x1={dragState.fromX}
-              y1={dragState.fromY}
-              x2={dragState.currentX}
-              y2={dragState.currentY}
-              stroke={dropTarget ? "#22c55e" : "#6366f1"}
-              strokeWidth={2}
-              strokeDasharray={dropTarget ? undefined : "6,4"}
-            />
-            {/* Arrow head at end */}
-            {dropTarget && (() => {
-              const dx = dragState.currentX - dragState.fromX;
-              const dy = dragState.currentY - dragState.fromY;
-              const angle = Math.atan2(dy, dx);
-              const arrowSize = 10;
-              return (
-                <polygon
-                  points={`
-                    ${dragState.currentX},${dragState.currentY}
-                    ${dragState.currentX - arrowSize * Math.cos(angle - Math.PI / 6)},${dragState.currentY - arrowSize * Math.sin(angle - Math.PI / 6)}
-                    ${dragState.currentX - arrowSize * Math.cos(angle + Math.PI / 6)},${dragState.currentY - arrowSize * Math.sin(angle + Math.PI / 6)}
-                  `}
-                  fill="#22c55e"
-                />
-              );
-            })()}
-            {/* Instruction text */}
-            <text
-              x={dragState.currentX + 10}
-              y={dragState.currentY - 10}
-              fontSize={11}
-              fill={dropTarget ? "#22c55e" : "#9ca3af"}
-              fontWeight={500}
-            >
-              {dropTarget ? `Set parent: ${dropTarget}` : "Drop on new parent"}
-            </text>
+        {/* Zoom wrapper */}
+        <g transform={`scale(${zoom})`}>
+          {/* Render edges first (behind nodes) */}
+          <g className="branch-graph__edges">
+            {layoutEdges.map((edge, i) => renderEdge(edge, i))}
           </g>
-        )}
 
-        {/* Render nodes */}
-        <g className="branch-graph__nodes">
-          {layoutNodes.map((node) => renderNode(node))}
+          {/* Render drag line while dragging */}
+          {dragState && (
+            <g pointerEvents="none">
+              {/* Glow effect */}
+              <line
+                x1={dragState.fromX}
+                y1={dragState.fromY}
+                x2={dragState.currentX}
+                y2={dragState.currentY}
+                stroke={dropTarget ? "#22c55e" : "#6366f1"}
+                strokeWidth={6}
+                opacity={0.3}
+              />
+              {/* Main line */}
+              <line
+                x1={dragState.fromX}
+                y1={dragState.fromY}
+                x2={dragState.currentX}
+                y2={dragState.currentY}
+                stroke={dropTarget ? "#22c55e" : "#6366f1"}
+                strokeWidth={2}
+                strokeDasharray={dropTarget ? undefined : "6,4"}
+              />
+              {/* Arrow head at end */}
+              {dropTarget && (() => {
+                const dx = dragState.currentX - dragState.fromX;
+                const dy = dragState.currentY - dragState.fromY;
+                const angle = Math.atan2(dy, dx);
+                const arrowSize = 10;
+                return (
+                  <polygon
+                    points={`
+                      ${dragState.currentX},${dragState.currentY}
+                      ${dragState.currentX - arrowSize * Math.cos(angle - Math.PI / 6)},${dragState.currentY - arrowSize * Math.sin(angle - Math.PI / 6)}
+                      ${dragState.currentX - arrowSize * Math.cos(angle + Math.PI / 6)},${dragState.currentY - arrowSize * Math.sin(angle + Math.PI / 6)}
+                    `}
+                    fill="#22c55e"
+                  />
+                );
+              })()}
+              {/* Instruction text */}
+              <text
+                x={dragState.currentX + 10}
+                y={dragState.currentY - 10}
+                fontSize={11}
+                fill={dropTarget ? "#22c55e" : "#9ca3af"}
+                fontWeight={500}
+              >
+                {dropTarget ? `Set parent: ${dropTarget}` : "Drop on new parent"}
+              </text>
+            </g>
+          )}
+
+          {/* Render nodes */}
+          <g className="branch-graph__nodes">
+            {layoutNodes.map((node) => renderNode(node))}
+          </g>
         </g>
       </svg>
     </div>

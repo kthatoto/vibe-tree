@@ -595,11 +595,20 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
     .from(schema.branchLinks)
     .where(eq(schema.branchLinks.id, id));
 
-  broadcast({
-    type: "branchLink.updated",
-    repoId: existing.repoId,
-    data: updated,
-  });
+  // Only broadcast if there are actual changes
+  const hasChanges =
+    existing.checksStatus !== checksStatus ||
+    existing.reviewDecision !== reviewDecision ||
+    existing.status !== status ||
+    existing.title !== title;
+
+  if (hasChanges) {
+    broadcast({
+      type: "branchLink.updated",
+      repoId: existing.repoId,
+      data: updated,
+    });
+  }
 
   return c.json(updated);
 });
@@ -710,6 +719,13 @@ branchLinksRouter.post("/detect", async (c) => {
 
     let link;
     if (existing) {
+      // Check if anything actually changed before broadcasting
+      const hasChanges =
+        existing.checksStatus !== prData.checksStatus ||
+        existing.reviewDecision !== prData.reviewDecision ||
+        existing.status !== prData.status ||
+        existing.title !== prData.title;
+
       await db
         .update(schema.branchLinks)
         .set(prData)
@@ -720,11 +736,14 @@ branchLinksRouter.post("/detect", async (c) => {
         .from(schema.branchLinks)
         .where(eq(schema.branchLinks.id, existing.id));
 
-      broadcast({
-        type: "branchLink.updated",
-        repoId: input.repoId,
-        data: link,
-      });
+      // Only broadcast if there are actual changes
+      if (hasChanges) {
+        broadcast({
+          type: "branchLink.updated",
+          repoId: input.repoId,
+          data: link,
+        });
+      }
     } else {
       const insertResult = await db
         .insert(schema.branchLinks)

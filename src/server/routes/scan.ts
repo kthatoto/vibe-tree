@@ -713,13 +713,68 @@ scanRouter.post("/", async (c) => {
 
       console.log(`[Scan] Background scan completed for ${repoId}`);
 
-      // Step 7: Fetch PR info from GitHub
+      // Step 7: Smart PR refresh - prioritize local branches, gradually update others
       try {
         const freshPrs = await getPRs(localPath);
-        if (freshPrs.length > 0) {
+        if (freshPrs.length === 0) {
+          // No PRs found, skip
+        } else {
+        // Get cached PR data for scoring
+        const cachedPRs = await db.select().from(schema.branchLinks)
+          .where(and(
+            eq(schema.branchLinks.repoId, repoId),
+            eq(schema.branchLinks.linkType, "pr")
+          ));
+
+        const localBranchSet = new Set(branchNames);
+        const worktreeBranchSet = new Set(worktrees.map(w => w.branch).filter(Boolean) as string[]);
+
+        // Build a map of fresh PRs for quick lookup (only for LOCAL branches)
+        const freshPrMap = new Map(
+          freshPrs
+            .filter(pr => localBranchSet.has(pr.branch))
+            .map(pr => [pr.branch, pr])
+        );
+
+        // Score and select PRs to refresh (only LOCAL branches)
+        const { selectPRsToRefresh } = await import("../lib/pr-scoring");
+        const cachedForScoring = cachedPRs
+          .filter(c => localBranchSet.has(c.branchName))
+          .map(c => ({
+            branchName: c.branchName,
+            checksStatus: c.checksStatus,
+            updatedAt: c.updatedAt,
+          }));
+
+        // Also include fresh local PRs not yet in cache
+        for (const pr of freshPrs) {
+          if (localBranchSet.has(pr.branch) && !cachedForScoring.some(c => c.branchName === pr.branch)) {
+            cachedForScoring.push({
+              branchName: pr.branch,
+              checksStatus: pr.checks?.toLowerCase() ?? null,
+              updatedAt: null, // Never cached = high priority
+            });
+          }
+        }
+
+        const selected = selectPRsToRefresh(cachedForScoring, {
+          localBranches: localBranchSet,
+          worktreeBranches: worktreeBranchSet,
+          now: Date.now(),
+        }, {
+          maxTotal: 5,    // Max 5 PRs per scan (worktree + others)
+          otherMax: 3,    // Up to 3 non-worktree PRs
+        });
+
+        // Filter fresh PRs to only selected ones
+        const relevantPrs = selected
+          .map(s => freshPrMap.get(s.branchName))
+          .filter((pr): pr is NonNullable<typeof pr> => pr != null);
+
+        if (relevantPrs.length > 0) {
           const now = new Date().toISOString();
-          const updatedPrs: { branch: string; checks: string | null; state: string }[] = [];
-          for (const pr of freshPrs) {
+          const updatedPrs: { branch: string; checks: string | null; state: string; reason: string; oldChecks: string | null }[] = [];
+          for (const pr of relevantPrs) {
             const existing = await db.select().from(schema.branchLinks)
               .where(and(
                 eq(schema.branchLinks.repoId, repoId),
@@ -742,15 +797,17 @@ scanRouter.post("/", async (c) => {
             // Track if PR data actually changed
             const oldChecks = existing[0]?.checksStatus ?? null;
             const newChecks = prData.checksStatus;
-            if (oldChecks !== newChecks) {
-              updatedPrs.push({ branch: pr.branch, checks: newChecks, state: prData.status });
-            }
 
             if (existing[0]) {
+              // Only broadcast if checks actually changed
+              if (oldChecks !== newChecks) {
+                updatedPrs.push({ branch: pr.branch, checks: newChecks, state: prData.status, reason: "checks_changed", oldChecks });
+              }
               await db.update(schema.branchLinks).set(prData).where(eq(schema.branchLinks.id, existing[0].id));
             } else {
+              // New PR - always broadcast
               await db.insert(schema.branchLinks).values({ repoId, branchName: pr.branch, linkType: "pr", url: pr.url, number: pr.number, ...prData, createdAt: now });
-              updatedPrs.push({ branch: pr.branch, checks: newChecks, state: prData.status });
+              updatedPrs.push({ branch: pr.branch, checks: newChecks, state: prData.status, reason: "new_pr", oldChecks: null });
             }
           }
 
@@ -763,6 +820,7 @@ scanRouter.post("/", async (c) => {
             });
           }
         }
+        } // end else (freshPrs.length > 0)
       } catch (err) {
         console.warn("[Scan] Background PR fetch failed:", err);
       }

@@ -274,7 +274,8 @@ export default function TreeDashboard() {
   const [worktreePostCreateScript, setWorktreePostCreateScript] = useState("");
   const [worktreePostDeleteScript, setWorktreePostDeleteScript] = useState("");
   // Settings modal category
-  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "cleanup">("branch");
+  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "cleanup" | "debug">("branch");
+  const [debugModeEnabled, setDebugModeEnabled] = useState(() => localStorage.getItem("vibe-tree-debug-mode") === "true");
   const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<{ chatSessions: number; taskInstructions: number; branchLinks: number } | null>(null);
 
@@ -639,13 +640,15 @@ export default function TreeDashboard() {
 
     // PR/CI status updates
     const unsubPrUpdated = wsClient.on("pr.updated", (msg) => {
-      const data = msg.data as { prs: { branch: string; checks: string | null; state: string }[] };
+      const data = msg.data as { prs: { branch: string; checks: string | null; state: string; reason?: string; oldChecks?: string | null }[] };
       if (!data.prs || data.prs.length === 0) return;
 
-      // Log the update
+      // Log the update with detailed reason
       for (const pr of data.prs) {
         const checksLabel = pr.checks === "success" ? "✔" : pr.checks === "failure" ? "✗" : "⏳";
-        addLog("pr", `CI ${checksLabel} ${pr.branch}`);
+        const oldLabel = pr.oldChecks === "success" ? "✔" : pr.oldChecks === "failure" ? "✗" : pr.oldChecks === "pending" ? "⏳" : "null";
+        const reasonText = pr.reason === "new_pr" ? "[NEW]" : `[${oldLabel}→${checksLabel}]`;
+        addLog("pr", `${reasonText} ${pr.branch}`);
       }
 
       // Update snapshot nodes with new CI status
@@ -2147,6 +2150,12 @@ export default function TreeDashboard() {
                 >
                   Cleanup
                 </button>
+                <button
+                  className={`settings-modal__nav-item ${settingsCategory === "debug" ? "settings-modal__nav-item--active" : ""}`}
+                  onClick={() => setSettingsCategory("debug")}
+                >
+                  Debug
+                </button>
               </div>
               <div className="settings-modal__content">
                 {settingsLoading && !settingsRule ? (
@@ -2275,6 +2284,29 @@ export default function TreeDashboard() {
                           >
                             Clean Up Stale Data
                           </button>
+                        </div>
+                      </>
+                    )}
+
+                    {settingsCategory === "debug" && (
+                      <>
+                        <h3>Debug</h3>
+                        <div className="settings-section">
+                          <label style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
+                            <input
+                              type="checkbox"
+                              checked={debugModeEnabled}
+                              onChange={(e) => {
+                                localStorage.setItem("vibe-tree-debug-mode", e.target.checked ? "true" : "false");
+                                setDebugModeEnabled(e.target.checked);
+                              }}
+                              style={{ width: "18px", height: "18px", cursor: "pointer" }}
+                            />
+                            <span>Fast Polling (10s)</span>
+                          </label>
+                          <p style={{ color: "#9ca3af", margin: "8px 0 0" }}>
+                            Enable 10-second polling interval for debugging. Page refresh required.
+                          </p>
                         </div>
                       </>
                     )}

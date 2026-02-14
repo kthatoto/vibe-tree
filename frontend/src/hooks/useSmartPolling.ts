@@ -1,5 +1,10 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 
+// Debug mode helper
+function isDebugMode(): boolean {
+  return localStorage.getItem("vibe-tree-debug-mode") === "true";
+}
+
 interface SmartPollingOptions {
   /** Local path of the repository */
   localPath: string | null;
@@ -34,6 +39,8 @@ export const INTERVALS = {
   ACTIVE_CLEAN: 60 * 1000, // 60s
   /** Hidden/inactive window: infrequent updates */
   HIDDEN: 300 * 1000, // 5min
+  /** Debug mode: fast polling */
+  DEBUG: 10 * 1000, // 10s
 } as const;
 
 /**
@@ -61,6 +68,11 @@ export function useSmartPolling({
    * Calculate the appropriate polling interval based on current state
    */
   const getInterval = useCallback(() => {
+    // Debug mode = always 10s
+    if (isDebugMode()) {
+      return INTERVALS.DEBUG;
+    }
+
     // Document hidden = long interval
     if (document.visibilityState === "hidden") {
       return INTERVALS.HIDDEN;

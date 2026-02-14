@@ -60,20 +60,13 @@ export default function TreeDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Save selected branch to localStorage when it changes
-  useEffect(() => {
-    if (selectedPinId && selectedNode) {
-      localStorage.setItem(`vibe-tree-selected-branch-${selectedPinId}`, selectedNode.branchName);
-    } else if (selectedPinId) {
-      localStorage.removeItem(`vibe-tree-selected-branch-${selectedPinId}`);
-    }
-  }, [selectedPinId, selectedNode?.branchName]);
+  // Track if selected branch has been restored from localStorage
+  const restoredSelectedBranch = useRef(false);
 
   // Restore selected branch from localStorage when snapshot loads
   useEffect(() => {
-    if (!snapshot || !selectedPinId) return;
-    // Only restore if no node is currently selected
-    if (selectedNode) return;
+    if (!snapshot || !selectedPinId || restoredSelectedBranch.current) return;
+    restoredSelectedBranch.current = true;
     const savedBranch = localStorage.getItem(`vibe-tree-selected-branch-${selectedPinId}`);
     if (savedBranch) {
       const node = snapshot.nodes.find(n => n.branchName === savedBranch);
@@ -82,6 +75,21 @@ export default function TreeDashboard() {
       }
     }
   }, [snapshot, selectedPinId]);
+
+  // Reset restoration flag when pin changes
+  useEffect(() => {
+    restoredSelectedBranch.current = false;
+  }, [selectedPinId]);
+
+  // Save selected branch to localStorage when user selects (not on initial restore)
+  useEffect(() => {
+    if (!selectedPinId || !restoredSelectedBranch.current) return;
+    if (selectedNode) {
+      localStorage.setItem(`vibe-tree-selected-branch-${selectedPinId}`, selectedNode.branchName);
+    } else {
+      localStorage.removeItem(`vibe-tree-selected-branch-${selectedPinId}`);
+    }
+  }, [selectedPinId, selectedNode?.branchName]);
 
   // Instruction cache: branchName -> TaskInstruction
   const [instructionCache, setInstructionCache] = useState<Map<string, TaskInstruction>>(new Map());
@@ -1773,7 +1781,7 @@ export default function TreeDashboard() {
                 ) : (
                   <div className="panel">
                     <div className="panel__header">
-                      <h3>Select a branch</h3>
+                      <h3>Branch</h3>
                     </div>
                     <p style={{ padding: "16px", color: "#666" }}>
                       Click on a branch to see details.

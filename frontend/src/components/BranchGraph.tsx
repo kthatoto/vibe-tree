@@ -96,6 +96,23 @@ export default function BranchGraph({
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
+  // Prevent browser back/forward gesture on horizontal scroll
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // Prevent browser back/forward when scrolling horizontally
+      if (Math.abs(e.deltaX) > 0) {
+        e.preventDefault();
+      }
+    };
+
+    // Use non-passive listener to allow preventDefault
+    svg.addEventListener("wheel", handleWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", handleWheel);
+  }, []);
+
   // Helper to check if a node should be minimized
   // Checkbox logic is inverted: checked = minimized (hidden), unchecked = visible
   const isMinimized = useCallback((branchName: string) => {

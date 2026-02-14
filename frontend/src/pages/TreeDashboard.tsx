@@ -99,8 +99,14 @@ export default function TreeDashboard() {
   // Branch graph fullscreen mode
   const [graphFullscreen, setGraphFullscreen] = useState(false);
 
-  // Branch graph zoom
-  const [graphZoom, setGraphZoom] = useState(1);
+  // Branch graph zoom (persisted in localStorage)
+  const [graphZoom, setGraphZoom] = useState(() => {
+    const saved = localStorage.getItem("branchGraph.zoom");
+    return saved ? parseFloat(saved) : 1;
+  });
+  useEffect(() => {
+    localStorage.setItem("branchGraph.zoom", String(graphZoom));
+  }, [graphZoom]);
 
   // Branch graph filter
   const [checkedBranches, setCheckedBranches] = useState<Set<string>>(new Set());

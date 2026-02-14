@@ -744,7 +744,7 @@ export default function BranchGraph({
                 height: "100%",
                 display: "flex",
                 flexDirection: "column",
-                justifyContent: "center",
+                justifyContent: "flex-start",
                 gap: 4,
                 overflow: "hidden",
               }}

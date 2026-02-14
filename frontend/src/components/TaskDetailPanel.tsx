@@ -878,7 +878,7 @@ export function TaskDetailPanel({
             <div className="task-detail-panel__branch-actions">
               <button
                 className="task-detail-panel__checkout-btn"
-                onClick={handleCheckout}
+                onClick={handleOpenCheckoutModal}
                 disabled={checkingOut}
               >
                 {checkingOut ? "Checking out..." : "Checkout"}

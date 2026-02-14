@@ -795,28 +795,58 @@ export default function BranchGraph({
 
     const { draggingBranch, siblings, currentX, offsetX } = columnDragState;
 
-    // Get sibling positions sorted by X (using left edge)
-    const siblingPositions = siblings.map(s => {
-      const node = layoutNodes.find(n => n.id === s);
-      const x = node?.x ?? 0;
-      const width = node?.width ?? NODE_WIDTH;
-      return { id: s, left: x, right: x + width, centerX: x + width / 2, width };
+    // Helper to get all descendants of a branch
+    const getDescendants = (branchId: string): string[] => {
+      const children = edges.filter(e => e.parent === branchId).map(e => e.child);
+      const descendants: string[] = [];
+      for (const child of children) {
+        descendants.push(child);
+        descendants.push(...getDescendants(child));
+      }
+      return descendants;
+    };
+
+    // Get column bounds (including all descendants)
+    const getColumnBounds = (branchId: string) => {
+      const ids = [branchId, ...getDescendants(branchId)];
+      const columnNodes = layoutNodes.filter(n => ids.includes(n.id));
+      if (columnNodes.length === 0) return null;
+
+      let minX = Infinity, maxX = -Infinity;
+      for (const node of columnNodes) {
+        const w = node.width ?? NODE_WIDTH;
+        minX = Math.min(minX, node.x);
+        maxX = Math.max(maxX, node.x + w);
+      }
+      return { left: minX, right: maxX, width: maxX - minX, centerX: (minX + maxX) / 2 };
+    };
+
+    // Get column bounds for all siblings, sorted by left edge
+    const siblingBounds = siblings.map(s => {
+      const bounds = getColumnBounds(s);
+      return {
+        id: s,
+        left: bounds?.left ?? 0,
+        right: bounds?.right ?? NODE_WIDTH,
+        width: bounds?.width ?? NODE_WIDTH,
+        centerX: bounds?.centerX ?? NODE_WIDTH / 2,
+      };
     }).sort((a, b) => a.left - b.left);
 
     // Current drag position (center of dragging column)
     const dragCenterX = currentX - offsetX;
-    const draggingInfo = siblingPositions.find(s => s.id === draggingBranch);
+    const draggingInfo = siblingBounds.find(s => s.id === draggingBranch);
     const draggingOriginalCenterX = draggingInfo?.centerX ?? 0;
     const draggingWidth = draggingInfo?.width ?? NODE_WIDTH;
 
     // Original index of dragging column
-    const originalIndex = siblingPositions.findIndex(s => s.id === draggingBranch);
+    const originalIndex = siblingBounds.findIndex(s => s.id === draggingBranch);
 
     // Calculate boundaries between columns (midpoint of gaps)
     const boundaries: number[] = [];
-    for (let i = 0; i < siblingPositions.length - 1; i++) {
-      const rightEdge = siblingPositions[i].right;
-      const leftEdge = siblingPositions[i + 1].left;
+    for (let i = 0; i < siblingBounds.length - 1; i++) {
+      const rightEdge = siblingBounds[i].right;
+      const leftEdge = siblingBounds[i + 1].left;
       boundaries.push((rightEdge + leftEdge) / 2);
     }
 
@@ -835,8 +865,8 @@ export default function BranchGraph({
     const offsets = new Map<string, number>();
     const shiftAmount = draggingWidth + HORIZONTAL_GAP;
 
-    for (let i = 0; i < siblingPositions.length; i++) {
-      const sibling = siblingPositions[i];
+    for (let i = 0; i < siblingBounds.length; i++) {
+      const sibling = siblingBounds[i];
       if (sibling.id === draggingBranch) {
         // Dragging column follows mouse
         offsets.set(sibling.id, dragCenterX - draggingOriginalCenterX);
@@ -855,7 +885,7 @@ export default function BranchGraph({
     }
 
     return offsets;
-  }, [columnDragState, layoutNodes]);
+  }, [columnDragState, layoutNodes, edges]);
 
   // Get offset for a specific node based on its column
   const getNodeOffset = useCallback((nodeId: string): number => {

@@ -741,22 +741,25 @@ export default function BranchGraph({
         layoutX = right + HORIZONTAL_GAP;
       }
 
-      // Check if drag center crosses the center of adjacent columns
-      // Swap happens when drag center passes the midpoint of the target column
+      // Calculate dragging column's visual edges
+      const dragLeftEdge = dragCenterX - draggingInfo.width / 2;
+      const dragRightEdge = dragCenterX + draggingInfo.width / 2;
+
+      // Swap detection based on edge overlap
       let newInsertIndex = currentInsertIndex;
 
-      // Check left swap: drag center needs to pass the center of the left neighbor
+      // Left swap: when dragging column's left edge passes left neighbor's left edge
       if (currentInsertIndex > 0) {
-        const leftNeighborCenter = visualPositions[currentInsertIndex - 1].centerX;
-        if (dragCenterX < leftNeighborCenter) {
+        const leftNeighborLeft = visualPositions[currentInsertIndex - 1].left;
+        if (dragLeftEdge < leftNeighborLeft) {
           newInsertIndex = currentInsertIndex - 1;
         }
       }
 
-      // Check right swap: drag center needs to pass the center of the right neighbor
+      // Right swap: when dragging column's right edge passes right neighbor's right edge
       if (currentInsertIndex < visualPositions.length - 1) {
-        const rightNeighborCenter = visualPositions[currentInsertIndex + 1].centerX;
-        if (dragCenterX > rightNeighborCenter) {
+        const rightNeighborRight = visualPositions[currentInsertIndex + 1].right;
+        if (dragRightEdge > rightNeighborRight) {
           newInsertIndex = currentInsertIndex + 1;
         }
       }

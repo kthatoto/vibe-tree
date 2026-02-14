@@ -764,11 +764,11 @@ export default function BranchGraph({
               )}
               {/* Row 2: R + CI + PR badges (no wrap, may overflow) */}
               <div style={{ display: "flex", gap: 3, flexWrap: "nowrap" }}>
-                {/* R (Review) badge */}
-                {(prLink?.reviewDecision === "APPROVED" || prLink?.reviewDecision === "CHANGES_REQUESTED" || prLink?.reviewDecision === "REVIEW_REQUIRED" || (prLink?.reviewers && (() => {
+                {/* R (Review) badge - only show if human reviewers exist */}
+                {prLink?.reviewers && (() => {
                   const reviewers = JSON.parse(prLink.reviewers) as string[];
                   return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
-                })())) && (
+                })() && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 4px",
@@ -846,8 +846,11 @@ export default function BranchGraph({
                 {/* PR status badges - right */}
                 {hasPR && (
                   <div style={{ display: "flex", gap: 6, flexWrap: "nowrap" }}>
-                {/* Review status - based on reviewDecision from branchLinks */}
-                {prLink?.reviewDecision === "APPROVED" && (
+                {/* Review status - based on reviewDecision from branchLinks (only show if human reviewers exist) */}
+                {prLink?.reviewDecision === "APPROVED" && prLink?.reviewers && (() => {
+                  const reviewers = JSON.parse(prLink.reviewers) as string[];
+                  return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
+                })() && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",
@@ -858,7 +861,10 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>Approved ✔</span>
                 )}
-                {prLink?.reviewDecision === "CHANGES_REQUESTED" && (
+                {prLink?.reviewDecision === "CHANGES_REQUESTED" && prLink?.reviewers && (() => {
+                  const reviewers = JSON.parse(prLink.reviewers) as string[];
+                  return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
+                })() && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",

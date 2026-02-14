@@ -1667,7 +1667,7 @@ export default function TreeDashboard() {
                           border: `1px solid ${paintMode === "check" ? "#22c55e" : "#ef4444"}`,
                           borderRadius: 6,
                         }}>
-                          <span style={{ fontSize: 12, color: paintMode === "check" ? "#4ade80" : "#f87171" }}>
+                          <span style={{ fontSize: 12, lineHeight: 1, color: paintMode === "check" ? "#4ade80" : "#f87171" }}>
                             🖌 Paint {paintMode === "check" ? "Check" : "Uncheck"} Mode
                           </span>
                           <button

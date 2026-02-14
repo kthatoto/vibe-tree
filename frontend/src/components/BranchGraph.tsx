@@ -768,10 +768,6 @@ export default function BranchGraph({
     const isDropTarget = dropTarget === id && dragState && dragState.fromBranch !== id;
     const canDrag = editMode && !isTentative && !isDefault && onEdgeCreate;
 
-    // Column reorder: can reorder if in edit mode, has siblings, and not tentative/default
-    const canReorderColumn = editMode && !isTentative && !isDefault && parentBranch && siblings && siblings.length > 1;
-    const isColumnDragging = columnDragState?.draggingBranch === id;
-
     // Determine node color (dark mode)
     let fillColor = "#1f2937";
     let strokeColor = "#4b5563";
@@ -852,34 +848,6 @@ export default function BranchGraph({
         }}
         onMouseDown={handleNodeMouseDown}
       >
-        {/* Column reorder drag handle - shown well above node to avoid worktree overlap */}
-        {canReorderColumn && (
-          <g
-            style={{ cursor: isColumnDragging ? "grabbing" : "grab" }}
-            onMouseDown={(e) => {
-              e.stopPropagation();
-              const coords = getSVGCoords(e);
-              handleColumnDragStart(id, parentBranch!, siblings!, coords.x);
-            }}
-          >
-            <rect
-              x={x + nodeWidth / 2 - 20}
-              y={y - 28}
-              width={40}
-              height={12}
-              rx={3}
-              ry={3}
-              fill={isColumnDragging ? "#6366f1" : "#374151"}
-              stroke={isColumnDragging ? "#818cf8" : "#4b5563"}
-              strokeWidth={1}
-            />
-            {/* Drag handle dots */}
-            <circle cx={x + nodeWidth / 2 - 8} cy={y - 22} r={2} fill="#9ca3af" />
-            <circle cx={x + nodeWidth / 2} cy={y - 22} r={2} fill="#9ca3af" />
-            <circle cx={x + nodeWidth / 2 + 8} cy={y - 22} r={2} fill="#9ca3af" />
-          </g>
-        )}
-
         {/* Node rectangle */}
         <rect
           x={x}
@@ -1424,6 +1392,47 @@ export default function BranchGraph({
           <g className="branch-graph__nodes">
             {layoutNodes.map((node) => renderNode(node))}
           </g>
+
+          {/* Column reorder drag handles - rendered last to be on top */}
+          {editMode && (
+            <g className="branch-graph__drag-handles">
+              {layoutNodes.map((node) => {
+                const { id, x, y, width: nodeWidth = NODE_WIDTH, isTentative, parentBranch, siblings } = node;
+                const isDefault = id === defaultBranch;
+                const canReorder = !isTentative && !isDefault && parentBranch && siblings && siblings.length > 1;
+                const isColumnDragging = columnDragState?.draggingBranch === id;
+
+                if (!canReorder) return null;
+
+                return (
+                  <g
+                    key={`drag-handle-${id}`}
+                    style={{ cursor: isColumnDragging ? "grabbing" : "grab" }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      const coords = getSVGCoords(e);
+                      handleColumnDragStart(id, parentBranch!, siblings!, coords.x);
+                    }}
+                  >
+                    <rect
+                      x={x + nodeWidth / 2 - 20}
+                      y={y - 16}
+                      width={40}
+                      height={12}
+                      rx={3}
+                      ry={3}
+                      fill={isColumnDragging ? "#6366f1" : "#374151"}
+                      stroke={isColumnDragging ? "#818cf8" : "#4b5563"}
+                      strokeWidth={1}
+                    />
+                    <circle cx={x + nodeWidth / 2 - 8} cy={y - 10} r={2} fill="#9ca3af" />
+                    <circle cx={x + nodeWidth / 2} cy={y - 10} r={2} fill="#9ca3af" />
+                    <circle cx={x + nodeWidth / 2 + 8} cy={y - 10} r={2} fill="#9ca3af" />
+                  </g>
+                );
+              })}
+            </g>
+          )}
         </g>
       </svg>
     </div>

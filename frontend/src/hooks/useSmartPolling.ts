@@ -22,7 +22,7 @@ const INTERVALS = {
   /** Active window + clean: moderate updates */
   ACTIVE_CLEAN: 60 * 1000, // 60s
   /** Hidden/inactive window: infrequent updates */
-  HIDDEN: 240 * 1000, // 4min
+  HIDDEN: 300 * 1000, // 5min
 } as const;
 
 /**

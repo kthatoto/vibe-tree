@@ -225,6 +225,19 @@ export default function TreeDashboard() {
   const [showWarnings, setShowWarnings] = useState(false);
   const [warningFilter, setWarningFilter] = useState<string | null>(null);
 
+  // Logs state
+  type LogEntry = { id: number; timestamp: Date; type: string; message: string };
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const logIdRef = useRef(0);
+  const addLog = useCallback((type: string, message: string) => {
+    const id = ++logIdRef.current;
+    setLogs((prev) => [...prev.slice(-49), { id, timestamp: new Date(), type, message }]); // Keep last 50
+  }, []);
+
+  // Next scan countdown
+  const [nextScanIn, setNextScanIn] = useState<number | null>(null);
+  const [scanStage, setScanStage] = useState<string | null>(null);
+
   // Bottom panel resize state (persisted in localStorage)
   const DEFAULT_BOTTOM_HEIGHT = 500;
   const MIN_BOTTOM_HEIGHT = 350;
@@ -431,6 +444,15 @@ export default function TreeDashboard() {
 
       const data = msg.data as { version?: number; stage?: string; isFinal?: boolean; snapshot?: ScanSnapshot; repoId?: string };
 
+      // Log scan progress
+      if (data.stage) {
+        setScanStage(data.stage);
+        addLog("scan", data.isFinal ? `Scan complete` : `Scan: ${data.stage}`);
+      }
+      if (data.isFinal) {
+        setScanStage(null);
+      }
+
       // Verify repoId matches to prevent cross-project updates
       const msgRepoId = data.snapshot?.repoId ?? data.repoId;
       if (msgRepoId && msgRepoId !== snapshot.repoId) {
@@ -499,6 +521,7 @@ export default function TreeDashboard() {
 
     // Refetch branches when planning is confirmed
     const unsubBranches = wsClient.on("branches.changed", () => {
+      addLog("branches", "Branches changed, rescanning...");
       if (selectedPin) {
         triggerScan(selectedPin.localPath);
       }
@@ -506,6 +529,7 @@ export default function TreeDashboard() {
 
     // Update branchLinks when PR info is refreshed (single source of truth)
     const unsubBranchLink = wsClient.on("branchLink.updated", (msg) => {
+      addLog("pr", `PR updated: ${(msg.data as BranchLink).branchName}`);
       const data = msg.data as BranchLink;
       setBranchLinks((prev) => {
         const newMap = new Map(prev);
@@ -537,14 +561,17 @@ export default function TreeDashboard() {
     const unsubFetchProgress = wsClient.on("fetch.progress", (msg) => {
       const data = msg.data as { step: string; message: string };
       setFetchProgress(data.message);
+      addLog("fetch", data.message);
     });
 
     const unsubFetchCompleted = wsClient.on("fetch.completed", () => {
       setFetchProgress(null);
+      addLog("fetch", "Fetch completed");
     });
 
-    const unsubFetchError = wsClient.on("fetch.error", () => {
+    const unsubFetchError = wsClient.on("fetch.error", (msg) => {
       setFetchProgress(null);
+      addLog("error", `Fetch error: ${(msg.data as { message?: string })?.message || "Unknown"}`);
     });
 
     return () => {
@@ -556,7 +583,7 @@ export default function TreeDashboard() {
       unsubFetchCompleted();
       unsubFetchError();
     };
-  }, [snapshot?.repoId, selectedPin, triggerScan]);
+  }, [snapshot?.repoId, selectedPin, triggerScan, addLog]);
 
   // No need to update checkedBranches when nodes change - start with all unchecked
 
@@ -1419,8 +1446,33 @@ export default function TreeDashboard() {
           </div>
         )}
 
-        {/* Spacer to push warnings to bottom */}
+        {/* Spacer to push logs and warnings to bottom */}
         <div className="sidebar__spacer" />
+
+        {/* Logs - fills remaining space, 2 lines max */}
+        <div style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "flex-end",
+          minHeight: 0,
+          padding: "0 8px",
+          marginBottom: 4,
+        }}>
+          <div style={{
+            fontSize: 10,
+            color: "#9ca3af",
+            fontFamily: "monospace",
+            overflow: "hidden",
+          }}>
+            {logs.slice(-2).map((log) => (
+              <div key={log.id} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <span style={{ color: "#6b7280" }}>{log.timestamp.toLocaleTimeString()}</span>{" "}
+                {log.message}
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* Warnings - always at bottom */}
         {snapshot && (

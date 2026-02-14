@@ -663,7 +663,11 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>Changes ✗</span>
                 )}
-                {prLink?.reviewDecision === "REVIEW_REQUIRED" && (
+                {prLink?.reviewDecision === "REVIEW_REQUIRED" && prLink?.reviewers && (() => {
+                  const reviewers = JSON.parse(prLink.reviewers) as string[];
+                  const humanReviewers = reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]"));
+                  return humanReviewers.length > 0;
+                })() && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",

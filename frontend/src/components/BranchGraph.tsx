@@ -354,23 +354,7 @@ export default function BranchGraph({
       const nodeHeight = shouldReduceHeight(branchName) ? MINIMIZED_NODE_HEIGHT : NODE_HEIGHT;
 
       // Vertical layout: Y is based on parent's bottom + gap
-      // For children of the default branch, start from TOP_PADDING (same row as develop)
-      // For default branch itself, center it vertically with its children
-      const isChildOfDefault = parentBranch === defaultBranch;
-      const isDefaultBranch = branchName === defaultBranch;
-      let y: number;
-      if (isChildOfDefault) {
-        // Children of default branch start at TOP_PADDING
-        y = TOP_PADDING;
-      } else if (isDefaultBranch) {
-        // Default branch is centered vertically with its children (which are at TOP_PADDING with NODE_HEIGHT)
-        // Center of children = TOP_PADDING + NODE_HEIGHT / 2
-        // develop.y + nodeHeight / 2 = TOP_PADDING + NODE_HEIGHT / 2
-        // develop.y = TOP_PADDING + NODE_HEIGHT / 2 - nodeHeight / 2
-        y = TOP_PADDING + (NODE_HEIGHT - nodeHeight) / 2;
-      } else {
-        y = parentY + parentHeight + VERTICAL_GAP;
-      }
+      const y = parentY + parentHeight + VERTICAL_GAP;
 
       const layoutNode: LayoutNode = {
         id: branchName,
@@ -395,9 +379,7 @@ export default function BranchGraph({
       // Layout children below, each child gets its own column
       // Sort children using siblingOrder if available
       const sortedChildren = sortChildren(branchName, children);
-      // For defaultBranch, start children from next column to avoid overlap
-      // (defaultBranch sits in its own column, children start from column + 1)
-      let currentCol = branchName === defaultBranch ? minCol + 1 : minCol;
+      let currentCol = minCol;
       sortedChildren.forEach((childName) => {
         currentCol = layoutSubtree(childName, depth + 1, currentCol, y, nodeHeight, branchName, sortedChildren);
       });
@@ -475,13 +457,8 @@ export default function BranchGraph({
     layoutNodes.forEach((n) => {
       const colX = columnXPositions.get(n.row) ?? LEFT_PADDING;
       const colWidth = columnMaxWidths.get(n.row) ?? NODE_WIDTH;
-      // defaultBranch is positioned at column start (not centered)
-      if (n.id === defaultBranch) {
-        n.x = colX;
-      } else {
-        // Center the node within the column
-        n.x = colX + (colWidth - n.width) / 2;
-      }
+      // Center the node within the column
+      n.x = colX + (colWidth - n.width) / 2;
     });
 
     // Add tentative nodes from planning session

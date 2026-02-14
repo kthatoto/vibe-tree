@@ -49,6 +49,7 @@ interface LayoutNode {
   x: number;
   y: number;
   width: number;
+  height: number;
   node: TreeNode;
   depth: number;
   row: number;
@@ -69,6 +70,7 @@ interface LayoutEdge {
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 80;
 const MINIMIZED_NODE_WIDTH = 90;
+const MINIMIZED_NODE_HEIGHT = 50;
 const TENTATIVE_NODE_HEIGHT = 60;
 const HORIZONTAL_GAP = 28;
 const VERTICAL_GAP = 50;
@@ -156,12 +158,17 @@ export default function BranchGraph({
     return () => svg.removeEventListener("wheel", handleWheel);
   }, []);
 
-  // Helper to check if a node should be minimized
+  // Helper to check if a branch is always minimized (develop/defaultBranch)
+  const isAlwaysMinimized = useCallback((branchName: string) => {
+    return branchName === defaultBranch || branchName === "develop";
+  }, [defaultBranch]);
+
+  // Helper to check if a node should be minimized (width only for filter, both for always-minimized)
   // Checkbox logic is inverted: checked = minimized (hidden), unchecked = visible
   const isMinimized = useCallback((branchName: string) => {
-    if (branchName === defaultBranch) return false; // Default branch is never minimized
+    if (isAlwaysMinimized(branchName)) return true;
     return filterEnabled && checkedBranches.has(branchName);
-  }, [filterEnabled, checkedBranches, defaultBranch]);
+  }, [filterEnabled, checkedBranches, isAlwaysMinimized]);
 
   // Get SVG coordinates from mouse event (accounting for zoom)
   const getSVGCoords = useCallback((e: React.MouseEvent | MouseEvent) => {
@@ -254,10 +261,20 @@ export default function BranchGraph({
       return { layoutNodes: [], layoutEdges: [], width: 400, height: 200 };
     }
 
+    // Helper to check if a branch is always minimized (develop/defaultBranch)
+    const isAlwaysMinimizedLayout = (branchName: string) => {
+      return branchName === defaultBranch || branchName === "develop";
+    };
+
     // Helper to check if a branch should be minimized (for layout calculation)
     const shouldMinimize = (branchName: string) => {
-      if (branchName === defaultBranch) return false;
+      if (isAlwaysMinimizedLayout(branchName)) return true;
       return filterEnabled && checkedBranches.has(branchName);
+    };
+
+    // Helper to check if height should be reduced (only for always-minimized branches)
+    const shouldReduceHeight = (branchName: string) => {
+      return isAlwaysMinimizedLayout(branchName);
     };
 
     // Build adjacency map (parent -> children)
@@ -319,6 +336,8 @@ export default function BranchGraph({
       branchName: string,
       depth: number,
       minCol: number,
+      parentY: number,
+      parentHeight: number,
       parentBranch?: string,
       siblings?: string[]
     ): number {
@@ -330,15 +349,35 @@ export default function BranchGraph({
       // Left-aligned: use minCol directly
       const col = minCol;
 
-      // Determine node width based on minimized state
+      // Determine node width and height based on minimized state
       const nodeWidth = shouldMinimize(branchName) ? MINIMIZED_NODE_WIDTH : NODE_WIDTH;
+      const nodeHeight = shouldReduceHeight(branchName) ? MINIMIZED_NODE_HEIGHT : NODE_HEIGHT;
 
-      // Vertical layout: depth controls Y, col controls X (X will be recalculated later)
+      // Vertical layout: Y is based on parent's bottom + gap
+      // For children of the default branch, start from TOP_PADDING (same row as develop)
+      // For default branch itself, center it vertically with its children
+      const isChildOfDefault = parentBranch === defaultBranch;
+      const isDefaultBranch = branchName === defaultBranch;
+      let y: number;
+      if (isChildOfDefault) {
+        // Children of default branch start at TOP_PADDING
+        y = TOP_PADDING;
+      } else if (isDefaultBranch) {
+        // Default branch is centered vertically with its children (which are at TOP_PADDING with NODE_HEIGHT)
+        // Center of children = TOP_PADDING + NODE_HEIGHT / 2
+        // develop.y + nodeHeight / 2 = TOP_PADDING + NODE_HEIGHT / 2
+        // develop.y = TOP_PADDING + NODE_HEIGHT / 2 - nodeHeight / 2
+        y = TOP_PADDING + (NODE_HEIGHT - nodeHeight) / 2;
+      } else {
+        y = parentY + parentHeight + VERTICAL_GAP;
+      }
+
       const layoutNode: LayoutNode = {
         id: branchName,
         x: 0, // Will be calculated in Phase 2
-        y: TOP_PADDING + depth * (NODE_HEIGHT + VERTICAL_GAP),
+        y,
         width: nodeWidth,
+        height: nodeHeight,
         node,
         depth,
         row: col,
@@ -356,9 +395,11 @@ export default function BranchGraph({
       // Layout children below, each child gets its own column
       // Sort children using siblingOrder if available
       const sortedChildren = sortChildren(branchName, children);
-      let currentCol = minCol;
+      // For defaultBranch, start children from next column to avoid overlap
+      // (defaultBranch sits in its own column, children start from column + 1)
+      let currentCol = branchName === defaultBranch ? minCol + 1 : minCol;
       sortedChildren.forEach((childName) => {
-        currentCol = layoutSubtree(childName, depth + 1, currentCol, branchName, sortedChildren);
+        currentCol = layoutSubtree(childName, depth + 1, currentCol, y, nodeHeight, branchName, sortedChildren);
       });
 
       // Return the next available column
@@ -373,10 +414,14 @@ export default function BranchGraph({
     rootNodes.forEach((root) => {
       const isDefaultRoot = root.branchName === defaultBranch;
       // For roots, parent is "__roots__" and siblings are other non-default roots
+      // Initial Y: parentY + parentHeight + VERTICAL_GAP = TOP_PADDING
+      // So: parentY = TOP_PADDING - VERTICAL_GAP, parentHeight = 0
       nextCol = layoutSubtree(
         root.branchName,
         0,
         nextCol,
+        TOP_PADDING - VERTICAL_GAP, // parentY
+        0, // parentHeight
         isDefaultRoot ? undefined : "__roots__",
         isDefaultRoot ? undefined : nonDefaultRoots
       );
@@ -389,12 +434,14 @@ export default function BranchGraph({
         const col = nextCol++;
 
         const nodeWidth = shouldMinimize(node.branchName) ? MINIMIZED_NODE_WIDTH : NODE_WIDTH;
+        const nodeHeight = shouldReduceHeight(node.branchName) ? MINIMIZED_NODE_HEIGHT : NODE_HEIGHT;
 
         const layoutNode: LayoutNode = {
           id: node.branchName,
           x: 0, // Will be calculated in Phase 2
-          y: TOP_PADDING + depth * (NODE_HEIGHT + VERTICAL_GAP),
+          y: TOP_PADDING,
           width: nodeWidth,
+          height: nodeHeight,
           node,
           depth,
           row: col,
@@ -552,6 +599,7 @@ export default function BranchGraph({
           x: 0, // Will be recalculated after all nodes are placed
           y: TOP_PADDING + tentDepth * (NODE_HEIGHT + VERTICAL_GAP),
           width: NODE_WIDTH, // Tentative nodes always use full width
+          height: TENTATIVE_NODE_HEIGHT,
           node: tentDummyNode,
           depth: tentDepth,
           row: col,
@@ -669,7 +717,7 @@ export default function BranchGraph({
     const BADGE_HEIGHT = 20; // Space for badges below nodes
     const maxX = Math.max(...layoutNodes.map((n) => n.x + n.width), 0) + LEFT_PADDING;
     const maxY = Math.max(
-      ...layoutNodes.map((n) => n.y + (n.isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT) + BADGE_HEIGHT),
+      ...layoutNodes.map((n) => n.y + n.height + BADGE_HEIGHT),
       0
     ) + TOP_PADDING;
 
@@ -1004,7 +1052,7 @@ export default function BranchGraph({
 
   const renderEdge = (edge: LayoutEdge, index: number) => {
     // Vertical edge: from bottom of parent to top of child
-    const fromHeight = edge.from.isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT;
+    const fromHeight = edge.from.height;
     const fromWidth = edge.from.width ?? NODE_WIDTH;
     const toWidth = edge.to.width ?? NODE_WIDTH;
 
@@ -1228,9 +1276,10 @@ export default function BranchGraph({
 
     // Check if this node should be minimized
     const nodeIsMinimized = !isTentative && isMinimized(id);
+    const nodeIsAlwaysMinimized = !isTentative && isAlwaysMinimized(id);
     const nodeWidth = nodeIsMinimized ? MINIMIZED_NODE_WIDTH : NODE_WIDTH;
-    // Height stays the same even when minimized (only width changes)
-    const nodeHeight = isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT;
+    // Only always-minimized branches (develop/defaultBranch) get reduced height
+    const nodeHeight = isTentative ? TENTATIVE_NODE_HEIGHT : (nodeIsAlwaysMinimized ? MINIMIZED_NODE_HEIGHT : NODE_HEIGHT);
     const isChecked = checkedBranches.has(id);
 
     // Get description label (first word/token before whitespace)
@@ -1383,7 +1432,14 @@ export default function BranchGraph({
                   }}>PR</span>
                 )}
               </div>
-              {/* Row 3: Branch name (single line, no ellipsis) */}
+              {/* Row 3: (default) label */}
+              {isDefault && (
+                <div style={{
+                  fontSize: 9,
+                  color: "#6b7280",
+                }}>(default)</div>
+              )}
+              {/* Row 4: Branch name */}
               <div style={{
                 fontSize: 10,
                 fontFamily: "monospace",
@@ -1899,7 +1955,7 @@ export default function BranchGraph({
               let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
               for (const node of columnNodes) {
                 const w = node.width ?? NODE_WIDTH;
-                const h = node.isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT;
+                const h = node.height ?? NODE_HEIGHT;
                 minX = Math.min(minX, node.x + offset);
                 minY = Math.min(minY, node.y);
                 maxX = Math.max(maxX, node.x + offset + w);

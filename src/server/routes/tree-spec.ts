@@ -46,6 +46,7 @@ treeSpecRouter.post("/", async (c) => {
   const specJson = JSON.stringify({
     nodes: input.nodes,
     edges: input.edges,
+    siblingOrder: input.siblingOrder,
   });
 
   // Check if spec exists

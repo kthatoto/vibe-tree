@@ -677,7 +677,11 @@ export default function TreeDashboard() {
           edges: [...prev.edges, newDisplayEdge],
           treeSpec: prev.treeSpec ? {
             ...prev.treeSpec,
-            specJson: { nodes: currentNodes, edges: newEdges },
+            specJson: {
+              nodes: currentNodes,
+              edges: newEdges,
+              siblingOrder: prev.treeSpec.specJson.siblingOrder,
+            },
             updatedAt: new Date().toISOString(),
           } : prev.treeSpec,
         };
@@ -689,6 +693,7 @@ export default function TreeDashboard() {
         baseBranch: snapshot.treeSpec?.baseBranch ?? snapshot.defaultBranch,
         nodes: currentNodes,
         edges: newEdges,
+        siblingOrder: snapshot.treeSpec?.specJson.siblingOrder,
       }).catch((err) => {
         console.error("Failed to update tree spec:", err);
       });
@@ -1417,6 +1422,7 @@ export default function TreeDashboard() {
                                       specJson: {
                                         nodes: prev.treeSpec.specJson.nodes,
                                         edges: originalTreeSpecEdges,
+                                        siblingOrder: prev.treeSpec.specJson.siblingOrder,
                                       },
                                       updatedAt: new Date().toISOString(),
                                     } : prev.treeSpec,
@@ -1429,6 +1435,7 @@ export default function TreeDashboard() {
                                   baseBranch: snapshot.treeSpec?.baseBranch ?? snapshot.defaultBranch,
                                   nodes: snapshot.treeSpec?.specJson.nodes ?? [],
                                   edges: originalTreeSpecEdges,
+                                  siblingOrder: snapshot.treeSpec?.specJson.siblingOrder,
                                 }).then(() => {
                                   // Background rescan to ensure consistency
                                   triggerScan(selectedPin.localPath);
@@ -1625,6 +1632,7 @@ export default function TreeDashboard() {
                           const filteredTreeSpecEdges = currentEdges.filter((e) => e.child !== childBranch);
                           const newTreeSpecEdges = [...filteredTreeSpecEdges, { parent: parentBranch, child: childBranch }];
                           const latestNodes = prev.treeSpec?.specJson.nodes ?? [];
+                          const currentSiblingOrder = prev.treeSpec?.specJson.siblingOrder;
 
                           // Save to server and rescan to ensure consistency
                           api.updateTreeSpec({
@@ -1632,6 +1640,7 @@ export default function TreeDashboard() {
                             baseBranch: prev.treeSpec?.baseBranch ?? prev.defaultBranch,
                             nodes: latestNodes,
                             edges: newTreeSpecEdges,
+                            siblingOrder: currentSiblingOrder,
                           }).then(() => {
                             // Rescan after treeSpec is saved to ensure edges are applied
                             triggerScan(selectedPin.localPath);
@@ -1657,7 +1666,11 @@ export default function TreeDashboard() {
                               repoId: prev.repoId,
                               baseBranch: prev.treeSpec?.baseBranch ?? prev.defaultBranch,
                               status: prev.treeSpec?.status ?? "draft" as const,
-                              specJson: { nodes: latestNodes, edges: newTreeSpecEdges },
+                              specJson: {
+                                nodes: latestNodes,
+                                edges: newTreeSpecEdges,
+                                siblingOrder: currentSiblingOrder,
+                              },
                               createdAt: prev.treeSpec?.createdAt ?? new Date().toISOString(),
                               updatedAt: new Date().toISOString(),
                             },
@@ -1671,6 +1684,48 @@ export default function TreeDashboard() {
                       }}
                       zoom={graphZoom}
                       onZoomChange={setGraphZoom}
+                      siblingOrder={snapshot.treeSpec?.specJson.siblingOrder ?? {}}
+                      onSiblingOrderChange={(newSiblingOrder) => {
+                        if (!selectedPin || !snapshot?.repoId) return;
+
+                        // Optimistic update
+                        setSnapshot((prev) => {
+                          if (!prev) return prev;
+
+                          const currentNodes = prev.treeSpec?.specJson.nodes ?? [];
+                          const currentEdges = prev.treeSpec?.specJson.edges ?? [];
+
+                          // Save to server
+                          api.updateTreeSpec({
+                            repoId: prev.repoId,
+                            baseBranch: prev.treeSpec?.baseBranch ?? prev.defaultBranch,
+                            nodes: currentNodes,
+                            edges: currentEdges,
+                            siblingOrder: newSiblingOrder,
+                          }).catch((err) => {
+                            console.error("Failed to save sibling order:", err);
+                            setError((err as Error).message);
+                          });
+
+                          return {
+                            ...prev,
+                            treeSpec: {
+                              ...prev.treeSpec,
+                              id: prev.treeSpec?.id ?? 0,
+                              repoId: prev.repoId,
+                              baseBranch: prev.treeSpec?.baseBranch ?? prev.defaultBranch,
+                              status: prev.treeSpec?.status ?? "draft" as const,
+                              specJson: {
+                                nodes: currentNodes,
+                                edges: currentEdges,
+                                siblingOrder: newSiblingOrder,
+                              },
+                              createdAt: prev.treeSpec?.createdAt ?? new Date().toISOString(),
+                              updatedAt: new Date().toISOString(),
+                            },
+                          };
+                        });
+                      }}
                     />
                   </div>
                 </div>

@@ -578,6 +578,7 @@ export const api = {
     baseBranch?: string;
     nodes: TreeSpecNode[];
     edges: TreeSpecEdge[];
+    siblingOrder?: Record<string, string[]>;
   }) =>
     fetchJson<TreeSpec>(`${API_BASE}/tree-spec`, {
       method: "POST",

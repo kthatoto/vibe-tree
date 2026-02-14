@@ -27,6 +27,9 @@ interface BranchGraphProps {
   checkedBranches?: Set<string>;
   onCheckedChange?: (branchName: string, checked: boolean) => void;
   filterEnabled?: boolean;
+  // Sibling order for column reordering (parent branchName -> ordered child branchNames)
+  siblingOrder?: Record<string, string[]>;
+  onSiblingOrderChange?: (siblingOrder: Record<string, string[]>) => void;
 }
 
 interface DragState {
@@ -48,6 +51,8 @@ interface LayoutNode {
   isTentative?: boolean;
   tentativeTitle?: string;
   taskId?: string; // For tentative nodes, stores the task ID for edge creation
+  parentBranch?: string; // Parent branch name for sibling reordering
+  siblings?: string[]; // Sibling branch names in current order
 }
 
 interface LayoutEdge {
@@ -91,10 +96,21 @@ export default function BranchGraph({
   checkedBranches = new Set(),
   onCheckedChange,
   filterEnabled = false,
+  siblingOrder = {},
+  onSiblingOrderChange,
 }: BranchGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+
+  // Column reorder drag state
+  const [columnDragState, setColumnDragState] = useState<{
+    draggingBranch: string;
+    parentBranch: string;
+    siblings: string[];
+    startX: number;
+    currentX: number;
+  } | null>(null);
 
   // Prevent browser back/forward gesture on horizontal scroll
   useEffect(() => {
@@ -184,6 +200,22 @@ export default function BranchGraph({
     };
   }, [dragState, getSVGCoords]);
 
+  // Column reorder drag handlers
+  const handleColumnDragStart = useCallback((
+    branchName: string,
+    parentBranch: string,
+    siblings: string[],
+    startX: number
+  ) => {
+    setColumnDragState({
+      draggingBranch: branchName,
+      parentBranch,
+      siblings,
+      startX,
+      currentX: startX,
+    });
+  }, []);
+
   const { layoutNodes, layoutEdges, width, height } = useMemo(() => {
     if (nodes.length === 0 && tentativeNodes.length === 0) {
       return { layoutNodes: [], layoutEdges: [], width: 400, height: 200 };
@@ -206,14 +238,40 @@ export default function BranchGraph({
       parentMap.set(edge.child, edge.parent);
     });
 
+    // Helper to sort children using siblingOrder if available
+    const sortChildren = (parentBranch: string, children: string[]): string[] => {
+      const order = siblingOrder[parentBranch];
+      if (!order || order.length === 0) {
+        // No custom order, sort alphabetically
+        return [...children].sort((a, b) => a.localeCompare(b));
+      }
+      // Sort by custom order, unknown children go to the end
+      return [...children].sort((a, b) => {
+        const indexA = order.indexOf(a);
+        const indexB = order.indexOf(b);
+        if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+        if (indexA === -1) return 1;
+        if (indexB === -1) return -1;
+        return indexA - indexB;
+      });
+    };
+
     // Find root nodes (nodes that are not children of any other node)
     const childSet = new Set(edges.map((e) => e.child));
     const rootNodes = nodes.filter((n) => !childSet.has(n.branchName));
 
-    // Sort roots: default branch first
+    // Sort roots: default branch first, then by siblingOrder["__roots__"] if available
+    const rootOrder = siblingOrder["__roots__"];
     rootNodes.sort((a, b) => {
       if (a.branchName === defaultBranch) return -1;
       if (b.branchName === defaultBranch) return 1;
+      if (rootOrder && rootOrder.length > 0) {
+        const indexA = rootOrder.indexOf(a.branchName);
+        const indexB = rootOrder.indexOf(b.branchName);
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+      }
       return a.branchName.localeCompare(b.branchName);
     });
 
@@ -224,7 +282,13 @@ export default function BranchGraph({
     // Track max column used at each depth for left-aligned layout
     const maxColAtDepth = new Map<number, number>();
 
-    function layoutSubtree(branchName: string, depth: number, minCol: number): number {
+    function layoutSubtree(
+      branchName: string,
+      depth: number,
+      minCol: number,
+      parentBranch?: string,
+      siblings?: string[]
+    ): number {
       const node = nodes.find((n) => n.branchName === branchName);
       if (!node || nodeMap.has(branchName)) return minCol;
 
@@ -245,6 +309,8 @@ export default function BranchGraph({
         node,
         depth,
         row: col,
+        parentBranch,
+        siblings,
       };
 
       layoutNodes.push(layoutNode);
@@ -255,19 +321,32 @@ export default function BranchGraph({
       maxColAtDepth.set(depth, Math.max(currentMax, col));
 
       // Layout children below, each child gets its own column
+      // Sort children using siblingOrder if available
+      const sortedChildren = sortChildren(branchName, children);
       let currentCol = minCol;
-      children.forEach((childName) => {
-        currentCol = layoutSubtree(childName, depth + 1, currentCol);
+      sortedChildren.forEach((childName) => {
+        currentCol = layoutSubtree(childName, depth + 1, currentCol, branchName, sortedChildren);
       });
 
       // Return the next available column
       return Math.max(currentCol, minCol + 1);
     }
 
+    // Sort root nodes (non-default roots are siblings)
+    const nonDefaultRoots = rootNodes.filter(r => r.branchName !== defaultBranch).map(r => r.branchName);
+
     // Layout from each root
     let nextCol = 0;
     rootNodes.forEach((root) => {
-      nextCol = layoutSubtree(root.branchName, 0, nextCol);
+      const isDefaultRoot = root.branchName === defaultBranch;
+      // For roots, parent is "__roots__" and siblings are other non-default roots
+      nextCol = layoutSubtree(
+        root.branchName,
+        0,
+        nextCol,
+        isDefaultRoot ? undefined : "__roots__",
+        isDefaultRoot ? undefined : nonDefaultRoots
+      );
     });
 
     // Handle orphan nodes (not connected to any root)
@@ -567,7 +646,62 @@ export default function BranchGraph({
       width: Math.max(400, maxX),
       height: Math.max(150, maxY),
     };
-  }, [nodes, edges, defaultBranch, tentativeNodes, tentativeEdges, tentativeBaseBranch, checkedBranches, filterEnabled]);
+  }, [nodes, edges, defaultBranch, tentativeNodes, tentativeEdges, tentativeBaseBranch, checkedBranches, filterEnabled, siblingOrder]);
+
+  // Handle column drag movement and drop (must be after layoutNodes is defined)
+  useEffect(() => {
+    if (!columnDragState) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const coords = getSVGCoords(e);
+      setColumnDragState(prev => prev ? { ...prev, currentX: coords.x } : null);
+    };
+
+    const handleMouseUp = () => {
+      if (columnDragState && onSiblingOrderChange) {
+        // Find all sibling layout nodes and their X positions
+        const siblingPositions = columnDragState.siblings.map(sibling => {
+          const node = layoutNodes.find(n => n.id === sibling);
+          return { branchName: sibling, x: node?.x ?? 0 };
+        });
+
+        // Sort by X position to get new order
+        siblingPositions.sort((a, b) => a.x - b.x);
+
+        // Calculate new position based on drag position
+        let newIndex = 0;
+        for (let i = 0; i < siblingPositions.length; i++) {
+          if (siblingPositions[i].branchName === columnDragState.draggingBranch) continue;
+          const midX = siblingPositions[i].x + (NODE_WIDTH / 2);
+          if (columnDragState.currentX > midX) {
+            newIndex = i + 1;
+          }
+        }
+
+        // Remove dragged item and insert at new position
+        const reordered = columnDragState.siblings.filter(
+          s => s !== columnDragState.draggingBranch
+        );
+        reordered.splice(Math.min(newIndex, reordered.length), 0, columnDragState.draggingBranch);
+
+        // Only update if order changed
+        if (JSON.stringify(reordered) !== JSON.stringify(columnDragState.siblings)) {
+          const newSiblingOrder = { ...siblingOrder };
+          newSiblingOrder[columnDragState.parentBranch] = reordered;
+          onSiblingOrderChange(newSiblingOrder);
+        }
+      }
+      setColumnDragState(null);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [columnDragState, getSVGCoords, layoutNodes, onSiblingOrderChange, siblingOrder]);
 
   const renderEdge = (edge: LayoutEdge, index: number) => {
     // Vertical edge: from bottom of parent to top of child
@@ -606,7 +740,7 @@ export default function BranchGraph({
   };
 
   const renderNode = (layoutNode: LayoutNode) => {
-    const { id, x, y, node, isTentative, tentativeTitle } = layoutNode;
+    const { id, x, y, node, isTentative, tentativeTitle, parentBranch, siblings } = layoutNode;
     const isSelected = selectedBranch === id;
     const isDefault = id === defaultBranch;
     const hasWorktree = !!node.worktree;
@@ -622,6 +756,10 @@ export default function BranchGraph({
     const isDragging = dragState?.fromBranch === id;
     const isDropTarget = dropTarget === id && dragState && dragState.fromBranch !== id;
     const canDrag = editMode && !isTentative && !isDefault && onEdgeCreate;
+
+    // Column reorder: can reorder if in edit mode, has siblings, and not tentative/default
+    const canReorderColumn = editMode && !isTentative && !isDefault && parentBranch && siblings && siblings.length > 1;
+    const isColumnDragging = columnDragState?.draggingBranch === id;
 
     // Determine node color (dark mode)
     let fillColor = "#1f2937";
@@ -703,6 +841,34 @@ export default function BranchGraph({
         }}
         onMouseDown={handleNodeMouseDown}
       >
+        {/* Column reorder drag handle - shown above node when in edit mode with siblings */}
+        {canReorderColumn && (
+          <g
+            style={{ cursor: isColumnDragging ? "grabbing" : "grab" }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              const coords = getSVGCoords(e);
+              handleColumnDragStart(id, parentBranch!, siblings!, coords.x);
+            }}
+          >
+            <rect
+              x={x + nodeWidth / 2 - 20}
+              y={y - 16}
+              width={40}
+              height={12}
+              rx={3}
+              ry={3}
+              fill={isColumnDragging ? "#6366f1" : "#374151"}
+              stroke={isColumnDragging ? "#818cf8" : "#4b5563"}
+              strokeWidth={1}
+            />
+            {/* Drag handle dots */}
+            <circle cx={x + nodeWidth / 2 - 8} cy={y - 10} r={2} fill="#9ca3af" />
+            <circle cx={x + nodeWidth / 2} cy={y - 10} r={2} fill="#9ca3af" />
+            <circle cx={x + nodeWidth / 2 + 8} cy={y - 10} r={2} fill="#9ca3af" />
+          </g>
+        )}
+
         {/* Node rectangle */}
         <rect
           x={x}

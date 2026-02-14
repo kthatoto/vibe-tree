@@ -105,6 +105,7 @@ export const updateTreeSpecSchema = z.object({
   baseBranch: z.string().optional(), // default branch (develop, main, master, etc.)
   nodes: z.array(treeSpecNodeSchema),
   edges: z.array(treeSpecEdgeSchema),
+  siblingOrder: z.record(z.string(), z.array(z.string())).optional(), // parent branchName -> ordered child branchNames
 });
 
 export type UpdateTreeSpecInput = z.infer<typeof updateTreeSpecSchema>;

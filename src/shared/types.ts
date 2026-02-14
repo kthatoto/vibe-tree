@@ -181,6 +181,7 @@ export interface TreeSpec {
   specJson: {
     nodes: TreeSpecNode[];
     edges: TreeSpecEdge[];
+    siblingOrder?: Record<string, string[]>; // parent branchName -> ordered child branchNames
   };
   createdAt: string;
   updatedAt: string;

@@ -750,7 +750,20 @@ export default function BranchGraph({
                 overflow: "hidden",
               }}
             >
-              {/* Row 1: Description label */}
+              {/* Row 1: Worktree name (if exists) */}
+              {hasWorktree && (
+                <span style={{
+                  fontSize: 10,
+                  padding: "1px 4px",
+                  borderRadius: 3,
+                  background: node.worktree?.isActive ? "#14532d" : "#1e3a5f",
+                  border: `1px solid ${node.worktree?.isActive ? "#22c55e" : "#3b82f6"}`,
+                  color: node.worktree?.isActive ? "#4ade80" : "#93c5fd",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                }}>{node.worktree?.path?.split("/").pop() || "worktree"}</span>
+              )}
+              {/* Row 2: Description label */}
               {descriptionLabel && (
                 <span style={{
                   fontSize: 10,

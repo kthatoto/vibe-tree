@@ -297,86 +297,43 @@
   display: block;
 }
 
-/* Branch Description Section */
-.task-detail-panel__description-section {
-  padding: 8px 16px;
+/* Branch Description Row */
+.task-detail-panel__description-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
   border-bottom: 1px solid #374151;
   flex-shrink: 0;
 }
 
-.task-detail-panel__description-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.task-detail-panel__description-header h4 {
-  margin: 0;
+.task-detail-panel__description-row label {
   font-size: 12px;
-  font-weight: 600;
   color: #9ca3af;
+  white-space: nowrap;
 }
 
-.task-detail-panel__description-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.task-detail-panel__description-actions button {
-  padding: 2px 8px;
-  background: transparent;
-  border: 1px solid #4b5563;
-  border-radius: 4px;
-  font-size: 11px;
-  color: #9ca3af;
-  cursor: pointer;
-}
-
-.task-detail-panel__description-actions button:hover {
-  background: #374151;
-  color: #e5e7eb;
-}
-
-.task-detail-panel__description-actions button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.task-detail-panel__description-textarea {
-  width: 100%;
-  padding: 8px;
+.task-detail-panel__description-input {
+  flex: 1;
+  padding: 4px 8px;
   background: #1f2937;
   border: 1px solid #374151;
   border-radius: 4px;
   color: #e5e7eb;
-  font-size: 13px;
-  line-height: 1.4;
-  resize: vertical;
-  font-family: inherit;
+  font-size: 12px;
 }
 
-.task-detail-panel__description-textarea:focus {
+.task-detail-panel__description-input:focus {
   outline: none;
   border-color: #60a5fa;
 }
 
-.task-detail-panel__description-textarea::placeholder {
+.task-detail-panel__description-input::placeholder {
   color: #6b7280;
 }
 
-.task-detail-panel__description-content {
-  font-size: 13px;
-  color: #e5e7eb;
-  line-height: 1.4;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.task-detail-panel__description-empty {
-  font-size: 13px;
-  color: #6b7280;
-  font-style: italic;
+.task-detail-panel__description-input:disabled {
+  opacity: 0.6;
 }
 
 /* Branch Links Section */

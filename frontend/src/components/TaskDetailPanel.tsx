@@ -257,7 +257,6 @@ export function TaskDetailPanel({
   // Branch description state
   const [branchDescription, setBranchDescription] = useState<BranchDescription | null>(null);
   const [descriptionDraft, setDescriptionDraft] = useState("");
-  const [editingDescription, setEditingDescription] = useState(false);
   const [savingDescription, setSavingDescription] = useState(false);
 
   // The working path is either the worktree path or localPath if checked out
@@ -575,11 +574,12 @@ export function TaskDetailPanel({
   };
 
   const handleSaveDescription = async () => {
+    // Only save if changed
+    if (descriptionDraft === (branchDescription?.description || "")) return;
     setSavingDescription(true);
     try {
       const updated = await api.updateBranchDescription(repoId, branchName, descriptionDraft);
       setBranchDescription(updated);
-      setEditingDescription(false);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -889,57 +889,19 @@ export function TaskDetailPanel({
 
       {error && <div className="task-detail-panel__error">{error}</div>}
 
-      {/* Description Section */}
-      <div className="task-detail-panel__description-section">
-        <div className="task-detail-panel__description-header">
-          <h4>Description</h4>
-          {!editingDescription ? (
-            <button
-              className="task-detail-panel__edit-btn"
-              onClick={() => {
-                setDescriptionDraft(branchDescription?.description || "");
-                setEditingDescription(true);
-              }}
-            >
-              Edit
-            </button>
-          ) : (
-            <div className="task-detail-panel__description-actions">
-              <button
-                onClick={handleSaveDescription}
-                disabled={savingDescription}
-              >
-                {savingDescription ? "Saving..." : "Save"}
-              </button>
-              <button
-                onClick={() => {
-                  setEditingDescription(false);
-                  setDescriptionDraft(branchDescription?.description || "");
-                }}
-                disabled={savingDescription}
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-        </div>
-        {editingDescription ? (
-          <textarea
-            className="task-detail-panel__description-textarea"
-            value={descriptionDraft}
-            onChange={(e) => setDescriptionDraft(e.target.value)}
-            placeholder="Add a description for this branch..."
-            rows={3}
-          />
-        ) : branchDescription?.description ? (
-          <div className="task-detail-panel__description-content">
-            {branchDescription.description}
-          </div>
-        ) : (
-          <div className="task-detail-panel__description-empty">
-            No description
-          </div>
-        )}
+      {/* Description Section - inline single line */}
+      <div className="task-detail-panel__description-row">
+        <label>Description:</label>
+        <input
+          type="text"
+          className="task-detail-panel__description-input"
+          value={descriptionDraft}
+          onChange={(e) => setDescriptionDraft(e.target.value)}
+          onBlur={handleSaveDescription}
+          placeholder="Branch description..."
+          disabled={savingDescription}
+        />
+        {savingDescription && <span className="task-detail-panel__spinner" />}
       </div>
 
       {/* Working Path Section */}

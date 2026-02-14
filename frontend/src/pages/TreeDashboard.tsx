@@ -108,9 +108,20 @@ export default function TreeDashboard() {
     localStorage.setItem("branchGraph.zoom", String(graphZoom));
   }, [graphZoom]);
 
-  // Branch graph filter
-  const [checkedBranches, setCheckedBranches] = useState<Set<string>>(new Set());
-  const [filterEnabled, setFilterEnabled] = useState(false);
+  // Branch graph filter (persisted in localStorage)
+  const [checkedBranches, setCheckedBranches] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem("branchGraph.checkedBranches");
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  });
+  const [filterEnabled, setFilterEnabled] = useState(() => {
+    return localStorage.getItem("branchGraph.filterEnabled") === "true";
+  });
+  useEffect(() => {
+    localStorage.setItem("branchGraph.checkedBranches", JSON.stringify([...checkedBranches]));
+  }, [checkedBranches]);
+  useEffect(() => {
+    localStorage.setItem("branchGraph.filterEnabled", String(filterEnabled));
+  }, [filterEnabled]);
 
   // Create branch dialog
   const [createBranchBase, setCreateBranchBase] = useState<string | null>(null);

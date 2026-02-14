@@ -852,7 +852,7 @@ export default function BranchGraph({
         }}
         onMouseDown={handleNodeMouseDown}
       >
-        {/* Column reorder drag handle - shown above node when in edit mode with siblings */}
+        {/* Column reorder drag handle - shown well above node to avoid worktree overlap */}
         {canReorderColumn && (
           <g
             style={{ cursor: isColumnDragging ? "grabbing" : "grab" }}
@@ -864,7 +864,7 @@ export default function BranchGraph({
           >
             <rect
               x={x + nodeWidth / 2 - 20}
-              y={y - 16}
+              y={y - 28}
               width={40}
               height={12}
               rx={3}
@@ -874,9 +874,9 @@ export default function BranchGraph({
               strokeWidth={1}
             />
             {/* Drag handle dots */}
-            <circle cx={x + nodeWidth / 2 - 8} cy={y - 10} r={2} fill="#9ca3af" />
-            <circle cx={x + nodeWidth / 2} cy={y - 10} r={2} fill="#9ca3af" />
-            <circle cx={x + nodeWidth / 2 + 8} cy={y - 10} r={2} fill="#9ca3af" />
+            <circle cx={x + nodeWidth / 2 - 8} cy={y - 22} r={2} fill="#9ca3af" />
+            <circle cx={x + nodeWidth / 2} cy={y - 22} r={2} fill="#9ca3af" />
+            <circle cx={x + nodeWidth / 2 + 8} cy={y - 22} r={2} fill="#9ca3af" />
           </g>
         )}
 

@@ -1604,6 +1604,9 @@ export default function TreeDashboard() {
                       }
                       setCurrentInstruction(updated);
                     }}
+                    onDescriptionChange={(branch, desc) => {
+                      setBranchDescriptions((prev) => new Map(prev).set(branch, desc));
+                    }}
                   />
                 ) : (
                   <div className="panel">

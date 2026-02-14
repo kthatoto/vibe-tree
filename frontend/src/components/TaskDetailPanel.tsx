@@ -167,6 +167,7 @@ interface TaskDetailPanelProps {
   instruction?: TaskInstruction | null;
   instructionLoading?: boolean;
   onInstructionUpdate?: (instruction: TaskInstruction) => void;
+  onDescriptionChange?: (branchName: string, description: string) => void;
 }
 
 export function TaskDetailPanel({
@@ -183,6 +184,7 @@ export function TaskDetailPanel({
   instruction,
   instructionLoading = false,
   onInstructionUpdate,
+  onDescriptionChange,
 }: TaskDetailPanelProps) {
   const isDefaultBranch = branchName === defaultBranch;
 
@@ -580,6 +582,7 @@ export function TaskDetailPanel({
     try {
       const updated = await api.updateBranchDescription(repoId, branchName, descriptionDraft);
       setBranchDescription(updated);
+      onDescriptionChange?.(branchName, descriptionDraft);
     } catch (err) {
       setError((err as Error).message);
     } finally {

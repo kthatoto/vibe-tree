@@ -74,6 +74,7 @@ const HORIZONTAL_GAP = 28;
 const VERTICAL_GAP = 50;
 const TOP_PADDING = 30;
 const LEFT_PADDING = 16;
+const SEPARATOR_HALF_WIDTH = 12; // Half width of separator zone (total width = 24px)
 
 
 // Zoom constraints (exported for external use)
@@ -769,7 +770,7 @@ export default function BranchGraph({
 
       if (isRootSiblings) {
         // Insert separator at its current position
-        const SEPARATOR_WIDTH = 16; // Virtual width for separator
+        const SEPARATOR_WIDTH = SEPARATOR_HALF_WIDTH * 2; // Full width of separator zone
         // Find where separator should be inserted visually
         let sepVisualLeft: number;
         if (currentSepIndex <= 0) {
@@ -1132,12 +1133,23 @@ export default function BranchGraph({
     return offsets;
   }, [columnDragState, getColumnBoundsHelper]);
 
-  // Get offset for a specific node based on its column
+  // Get offset for a specific node based on its column and separator position
   const getNodeOffset = useCallback((nodeId: string): number => {
+    let offset = 0;
+
+    // Drag offset
     const columnRoot = getColumnRoot(nodeId);
-    if (!columnRoot) return 0;
-    return columnOffsets.get(columnRoot) ?? 0;
-  }, [getColumnRoot, columnOffsets]);
+    if (columnRoot) {
+      offset += columnOffsets.get(columnRoot) ?? 0;
+    }
+
+    // Separator spacing offset - unfocused branches (right of separator) are shifted right
+    if (isUnfocusedBranch(nodeId)) {
+      offset += SEPARATOR_HALF_WIDTH * 2;
+    }
+
+    return offset;
+  }, [getColumnRoot, columnOffsets, isUnfocusedBranch]);
 
   // For backwards compatibility
   const columnDragOffset = useMemo(() => {
@@ -1939,20 +1951,19 @@ export default function BranchGraph({
                 const lastBounds = getColumnBoundsHelper(lastSibling);
                 separatorX = (lastBounds?.right ?? width - 50) + HORIZONTAL_GAP / 2;
               } else {
-                // Between two columns
+                // Between two columns - separator is in the middle of the gap
+                // Note: unfocused (right) columns are shifted by SEPARATOR_HALF_WIDTH * 2
                 const leftSibling = rootSiblings[effectiveSeparatorIndex - 1];
-                const rightSibling = rootSiblings[effectiveSeparatorIndex];
                 const leftBounds = getColumnBoundsHelper(leftSibling);
-                const rightBounds = getColumnBoundsHelper(rightSibling);
                 const leftRight = leftBounds?.right ?? 0;
-                const rightLeft = rightBounds?.left ?? width;
-                separatorX = (leftRight + rightLeft) / 2;
+                // Separator is at the center of the gap (left edge + half the separator spacing)
+                separatorX = leftRight + SEPARATOR_HALF_WIDTH;
               }
             }
 
             return (
               <g className="branch-graph__focus-separator">
-                {/* Separator line - extends full height */}
+                {/* Separator line */}
                 <line
                   x1={separatorX}
                   y1={0}

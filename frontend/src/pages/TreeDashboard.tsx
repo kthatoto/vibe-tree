@@ -60,6 +60,29 @@ export default function TreeDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Save selected branch to localStorage when it changes
+  useEffect(() => {
+    if (selectedPinId && selectedNode) {
+      localStorage.setItem(`vibe-tree-selected-branch-${selectedPinId}`, selectedNode.branchName);
+    } else if (selectedPinId) {
+      localStorage.removeItem(`vibe-tree-selected-branch-${selectedPinId}`);
+    }
+  }, [selectedPinId, selectedNode?.branchName]);
+
+  // Restore selected branch from localStorage when snapshot loads
+  useEffect(() => {
+    if (!snapshot || !selectedPinId) return;
+    // Only restore if no node is currently selected
+    if (selectedNode) return;
+    const savedBranch = localStorage.getItem(`vibe-tree-selected-branch-${selectedPinId}`);
+    if (savedBranch) {
+      const node = snapshot.nodes.find(n => n.branchName === savedBranch);
+      if (node) {
+        setSelectedNode(node);
+      }
+    }
+  }, [snapshot, selectedPinId]);
+
   // Instruction cache: branchName -> TaskInstruction
   const [instructionCache, setInstructionCache] = useState<Map<string, TaskInstruction>>(new Map());
   const [currentInstruction, setCurrentInstruction] = useState<TaskInstruction | null>(null);

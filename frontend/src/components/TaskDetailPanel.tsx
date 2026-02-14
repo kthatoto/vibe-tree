@@ -947,7 +947,7 @@ export function TaskDetailPanel({
                   onClick={() => setShowSyncModal(true)}
                   disabled={syncing}
                 >
-                  {syncing ? "Syncing..." : `Sync (↓${node.aheadBehind.behind} from ${parentBranch})`}
+                  {syncing ? "Syncing..." : `Sync ↓${node.aheadBehind.behind}`}
                 </button>
               )}
               {/* Behind remote - show Pull button */}

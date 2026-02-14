@@ -1101,6 +1101,10 @@ export const api = {
     fetchJson<Record<string, BranchLink[]>>(
       `${API_BASE}/branch-links/batch?repoId=${encodeURIComponent(repoId)}&branches=${encodeURIComponent(branches.join(","))}`
     ),
+  getRepoLabels: (repoId: string) =>
+    fetchJson<Record<string, string>>(
+      `${API_BASE}/branch-links/repo-labels?repoId=${encodeURIComponent(repoId)}`
+    ),
   createBranchLink: (data: {
     repoId: string;
     branchName: string;

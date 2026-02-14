@@ -268,6 +268,9 @@ export function TaskDetailPanel({
   const [descriptionSaved, setDescriptionSaved] = useState(false);
   const descriptionInputRef = useRef<HTMLInputElement>(null);
 
+  // Repo-level label colors cache
+  const [repoLabels, setRepoLabels] = useState<Record<string, string>>({});
+
   // The working path is either the worktree path or localPath if checked out
   const workingPath = worktreePath || (checkedOut ? localPath : null);
 
@@ -360,6 +363,19 @@ export function TaskDetailPanel({
     };
     loadDescription();
   }, [repoId, branchName]);
+
+  // Load repo-level label colors
+  useEffect(() => {
+    const loadRepoLabels = async () => {
+      try {
+        const labels = await api.getRepoLabels(repoId);
+        setRepoLabels(labels);
+      } catch (err) {
+        console.error("Failed to load repo labels:", err);
+      }
+    };
+    loadRepoLabels();
+  }, [repoId]);
 
   // Poll CI status for PRs every 30 seconds
   useEffect(() => {
@@ -1192,7 +1208,7 @@ export function TaskDetailPanel({
               </div>
             );
           }
-          const labels: GitHubLabel[] = pr.labels ? ((): GitHubLabel[] => { try { const parsed = JSON.parse(pr.labels!); return Array.isArray(parsed) ? parsed.map((l: string | GitHubLabel) => typeof l === 'string' ? { name: l, color: '374151' } : l) : [] } catch { return [] } })() : [];
+          const labels: GitHubLabel[] = pr.labels ? ((): GitHubLabel[] => { try { const parsed = JSON.parse(pr.labels!); return Array.isArray(parsed) ? parsed.map((l: string | GitHubLabel) => typeof l === 'string' ? { name: l, color: repoLabels[l] || '374151' } : l) : [] } catch { return [] } })() : [];
           const reviewers = pr.reviewers ? ((): string[] => { try { return JSON.parse(pr.reviewers!) } catch { return [] } })() : [];
           const checks: GitHubCheck[] = pr.checks ? ((): GitHubCheck[] => { try { return JSON.parse(pr.checks!) } catch { return [] } })() : [];
           const passedChecks = checks.filter((c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED").length;

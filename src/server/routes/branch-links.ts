@@ -9,6 +9,23 @@ import { BadRequestError, NotFoundError } from "../middleware/error-handler";
 
 export const branchLinksRouter = new Hono();
 
+// Helper: Cache repo labels
+async function cacheRepoLabels(repoId: string, labels: { name: string; color: string }[]): Promise<void> {
+  const now = new Date().toISOString();
+  for (const label of labels) {
+    const [existing] = await db.select().from(schema.repoLabels)
+      .where(and(eq(schema.repoLabels.repoId, repoId), eq(schema.repoLabels.name, label.name)))
+      .limit(1);
+    if (existing) {
+      if (existing.color !== label.color) {
+        await db.update(schema.repoLabels).set({ color: label.color, updatedAt: now }).where(eq(schema.repoLabels.id, existing.id));
+      }
+    } else {
+      await db.insert(schema.repoLabels).values({ repoId, name: label.name, color: label.color, updatedAt: now });
+    }
+  }
+}
+
 // Helper: Fetch Issue info from GitHub
 interface GitHubIssueInfo {
   number: number;
@@ -153,6 +170,19 @@ async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<GitH
 const getBranchLinksSchema = z.object({
   repoId: z.string().min(1),
   branchName: z.string().min(1),
+});
+
+// GET /api/branch-links/repo-labels?repoId=...
+branchLinksRouter.get("/repo-labels", async (c) => {
+  const repoId = c.req.query("repoId");
+  if (!repoId) return c.json({});
+
+  const labels = await db.select().from(schema.repoLabels).where(eq(schema.repoLabels.repoId, repoId));
+  const result: Record<string, string> = {};
+  for (const label of labels) {
+    result[label.name] = label.color;
+  }
+  return c.json(result);
 });
 
 const getBranchLinksBatchSchema = z.object({
@@ -373,6 +403,8 @@ branchLinksRouter.post("/", async (c) => {
         reviewers = JSON.stringify(prInfo.reviewers);
         projectStatus = prInfo.projectStatus ?? null;
         baseBranch = prInfo.baseBranch || null;
+        // Cache label colors at repo level
+        await cacheRepoLabels(input.repoId, prInfo.labels);
       }
     }
   }
@@ -537,6 +569,8 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
       reviewers = JSON.stringify(prInfo.reviewers);
       projectStatus = prInfo.projectStatus ?? null;
       baseBranch = prInfo.baseBranch || null;
+      // Cache label colors at repo level
+      await cacheRepoLabels(existing.repoId, prInfo.labels);
     }
   }
 
@@ -656,13 +690,18 @@ branchLinksRouter.post("/detect", async (c) => {
       }
     }
 
+    const labelsWithColors = (data.labels || []).map((l: { name: string; color: string }) => ({ name: l.name, color: l.color }));
+
+    // Cache label colors at repo level
+    await cacheRepoLabels(input.repoId, labelsWithColors);
+
     const prData = {
       title: data.title,
       status: data.state?.toLowerCase() || "open",
       checksStatus,
       reviewDecision: data.reviewDecision || null,
       checks: JSON.stringify(checks),
-      labels: JSON.stringify((data.labels || []).map((l: { name: string; color: string }) => ({ name: l.name, color: l.color }))),
+      labels: JSON.stringify(labelsWithColors),
       reviewers: JSON.stringify(reviewers),
       projectStatus,
       baseBranch: data.baseRefName || null,

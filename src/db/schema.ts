@@ -372,6 +372,15 @@ export const branchExternalLinks = sqliteTable("branch_external_links", {
   updatedAt: text("updated_at").notNull(),
 });
 
+// Repo labels (リポジトリのラベル色キャッシュ)
+export const repoLabels = sqliteTable("repo_labels", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  repoId: text("repo_id").notNull(),
+  name: text("name").notNull(),
+  color: text("color").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 // Branch files (ブランチに紐づくファイル - 画像、スクリーンショット等)
 export const branchFiles = sqliteTable("branch_files", {
   id: integer("id").primaryKey({ autoIncrement: true }),

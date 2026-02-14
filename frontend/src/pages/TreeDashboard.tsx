@@ -268,23 +268,6 @@ export default function TreeDashboard() {
     setPendingChanges(null);
   }, []);
 
-  // Manual refresh from DB (explicit user action)
-  const refreshFromDB = useCallback(async () => {
-    if (!selectedPinId) return;
-
-    setIsApplyingUpdate(true);
-    try {
-      const { snapshot: freshSnapshot, version } = await api.getSnapshot(selectedPinId);
-      setSnapshot(freshSnapshot);
-      currentSnapshotVersion.current = version;
-      setPendingChanges(null);
-    } catch (err) {
-      console.error("[TreeDashboard] Failed to refresh:", err);
-    } finally {
-      setIsApplyingUpdate(false);
-    }
-  }, [selectedPinId]);
-
   // Trigger background scan without loading state (with debounce protection)
   const triggerScan = useCallback((localPath: string) => {
     if (isScanningRef.current) return; // Prevent multiple concurrent scans
@@ -1406,7 +1389,7 @@ export default function TreeDashboard() {
                 <div className="panel panel--graph">
                   <div className="panel__header">
                     <h3>Branch Graph</h3>
-                    <span className="panel__count" style={{ marginRight: "auto" }}>{snapshot.nodes.length} branches</span>
+                    <span className="panel__count" style={{ marginLeft: 12, marginRight: "auto" }}>{snapshot.nodes.length} branches</span>
                     <div className="panel__header-actions">
                       {branchGraphEditMode ? (
                         <>
@@ -1492,17 +1475,9 @@ export default function TreeDashboard() {
                           >
                             {fetching ? (fetchProgress || "Fetching...") : "Fetch"}
                           </button>
-                          <button
-                            className="btn-icon"
-                            onClick={refreshFromDB}
-                            disabled={isApplyingUpdate}
-                            title="Refresh from database"
-                          >
-                            {isApplyingUpdate ? "..." : "Refresh"}
-                          </button>
                           <span style={{ width: 1, height: 20, background: "#4b5563", margin: "0 4px" }} />
                           <button
-                            className={`btn-icon${filterEnabled ? " btn-icon--active" : ""}`}
+                            className="btn-icon"
                             onClick={() => setFilterEnabled(!filterEnabled)}
                             title={filterEnabled ? "Disable filter" : "Enable filter"}
                           >

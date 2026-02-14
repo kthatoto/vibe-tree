@@ -276,9 +276,11 @@ export default function BranchGraph({
     });
 
     // Phase 2: Calculate column max widths and X positions
-    // Find max width for each column
+    // Find max width for each column (excluding defaultBranch from width calculation)
     const columnMaxWidths = new Map<number, number>();
     layoutNodes.forEach((n) => {
+      // defaultBranch is excluded from column width calculation (special treatment)
+      if (n.id === defaultBranch) return;
       const currentMax = columnMaxWidths.get(n.row) ?? 0;
       columnMaxWidths.set(n.row, Math.max(currentMax, n.width));
     });
@@ -297,8 +299,13 @@ export default function BranchGraph({
     layoutNodes.forEach((n) => {
       const colX = columnXPositions.get(n.row) ?? LEFT_PADDING;
       const colWidth = columnMaxWidths.get(n.row) ?? NODE_WIDTH;
-      // Center the node within the column
-      n.x = colX + (colWidth - n.width) / 2;
+      // defaultBranch is positioned at column start (not centered)
+      if (n.id === defaultBranch) {
+        n.x = colX;
+      } else {
+        // Center the node within the column
+        n.x = colX + (colWidth - n.width) / 2;
+      }
     });
 
     // Add tentative nodes from planning session
@@ -454,6 +461,8 @@ export default function BranchGraph({
       // Recalculate column widths and X positions after adding tentative nodes
       columnMaxWidths.clear();
       layoutNodes.forEach((n) => {
+        // defaultBranch is excluded from column width calculation
+        if (n.id === defaultBranch) return;
         const curMax = columnMaxWidths.get(n.row) ?? 0;
         columnMaxWidths.set(n.row, Math.max(curMax, n.width));
       });
@@ -470,8 +479,13 @@ export default function BranchGraph({
       layoutNodes.forEach((n) => {
         const colX = columnXPositions.get(n.row) ?? LEFT_PADDING;
         const colWidth = columnMaxWidths.get(n.row) ?? NODE_WIDTH;
-        // Center the node within the column
-        n.x = colX + (colWidth - n.width) / 2;
+        // defaultBranch is positioned at column start (not centered)
+        if (n.id === defaultBranch) {
+          n.x = colX;
+        } else {
+          // Center the node within the column
+          n.x = colX + (colWidth - n.width) / 2;
+        }
       });
 
       // Create edges for tentative nodes
@@ -723,24 +737,52 @@ export default function BranchGraph({
           style={{ pointerEvents: "none", overflow: "visible" }}
         >
           {nodeIsMinimized ? (
-            /* Minimized view - branch name only, left-aligned */
+            /* Minimized view - description label, CI, and branch name */
             <div
               style={{
                 width: "100%",
                 height: "100%",
                 display: "flex",
-                alignItems: "center",
+                flexDirection: "column",
+                justifyContent: "center",
+                gap: 4,
                 overflow: "hidden",
               }}
             >
-              <span style={{
-                fontSize: 11,
+              {/* Row 1: Description label + CI status */}
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {descriptionLabel && (
+                  <span style={{
+                    fontSize: 10,
+                    padding: "1px 4px",
+                    borderRadius: 3,
+                    background: "#1e3a5f",
+                    border: "1px solid #3b82f6",
+                    color: "#93c5fd",
+                    whiteSpace: "nowrap",
+                  }}>{descriptionLabel}</span>
+                )}
+                {prLink?.checksStatus && (
+                  <span style={{
+                    fontSize: 10,
+                    padding: "1px 4px",
+                    borderRadius: 3,
+                    background: prLink.checksStatus === "success" ? "#14532d" : prLink.checksStatus === "failure" ? "#7f1d1d" : "#78350f",
+                    border: `1px solid ${prLink.checksStatus === "success" ? "#22c55e" : prLink.checksStatus === "failure" ? "#ef4444" : "#f59e0b"}`,
+                    color: prLink.checksStatus === "success" ? "#4ade80" : prLink.checksStatus === "failure" ? "#f87171" : "#fbbf24",
+                    whiteSpace: "nowrap",
+                  }}>{prLink.checksStatus === "success" ? "CI ✔" : prLink.checksStatus === "failure" ? "CI ✗" : "CI …"}</span>
+                )}
+              </div>
+              {/* Row 2: Branch name (full width, wrap if needed) */}
+              <div style={{
+                fontSize: 10,
                 fontFamily: "monospace",
                 color: "#9ca3af",
+                lineHeight: 1.2,
+                wordBreak: "break-all",
                 overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}>{id}</span>
+              }}>{id}</div>
             </div>
           ) : (
           <div

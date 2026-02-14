@@ -1320,6 +1320,43 @@
   background: #b91c1c;
 }
 
+/* Checkout target list */
+.task-detail-panel__checkout-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0;
+}
+
+.task-detail-panel__checkout-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #111827;
+  border: 1px solid #374151;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.task-detail-panel__checkout-option:hover {
+  background: #1f2937;
+  border-color: #4b5563;
+}
+
+.task-detail-panel__checkout-option-name {
+  font-size: 13px;
+  color: #e5e7eb;
+  font-weight: 500;
+}
+
+.task-detail-panel__checkout-option-branch {
+  font-size: 11px;
+  color: #6b7280;
+  font-family: monospace;
+}
+
 /* Streaming indicator */
 .task-detail-panel__streaming-indicator {
   color: #3b82f6;

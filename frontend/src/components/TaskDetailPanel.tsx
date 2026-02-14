@@ -229,6 +229,8 @@ export function TaskDetailPanel({
 
   // Checkout state - track if we checked out to this branch
   const [checkedOut, setCheckedOut] = useState(false);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [availableWorktrees, setAvailableWorktrees] = useState<{ path: string; branch: string | null }[]>([]);
 
   // Reset checkout state when branch changes
   useEffect(() => {
@@ -643,13 +645,34 @@ export function TaskDetailPanel({
     }
   };
 
-  const handleCheckout = async () => {
+  const handleOpenCheckoutModal = async () => {
+    setError(null);
+    try {
+      const result = await api.getWorktreesByRepo(repoId);
+      // Build list: main repo + all worktrees
+      const list: { path: string; branch: string | null }[] = [
+        { path: result.localPath, branch: null }, // main repo - will fetch current branch
+      ];
+      for (const wt of result.worktrees) {
+        if (wt.path !== result.localPath) {
+          list.push({ path: wt.path, branch: wt.branch });
+        }
+      }
+      setAvailableWorktrees(list);
+      setShowCheckoutModal(true);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleCheckoutTo = async (targetPath: string) => {
+    setShowCheckoutModal(false);
     setCheckingOut(true);
     setError(null);
     try {
-      await api.checkout(localPath, branchName);
-      setCheckedOut(true); // Enable chat section
-      onWorktreeCreated?.(); // Rescan to update
+      await api.checkout(targetPath, branchName);
+      setCheckedOut(true);
+      onWorktreeCreated?.();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -996,20 +1019,11 @@ export function TaskDetailPanel({
           <div className="task-detail-panel__branch-actions">
             <button
               className="task-detail-panel__checkout-btn"
-              onClick={handleCheckout}
-              disabled={checkingOut || creatingWorktree}
+              onClick={handleOpenCheckoutModal}
+              disabled={checkingOut}
             >
               {checkingOut ? "Checking out..." : "Checkout"}
             </button>
-            {!isMerged && (
-              <button
-                className="task-detail-panel__create-worktree-btn"
-                onClick={() => setShowCreateWorktreeModal(true)}
-                disabled={creatingWorktree || checkingOut}
-              >
-                {creatingWorktree ? "Creating..." : "Create Worktree"}
-              </button>
-            )}
             {node?.remoteAheadBehind && node.remoteAheadBehind.behind > 0 && (
               <button
                 className="task-detail-panel__pull-btn"
@@ -1602,24 +1616,35 @@ export function TaskDetailPanel({
         );
       })()}
 
-      {/* Create Worktree Confirmation Modal */}
-      {showCreateWorktreeModal && (
-        <div className="task-detail-panel__modal-overlay" onClick={() => setShowCreateWorktreeModal(false)}>
+      {/* Checkout Target Selection Modal */}
+      {showCheckoutModal && (
+        <div className="task-detail-panel__modal-overlay" onClick={() => setShowCheckoutModal(false)}>
           <div className="task-detail-panel__modal" onClick={(e) => e.stopPropagation()}>
-            <h4>Worktreeを作成しますか？</h4>
-            <p className="task-detail-panel__modal-branch-name" style={{ color: "#4ade80" }}>{branchName}</p>
+            <h4>Checkout先を選択</h4>
+            <div className="task-detail-panel__checkout-list">
+              {availableWorktrees.map((wt, i) => (
+                <button
+                  key={wt.path}
+                  className="task-detail-panel__checkout-option"
+                  onClick={() => handleCheckoutTo(wt.path)}
+                >
+                  <span className="task-detail-panel__checkout-option-name">
+                    {i === 0 ? "Main" : wt.path.split("/").pop()}
+                  </span>
+                  {wt.branch && (
+                    <span className="task-detail-panel__checkout-option-branch">
+                      {wt.branch}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
             <div className="task-detail-panel__modal-actions">
               <button
                 className="task-detail-panel__modal-cancel"
-                onClick={() => setShowCreateWorktreeModal(false)}
+                onClick={() => setShowCheckoutModal(false)}
               >
-                キャンセル
-              </button>
-              <button
-                className="task-detail-panel__modal-confirm"
-                onClick={handleCreateWorktree}
-              >
-                作成
+                Cancel
               </button>
             </div>
           </div>

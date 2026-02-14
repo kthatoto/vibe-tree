@@ -1349,8 +1349,8 @@ export default function TreeDashboard() {
         {/* Spacer to push warnings to bottom */}
         <div className="sidebar__spacer" />
 
-        {/* Warnings - always at bottom */}
-        {snapshot && snapshot.warnings.length > 0 && (
+        {/* Warnings & Fetch - always at bottom */}
+        {snapshot && (
           <div className="sidebar__section sidebar__section--bottom">
             <button
               className="sidebar__warnings-btn"
@@ -1358,7 +1358,17 @@ export default function TreeDashboard() {
             >
               <span className="sidebar__warnings-icon">⚠</span>
               <span>Warnings</span>
-              <span className="sidebar__warnings-count">{snapshot.warnings.length}</span>
+              {snapshot.warnings.length > 0 && (
+                <span className="sidebar__warnings-count">{snapshot.warnings.length}</span>
+              )}
+            </button>
+            <button
+              className="sidebar__fetch-btn"
+              onClick={() => selectedPin && handleFetch(selectedPin.localPath)}
+              disabled={fetching || !selectedPin}
+              title="Fetch from remote"
+            >
+              {fetching ? "Fetching..." : "Fetch"}
             </button>
           </div>
         )}

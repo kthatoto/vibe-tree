@@ -1290,8 +1290,8 @@ export default function BranchGraph({
           );
         })()}
 
-        {/* Add branch button - positioned at bottom right of node (hidden when minimized) */}
-        {!nodeIsMinimized && onBranchCreate && !isTentative && !isMerged && (
+        {/* Add branch button - positioned at bottom right of node */}
+        {onBranchCreate && !isTentative && !isMerged && (
           <g
             style={{ cursor: "pointer" }}
             onClick={(e) => {
@@ -1300,7 +1300,7 @@ export default function BranchGraph({
             }}
           >
             <rect
-              x={x + NODE_WIDTH - 26}
+              x={x + nodeWidth - 26}
               y={y + nodeHeight - 22}
               width={22}
               height={18}
@@ -1310,7 +1310,7 @@ export default function BranchGraph({
               strokeWidth={1}
             />
             <text
-              x={x + NODE_WIDTH - 15}
+              x={x + nodeWidth - 15}
               y={y + nodeHeight - 12}
               textAnchor="middle"
               dominantBaseline="middle"

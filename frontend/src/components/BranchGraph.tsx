@@ -1300,21 +1300,21 @@ export default function BranchGraph({
             }}
           >
             <rect
-              x={x + nodeWidth - 26}
-              y={y + nodeHeight - 22}
-              width={22}
-              height={18}
-              rx={4}
+              x={x + nodeWidth - 18}
+              y={y + nodeHeight - 16}
+              width={14}
+              height={14}
+              rx={3}
               fill="#374151"
               stroke="#6b7280"
               strokeWidth={1}
             />
             <text
-              x={x + nodeWidth - 15}
-              y={y + nodeHeight - 12}
+              x={x + nodeWidth - 11}
+              y={y + nodeHeight - 9}
               textAnchor="middle"
               dominantBaseline="middle"
-              fontSize={14}
+              fontSize={11}
               fill="#9ca3af"
               fontWeight="bold"
             >

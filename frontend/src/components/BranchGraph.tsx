@@ -749,8 +749,8 @@ export default function BranchGraph({
                 overflow: "hidden",
               }}
             >
-              {/* Row 1: Description label + CI status */}
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {/* Row 1: Description label + R/CI/PR badges */}
+              <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
                 {descriptionLabel && (
                   <span style={{
                     fontSize: 10,
@@ -762,6 +762,22 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>{descriptionLabel}</span>
                 )}
+                {/* R (Review) badge - yellow */}
+                {(prLink?.reviewDecision === "APPROVED" || prLink?.reviewDecision === "CHANGES_REQUESTED" || prLink?.reviewDecision === "REVIEW_REQUIRED" || (prLink?.reviewers && (() => {
+                  const reviewers = JSON.parse(prLink.reviewers) as string[];
+                  return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
+                })())) && (
+                  <span style={{
+                    fontSize: 10,
+                    padding: "1px 4px",
+                    borderRadius: 3,
+                    background: prLink?.reviewDecision === "APPROVED" ? "#14532d" : prLink?.reviewDecision === "CHANGES_REQUESTED" ? "#7f1d1d" : "#78350f",
+                    border: `1px solid ${prLink?.reviewDecision === "APPROVED" ? "#22c55e" : prLink?.reviewDecision === "CHANGES_REQUESTED" ? "#ef4444" : "#f59e0b"}`,
+                    color: prLink?.reviewDecision === "APPROVED" ? "#4ade80" : prLink?.reviewDecision === "CHANGES_REQUESTED" ? "#f87171" : "#fbbf24",
+                    whiteSpace: "nowrap",
+                  }}>{prLink?.reviewDecision === "APPROVED" ? "R✔" : prLink?.reviewDecision === "CHANGES_REQUESTED" ? "R✗" : "R"}</span>
+                )}
+                {/* CI badge */}
                 {prLink?.checksStatus && (
                   <span style={{
                     fontSize: 10,
@@ -771,17 +787,28 @@ export default function BranchGraph({
                     border: `1px solid ${prLink.checksStatus === "success" ? "#22c55e" : prLink.checksStatus === "failure" ? "#ef4444" : "#f59e0b"}`,
                     color: prLink.checksStatus === "success" ? "#4ade80" : prLink.checksStatus === "failure" ? "#f87171" : "#fbbf24",
                     whiteSpace: "nowrap",
-                  }}>{prLink.checksStatus === "success" ? "CI ✔" : prLink.checksStatus === "failure" ? "CI ✗" : "CI …"}</span>
+                  }}>{prLink.checksStatus === "success" ? "CI✔" : prLink.checksStatus === "failure" ? "CI✗" : "CI"}</span>
+                )}
+                {/* PR badge */}
+                {hasPR && (
+                  <span style={{
+                    fontSize: 10,
+                    padding: "1px 4px",
+                    borderRadius: 3,
+                    background: isMerged ? "#3b0764" : "#374151",
+                    border: isMerged ? "1px solid #9333ea" : "1px solid #4b5563",
+                    color: isMerged ? "#c084fc" : "#e5e7eb",
+                    whiteSpace: "nowrap",
+                  }}>PR</span>
                 )}
               </div>
-              {/* Row 2: Branch name (single line) */}
+              {/* Row 2: Branch name (single line, no ellipsis) */}
               <div style={{
                 fontSize: 10,
                 fontFamily: "monospace",
                 color: "#9ca3af",
                 whiteSpace: "nowrap",
                 overflow: "hidden",
-                textOverflow: "ellipsis",
               }}>{id}</div>
             </div>
           ) : (

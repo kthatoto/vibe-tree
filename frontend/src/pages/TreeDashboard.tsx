@@ -486,25 +486,7 @@ export default function TreeDashboard() {
     };
   }, [snapshot?.repoId, selectedPin, triggerScan]);
 
-  // Update checkedBranches when nodes change (add new branches as checked)
-  useEffect(() => {
-    if (!snapshot?.nodes) return;
-    setCheckedBranches((prev) => {
-      const newSet = new Set(prev);
-      let changed = false;
-      snapshot.nodes.forEach((n) => {
-        if (!newSet.has(n.branchName)) {
-          newSet.add(n.branchName);
-          changed = true;
-        }
-      });
-      // Initialize all as checked if empty
-      if (prev.size === 0 && snapshot.nodes.length > 0) {
-        return new Set(snapshot.nodes.map((n) => n.branchName));
-      }
-      return changed ? newSet : prev;
-    });
-  }, [snapshot?.nodes]);
+  // No need to update checkedBranches when nodes change - start with all unchecked
 
   // Load branchLinks when snapshot is available
   useEffect(() => {
@@ -1474,12 +1456,32 @@ export default function TreeDashboard() {
                           >
                             {isApplyingUpdate ? "..." : "Refresh"}
                           </button>
+                          <span style={{ width: 1, height: 20, background: "#4b5563", margin: "0 4px" }} />
                           <button
                             className={`btn-icon${filterEnabled ? " btn-icon--active" : ""}`}
                             onClick={() => setFilterEnabled(!filterEnabled)}
                             title={filterEnabled ? "Disable filter" : "Enable filter"}
                           >
                             {filterEnabled ? "Filter ON" : "Filter"}
+                          </button>
+                          <button
+                            className="btn-icon"
+                            onClick={() => {
+                              if (!snapshot) return;
+                              const nonDefaultBranches = snapshot.nodes
+                                .filter((n) => n.branchName !== snapshot.defaultBranch)
+                                .map((n) => n.branchName);
+                              // Toggle: if all checked, uncheck all; otherwise check all
+                              const allChecked = nonDefaultBranches.every((b) => checkedBranches.has(b));
+                              if (allChecked) {
+                                setCheckedBranches(new Set());
+                              } else {
+                                setCheckedBranches(new Set(nonDefaultBranches));
+                              }
+                            }}
+                            title="Toggle all checkboxes"
+                          >
+                            Toggle
                           </button>
                           {/* Zoom controls */}
                           <span className="zoom-controls">

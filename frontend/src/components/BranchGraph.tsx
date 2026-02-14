@@ -54,6 +54,7 @@ interface LayoutEdge {
 
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 80;
+const MINIMIZED_NODE_WIDTH = 120;
 const MINIMIZED_NODE_HEIGHT = 28;
 const TENTATIVE_NODE_HEIGHT = 60;
 const HORIZONTAL_GAP = 28;
@@ -92,9 +93,11 @@ export default function BranchGraph({
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
   // Helper to check if a node should be minimized
+  // Checkbox logic is inverted: checked = minimized (hidden), unchecked = visible
   const isMinimized = useCallback((branchName: string) => {
-    return filterEnabled && !checkedBranches.has(branchName);
-  }, [filterEnabled, checkedBranches]);
+    if (branchName === defaultBranch) return false; // Default branch is never minimized
+    return filterEnabled && checkedBranches.has(branchName);
+  }, [filterEnabled, checkedBranches, defaultBranch]);
 
   // Get SVG coordinates from mouse event (accounting for zoom)
   const getSVGCoords = useCallback((e: React.MouseEvent | MouseEvent) => {
@@ -568,6 +571,7 @@ export default function BranchGraph({
 
     // Check if this node should be minimized
     const nodeIsMinimized = !isTentative && isMinimized(id);
+    const nodeWidth = nodeIsMinimized ? MINIMIZED_NODE_WIDTH : NODE_WIDTH;
     const nodeHeight = nodeIsMinimized ? MINIMIZED_NODE_HEIGHT : (isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT);
     const isChecked = checkedBranches.has(id);
 
@@ -602,7 +606,7 @@ export default function BranchGraph({
         <rect
           x={x}
           y={y}
-          width={NODE_WIDTH}
+          width={nodeWidth}
           height={nodeHeight}
           rx={6}
           ry={6}
@@ -613,8 +617,8 @@ export default function BranchGraph({
           onClick={() => !isTentative && !dragState && onSelectBranch(id)}
         />
 
-        {/* Checkbox for filtering - only for non-tentative, non-minimized nodes */}
-        {!isTentative && !nodeIsMinimized && (
+        {/* Checkbox for filtering - only for non-tentative, non-default, non-minimized nodes */}
+        {!isTentative && !isDefault && !nodeIsMinimized && (
           <foreignObject
             x={x + 4}
             y={y + nodeHeight - 20}
@@ -644,38 +648,57 @@ export default function BranchGraph({
         <foreignObject
           x={x + 8}
           y={y + 4}
-          width={NODE_WIDTH - 16}
+          width={nodeWidth - 16}
           height={nodeHeight - 8}
           style={{ pointerEvents: "none", overflow: "visible" }}
         >
           {nodeIsMinimized ? (
-            /* Minimized view - just branch name */
+            /* Minimized view - description label + CI status */
             <div
               style={{
-                width: NODE_WIDTH - 16,
+                width: nodeWidth - 16,
                 height: "100%",
                 display: "flex",
-                alignItems: "center",
+                flexDirection: "column",
+                justifyContent: "center",
+                gap: 2,
                 overflow: "hidden",
               }}
             >
-              <span
-                style={{
-                  fontSize: 11,
-                  fontFamily: "monospace",
-                  color: "#9ca3af",
+              {descriptionLabel && (
+                <span style={{
+                  fontSize: 10,
+                  padding: "1px 5px",
+                  borderRadius: 3,
+                  background: "#1e3a5f",
+                  border: "1px solid #3b82f6",
+                  color: "#93c5fd",
+                  whiteSpace: "nowrap",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
+                  alignSelf: "flex-start",
+                }}>{descriptionLabel}</span>
+              )}
+              {prLink?.checksStatus && (
+                <span style={{
+                  fontSize: 9,
+                  padding: "1px 4px",
+                  borderRadius: 3,
+                  background: prLink.checksStatus === "success" ? "#14532d" : prLink.checksStatus === "failure" ? "#7f1d1d" : "#78350f",
+                  border: `1px solid ${prLink.checksStatus === "success" ? "#22c55e" : prLink.checksStatus === "failure" ? "#ef4444" : "#f59e0b"}`,
+                  color: prLink.checksStatus === "success" ? "#4ade80" : prLink.checksStatus === "failure" ? "#f87171" : "#fbbf24",
                   whiteSpace: "nowrap",
-                }}
-              >
-                {id}
-              </span>
+                  alignSelf: "flex-start",
+                }}>{prLink.checksStatus === "success" ? "CI ✔" : prLink.checksStatus === "failure" ? "CI ✗" : "CI ●"}</span>
+              )}
+              {!descriptionLabel && !prLink?.checksStatus && (
+                <span style={{ fontSize: 10, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{id}</span>
+              )}
             </div>
           ) : (
           <div
             style={{
-              width: NODE_WIDTH - 16,
+              width: nodeWidth - 16,
               height: "100%",
               display: "flex",
               flexDirection: "column",

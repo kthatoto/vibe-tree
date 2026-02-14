@@ -18,6 +18,8 @@ interface BranchGraphProps {
   onBranchCreate?: (baseBranch: string) => void;
   // Branch links for PR info (single source of truth)
   branchLinks?: Map<string, BranchLink[]>;
+  // Branch descriptions (first word shown as label)
+  branchDescriptions?: Map<string, string>;
   // Zoom control (external)
   zoom?: number;
   onZoomChange?: (zoom: number) => void;
@@ -77,6 +79,7 @@ export default function BranchGraph({
   onEdgeCreate,
   onBranchCreate,
   branchLinks = new Map(),
+  branchDescriptions = new Map(),
   zoom = 1,
   onZoomChange,
 }: BranchGraphProps) {
@@ -555,6 +558,10 @@ export default function BranchGraph({
     const branchNameDisplay = isTentative ? id : null;
     const nodeHeight = isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT;
 
+    // Get description label (first word/token before whitespace)
+    const fullDescription = branchDescriptions.get(id);
+    const descriptionLabel = fullDescription?.split(/\s+/)[0] || null;
+
     // In edit mode, the whole node is draggable (line starts from top edge of node for vertical layout)
     const handleNodeMouseDown = canDrag ? (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -612,9 +619,27 @@ export default function BranchGraph({
               overflow: "hidden",
             }}
           >
-            {/* Line 1: Status labels - right aligned */}
-            {hasPR && (
-              <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", justifyContent: "flex-end" }}>
+            {/* Line 1: Description label (left) + Status labels (right) */}
+            {(descriptionLabel || hasPR) && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", justifyContent: "space-between", alignItems: "center" }}>
+                {/* Description label - left */}
+                {descriptionLabel ? (
+                  <span style={{
+                    fontSize: 10,
+                    padding: "1px 5px",
+                    borderRadius: 3,
+                    background: "#1e3a5f",
+                    border: "1px solid #3b82f6",
+                    color: "#93c5fd",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    maxWidth: 80,
+                  }}>{descriptionLabel}</span>
+                ) : <span />}
+                {/* PR status badges - right */}
+                {hasPR && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "nowrap" }}>
                 {/* Review status - based on reviewDecision from branchLinks */}
                 {prLink?.reviewDecision === "APPROVED" && (
                   <span style={{
@@ -709,23 +734,25 @@ export default function BranchGraph({
                   color: isMerged ? "#c084fc" : "#e5e7eb",
                   whiteSpace: "nowrap",
                 }}>PR</span>
-                {/* Warning if PR base doesn't match graph parent */}
-                {hasPRBaseMismatch && (
-                  <span
-                    style={{
-                      fontSize: 10,
-                      padding: "1px 5px",
-                      borderRadius: 3,
-                      background: "#78350f",
-                      border: "1px solid #f59e0b",
-                      color: "#fbbf24",
-                      whiteSpace: "nowrap",
-                      cursor: "help",
-                    }}
-                    title={`PR targets "${prBaseBranch}" but graph shows parent as "${graphParent}"`}
-                  >
-                    ⚠
-                  </span>
+                    {/* Warning if PR base doesn't match graph parent */}
+                    {hasPRBaseMismatch && (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          padding: "1px 5px",
+                          borderRadius: 3,
+                          background: "#78350f",
+                          border: "1px solid #f59e0b",
+                          color: "#fbbf24",
+                          whiteSpace: "nowrap",
+                          cursor: "help",
+                        }}
+                        title={`PR targets "${prBaseBranch}" but graph shows parent as "${graphParent}"`}
+                      >
+                        ⚠
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
             )}

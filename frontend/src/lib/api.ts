@@ -1138,6 +1138,10 @@ export const api = {
     fetchJson<BranchDescription | null>(
       `${API_BASE}/branch-descriptions?repoId=${encodeURIComponent(repoId)}&branchName=${encodeURIComponent(branchName)}`
     ),
+  getBranchDescriptionsBatch: (repoId: string, branches: string[]) =>
+    fetchJson<Record<string, string>>(
+      `${API_BASE}/branch-descriptions/batch?repoId=${encodeURIComponent(repoId)}&branches=${encodeURIComponent(branches.join(","))}`
+    ),
   updateBranchDescription: (repoId: string, branchName: string, description: string) =>
     fetchJson<BranchDescription>(`${API_BASE}/branch-descriptions`, {
       method: "PUT",

@@ -67,7 +67,8 @@ export default function TreeDashboard() {
 
   // Branch links (single source of truth for PR info)
   const [branchLinks, setBranchLinks] = useState<Map<string, BranchLink[]>>(new Map());
-
+  // Branch descriptions (git branch descriptions for labels)
+  const [branchDescriptions, setBranchDescriptions] = useState<Map<string, string>>(new Map());
 
   // Multi-session planning state (only store what's needed, not full session copy)
   const [selectedSessionBaseBranch, setSelectedSessionBaseBranch] = useState<string | null>(null);
@@ -492,6 +493,17 @@ export default function TreeDashboard() {
           linksMap.set(branchName, result[branchName] || []);
         }
         setBranchLinks(linksMap);
+      })
+      .catch(console.error);
+  }, [snapshot?.repoId, snapshot?.nodes.length]);
+
+  // Load branchDescriptions when snapshot is available
+  useEffect(() => {
+    if (!snapshot?.repoId || snapshot.nodes.length === 0) return;
+    const branchNames = snapshot.nodes.map((n) => n.branchName);
+    api.getBranchDescriptionsBatch(snapshot.repoId, branchNames)
+      .then((result) => {
+        setBranchDescriptions(new Map(Object.entries(result)));
       })
       .catch(console.error);
   }, [snapshot?.repoId, snapshot?.nodes.length]);
@@ -1490,6 +1502,7 @@ export default function TreeDashboard() {
                       tentativeEdges={tentativeEdges}
                       editMode={branchGraphEditMode}
                       branchLinks={branchLinks}
+                      branchDescriptions={branchDescriptions}
                       onEdgeCreate={(parentBranch, childBranch) => {
                         // Create a new edge from parent to child (reparent operation)
                         if (!selectedPin || !snapshot?.repoId) return;

@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api, type TaskInstruction, type ChatMessage, type TreeNode, type BranchLink, type GitHubCheck, type GitHubLabel, type BranchDescription } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import { computeSimpleDiff, type DiffLine } from "../lib/diff";
@@ -1302,26 +1304,15 @@ export function TaskDetailPanel({
             <h4>Task Instruction</h4>
             <div className="task-detail-panel__instruction-actions">
               {!editingInstruction ? (
-                <>
-                  <button
-                    className="task-detail-panel__planning-btn"
-                    onClick={() => {
-                      onStartPlanning?.(branchName, instruction?.instructionMd || null);
-                    }}
-                    title="Start Planning Session"
-                  >
-                    Planning
-                  </button>
-                  <button
-                    className="task-detail-panel__edit-btn"
-                    onClick={() => {
-                      setInstructionDraft(instruction?.instructionMd || "");
-                      setEditingInstruction(true);
-                    }}
-                  >
-                    Edit
-                  </button>
-                </>
+                <button
+                  className="task-detail-panel__edit-btn"
+                  onClick={() => {
+                    setInstructionDraft(instruction?.instructionMd || "");
+                    setEditingInstruction(true);
+                  }}
+                >
+                  Edit
+                </button>
               ) : (
                 <>
                   <button onClick={handleSaveInstruction}>Save</button>
@@ -1337,13 +1328,24 @@ export function TaskDetailPanel({
             className="task-detail-panel__instruction-content"
             style={{ height: instructionHeight }}
           >
-            <textarea
-              className="task-detail-panel__instruction-textarea"
-              value={editingInstruction ? instructionDraft : (instruction?.instructionMd || "")}
-              onChange={(e) => setInstructionDraft(e.target.value)}
-              readOnly={!editingInstruction}
-              placeholder="No instructions yet..."
-            />
+            {editingInstruction ? (
+              <textarea
+                className="task-detail-panel__instruction-textarea"
+                value={instructionDraft}
+                onChange={(e) => setInstructionDraft(e.target.value)}
+                placeholder="No instructions yet..."
+              />
+            ) : instruction?.instructionMd ? (
+              <div className="task-detail-panel__instruction-markdown">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {instruction.instructionMd}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              <div className="task-detail-panel__instruction-empty">
+                No instructions yet...
+              </div>
+            )}
           </div>
         </div>
       )}

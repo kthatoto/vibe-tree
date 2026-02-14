@@ -749,7 +749,7 @@ export default function BranchGraph({
                 overflow: "hidden",
               }}
             >
-              {/* Row 1: Description label + R/CI/PR badges */}
+              {/* Row 1: Description label + PR badge */}
               <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
                 {descriptionLabel && (
                   <span style={{
@@ -762,7 +762,22 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>{descriptionLabel}</span>
                 )}
-                {/* R (Review) badge - yellow */}
+                {/* PR badge */}
+                {hasPR && (
+                  <span style={{
+                    fontSize: 10,
+                    padding: "1px 4px",
+                    borderRadius: 3,
+                    background: isMerged ? "#3b0764" : "#374151",
+                    border: isMerged ? "1px solid #9333ea" : "1px solid #4b5563",
+                    color: isMerged ? "#c084fc" : "#e5e7eb",
+                    whiteSpace: "nowrap",
+                  }}>PR</span>
+                )}
+              </div>
+              {/* Row 2: R + CI badges */}
+              <div style={{ display: "flex", gap: 3 }}>
+                {/* R (Review) badge */}
                 {(prLink?.reviewDecision === "APPROVED" || prLink?.reviewDecision === "CHANGES_REQUESTED" || prLink?.reviewDecision === "REVIEW_REQUIRED" || (prLink?.reviewers && (() => {
                   const reviewers = JSON.parse(prLink.reviewers) as string[];
                   return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
@@ -789,20 +804,8 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>{prLink.checksStatus === "success" ? "CI✔" : prLink.checksStatus === "failure" ? "CI✗" : "CI"}</span>
                 )}
-                {/* PR badge */}
-                {hasPR && (
-                  <span style={{
-                    fontSize: 10,
-                    padding: "1px 4px",
-                    borderRadius: 3,
-                    background: isMerged ? "#3b0764" : "#374151",
-                    border: isMerged ? "1px solid #9333ea" : "1px solid #4b5563",
-                    color: isMerged ? "#c084fc" : "#e5e7eb",
-                    whiteSpace: "nowrap",
-                  }}>PR</span>
-                )}
               </div>
-              {/* Row 2: Branch name (single line, no ellipsis) */}
+              {/* Row 3: Branch name (single line, no ellipsis) */}
               <div style={{
                 fontSize: 10,
                 fontFamily: "monospace",
@@ -850,7 +853,7 @@ export default function BranchGraph({
                     fontSize: 10,
                     padding: "1px 5px",
                     borderRadius: 3,
-                    background: "transparent",
+                    background: "#14532d",
                     border: "1px solid #22c55e",
                     color: "#4ade80",
                     whiteSpace: "nowrap",
@@ -861,7 +864,7 @@ export default function BranchGraph({
                     fontSize: 10,
                     padding: "1px 5px",
                     borderRadius: 3,
-                    background: "transparent",
+                    background: "#7f1d1d",
                     border: "1px solid #ef4444",
                     color: "#f87171",
                     whiteSpace: "nowrap",
@@ -876,7 +879,7 @@ export default function BranchGraph({
                     fontSize: 10,
                     padding: "1px 5px",
                     borderRadius: 3,
-                    background: "transparent",
+                    background: "#78350f",
                     border: "1px solid #f59e0b",
                     color: "#fbbf24",
                     whiteSpace: "nowrap",
@@ -892,7 +895,7 @@ export default function BranchGraph({
                     fontSize: 10,
                     padding: "1px 5px",
                     borderRadius: 3,
-                    background: "transparent",
+                    background: "#78350f",
                     border: "1px solid #f59e0b",
                     color: "#fbbf24",
                     whiteSpace: "nowrap",

@@ -30,6 +30,9 @@ interface BranchGraphProps {
   // Sibling order for column reordering (parent branchName -> ordered child branchNames)
   siblingOrder?: Record<string, string[]>;
   onSiblingOrderChange?: (siblingOrder: Record<string, string[]>) => void;
+  // Focus separator - divides focused (left) from unfocused (right) items
+  focusSeparatorX?: number | null; // null means no separator
+  onFocusSeparatorChange?: (x: number | null) => void;
 }
 
 interface DragState {
@@ -98,10 +101,18 @@ export default function BranchGraph({
   filterEnabled = false,
   siblingOrder = {},
   onSiblingOrderChange,
+  focusSeparatorX = null,
+  onFocusSeparatorChange,
 }: BranchGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+
+  // Focus separator drag state
+  const [separatorDragState, setSeparatorDragState] = useState<{
+    startX: number;
+    currentX: number;
+  } | null>(null);
 
   // Column reorder drag state
   const [columnDragState, setColumnDragState] = useState<{
@@ -808,6 +819,45 @@ export default function BranchGraph({
     };
   }, [columnDragState, getSVGCoords, layoutNodes, onSiblingOrderChange, siblingOrder, getColumnBoundsHelper]);
 
+  // Handle focus separator drag
+  useEffect(() => {
+    if (!separatorDragState) return;
+
+    const originalUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const coords = getSVGCoords(e);
+      setSeparatorDragState(prev => prev ? { ...prev, currentX: coords.x } : null);
+    };
+
+    const handleMouseUp = () => {
+      if (separatorDragState && onFocusSeparatorChange) {
+        onFocusSeparatorChange(separatorDragState.currentX);
+      }
+      setSeparatorDragState(null);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.userSelect = originalUserSelect;
+    };
+  }, [separatorDragState, getSVGCoords, onFocusSeparatorChange]);
+
+  // Calculate current separator X (either from drag or prop)
+  const currentSeparatorX = separatorDragState?.currentX ?? focusSeparatorX;
+
+  // Helper to check if a node is on the unfocused (right) side
+  const isUnfocused = useCallback((nodeX: number, nodeWidth: number): boolean => {
+    if (currentSeparatorX === null) return false;
+    // Node is unfocused if its left edge is to the right of the separator
+    return nodeX > currentSeparatorX;
+  }, [currentSeparatorX]);
+
   const renderEdge = (edge: LayoutEdge, index: number) => {
     // Vertical edge: from bottom of parent to top of child
     const fromHeight = edge.from.isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT;
@@ -831,8 +881,15 @@ export default function BranchGraph({
     const strokeColor = edge.isTentative ? "#9c27b0" : edge.isDesigned ? "#9c27b0" : "#4b5563";
     const strokeDash = edge.isTentative ? "4,4" : undefined;
 
+    // Check if edge is unfocused (either endpoint is on the right side of separator)
+    const fromX = edge.from.x + fromOffsetX;
+    const toX = edge.to.x + toOffsetX;
+    const edgeUnfocused = isUnfocused(fromX, fromWidth) || isUnfocused(toX, toWidth);
+    const baseOpacity = edge.isTentative ? 0.7 : 1;
+    const edgeOpacity = edgeUnfocused ? baseOpacity * 0.3 : baseOpacity;
+
     return (
-      <g key={`edge-${index}`} opacity={edge.isTentative ? 0.7 : 1}>
+      <g key={`edge-${index}`} opacity={edgeOpacity}>
         <path
           d={path}
           fill="none"
@@ -1028,11 +1085,16 @@ export default function BranchGraph({
       handleDragStart(id, x + nodeWidth / 2, y);
     } : undefined;
 
+    // Check if node is unfocused (to the right of separator)
+    const nodeUnfocused = isUnfocused(x, nodeWidth);
+    const baseNodeOpacity = isTentative ? 0.8 : isDragging ? 0.5 : isMerged ? 0.6 : 1;
+    const nodeOpacity = nodeUnfocused ? baseNodeOpacity * 0.3 : baseNodeOpacity;
+
     return (
       <g
         key={id}
         style={{ cursor: canDrag ? (isDragging ? "grabbing" : "grab") : (isTentative ? "default" : "pointer") }}
-        opacity={isTentative ? 0.8 : isDragging ? 0.5 : isMerged ? 0.6 : 1}
+        opacity={nodeOpacity}
         onMouseEnter={() => {
           if (dragState && dragState.fromBranch !== id && !isTentative) {
             setDropTarget(id);
@@ -1702,6 +1764,45 @@ export default function BranchGraph({
               </g>
             );
           })()}
+
+          {/* Focus separator line */}
+          {(currentSeparatorX !== null || onFocusSeparatorChange) && (
+            <g className="branch-graph__focus-separator">
+              {/* Separator line */}
+              <line
+                x1={currentSeparatorX ?? width - 50}
+                y1={0}
+                x2={currentSeparatorX ?? width - 50}
+                y2={height}
+                stroke="#6366f1"
+                strokeWidth={2}
+                strokeDasharray="6,4"
+                opacity={currentSeparatorX !== null ? 0.8 : 0.3}
+              />
+              {/* Draggable handle */}
+              <rect
+                x={(currentSeparatorX ?? width - 50) - 8}
+                y={height / 2 - 30}
+                width={16}
+                height={60}
+                rx={4}
+                fill="#4f46e5"
+                stroke="#818cf8"
+                strokeWidth={1}
+                style={{ cursor: "ew-resize" }}
+                opacity={currentSeparatorX !== null ? 1 : 0.5}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  const coords = getSVGCoords(e);
+                  setSeparatorDragState({ startX: coords.x, currentX: currentSeparatorX ?? width - 50 });
+                }}
+              />
+              {/* Handle grip dots */}
+              <circle cx={currentSeparatorX ?? width - 50} cy={height / 2 - 12} r={2} fill="#a5b4fc" style={{ pointerEvents: "none" }} />
+              <circle cx={currentSeparatorX ?? width - 50} cy={height / 2} r={2} fill="#a5b4fc" style={{ pointerEvents: "none" }} />
+              <circle cx={currentSeparatorX ?? width - 50} cy={height / 2 + 12} r={2} fill="#a5b4fc" style={{ pointerEvents: "none" }} />
+            </g>
+          )}
         </g>
       </svg>
     </div>

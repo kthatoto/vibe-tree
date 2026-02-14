@@ -441,6 +441,15 @@ export interface BranchLink {
   updatedAt: string;
 }
 
+export interface BranchDescription {
+  id: number;
+  repoId: string;
+  branchName: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...options,
@@ -1122,6 +1131,17 @@ export const api = {
     fetchJson<{ found: boolean; link?: BranchLink }>(`${API_BASE}/branch-links/detect`, {
       method: "POST",
       body: JSON.stringify({ repoId, branchName }),
+    }),
+
+  // Branch Descriptions
+  getBranchDescription: (repoId: string, branchName: string) =>
+    fetchJson<BranchDescription | null>(
+      `${API_BASE}/branch-descriptions?repoId=${encodeURIComponent(repoId)}&branchName=${encodeURIComponent(branchName)}`
+    ),
+  updateBranchDescription: (repoId: string, branchName: string, description: string) =>
+    fetchJson<BranchDescription>(`${API_BASE}/branch-descriptions`, {
+      method: "PUT",
+      body: JSON.stringify({ repoId, branchName, description }),
     }),
 
   // Todos

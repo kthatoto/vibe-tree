@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { api, type TaskInstruction, type ChatMessage, type TreeNode, type BranchLink, type GitHubCheck, type GitHubLabel } from "../lib/api";
+import { api, type TaskInstruction, type ChatMessage, type TreeNode, type BranchLink, type GitHubCheck, type GitHubLabel, type BranchDescription } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import { computeSimpleDiff, type DiffLine } from "../lib/diff";
 import { linkifyPreContent } from "../lib/linkify";
@@ -254,6 +254,12 @@ export function TaskDetailPanel({
   // Deletable branch check (no commits + not on remote)
   const [isDeletable, setIsDeletable] = useState(false);
 
+  // Branch description state
+  const [branchDescription, setBranchDescription] = useState<BranchDescription | null>(null);
+  const [descriptionDraft, setDescriptionDraft] = useState("");
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [savingDescription, setSavingDescription] = useState(false);
+
   // The working path is either the worktree path or localPath if checked out
   const workingPath = worktreePath || (checkedOut ? localPath : null);
 
@@ -332,6 +338,20 @@ export function TaskDetailPanel({
     };
     checkDeletable();
   }, [localPath, branchName, parentBranch, isDefaultBranch]);
+
+  // Load branch description
+  useEffect(() => {
+    const loadDescription = async () => {
+      try {
+        const desc = await api.getBranchDescription(repoId, branchName);
+        setBranchDescription(desc);
+        setDescriptionDraft(desc?.description || "");
+      } catch (err) {
+        console.error("Failed to load branch description:", err);
+      }
+    };
+    loadDescription();
+  }, [repoId, branchName]);
 
   // Poll CI status for PRs every 30 seconds
   useEffect(() => {
@@ -551,6 +571,19 @@ export function TaskDetailPanel({
       setEditingInstruction(false);
     } catch (err) {
       setError((err as Error).message);
+    }
+  };
+
+  const handleSaveDescription = async () => {
+    setSavingDescription(true);
+    try {
+      const updated = await api.updateBranchDescription(repoId, branchName, descriptionDraft);
+      setBranchDescription(updated);
+      setEditingDescription(false);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSavingDescription(false);
     }
   };
 
@@ -855,6 +888,59 @@ export function TaskDetailPanel({
       </div>
 
       {error && <div className="task-detail-panel__error">{error}</div>}
+
+      {/* Description Section */}
+      <div className="task-detail-panel__description-section">
+        <div className="task-detail-panel__description-header">
+          <h4>Description</h4>
+          {!editingDescription ? (
+            <button
+              className="task-detail-panel__edit-btn"
+              onClick={() => {
+                setDescriptionDraft(branchDescription?.description || "");
+                setEditingDescription(true);
+              }}
+            >
+              Edit
+            </button>
+          ) : (
+            <div className="task-detail-panel__description-actions">
+              <button
+                onClick={handleSaveDescription}
+                disabled={savingDescription}
+              >
+                {savingDescription ? "Saving..." : "Save"}
+              </button>
+              <button
+                onClick={() => {
+                  setEditingDescription(false);
+                  setDescriptionDraft(branchDescription?.description || "");
+                }}
+                disabled={savingDescription}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+        {editingDescription ? (
+          <textarea
+            className="task-detail-panel__description-textarea"
+            value={descriptionDraft}
+            onChange={(e) => setDescriptionDraft(e.target.value)}
+            placeholder="Add a description for this branch..."
+            rows={3}
+          />
+        ) : branchDescription?.description ? (
+          <div className="task-detail-panel__description-content">
+            {branchDescription.description}
+          </div>
+        ) : (
+          <div className="task-detail-panel__description-empty">
+            No description
+          </div>
+        )}
+      </div>
 
       {/* Working Path Section */}
       <div className="task-detail-panel__worktree-section">

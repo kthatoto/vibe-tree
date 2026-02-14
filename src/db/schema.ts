@@ -279,6 +279,16 @@ export const branchLinks = sqliteTable("branch_links", {
   updatedAt: text("updated_at").notNull(),
 });
 
+// Branch descriptions (branch-level notes/descriptions)
+export const branchDescriptions = sqliteTable("branch_descriptions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  repoId: text("repo_id").notNull(),
+  branchName: text("branch_name").notNull(),
+  description: text("description").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 // ============================================================
 // Conversation Compact System Tables
 // ============================================================

@@ -663,6 +663,10 @@ export default function BranchGraph({
   useEffect(() => {
     if (!columnDragState) return;
 
+    // Disable text selection during drag
+    const originalUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+
     const handleMouseMove = (e: MouseEvent) => {
       const coords = getSVGCoords(e);
       setColumnDragState(prev => prev ? { ...prev, currentX: coords.x } : null);
@@ -711,6 +715,7 @@ export default function BranchGraph({
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.userSelect = originalUserSelect;
     };
   }, [columnDragState, getSVGCoords, layoutNodes, onSiblingOrderChange, siblingOrder]);
 

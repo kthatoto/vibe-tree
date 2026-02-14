@@ -31,8 +31,9 @@ interface BranchGraphProps {
   siblingOrder?: Record<string, string[]>;
   onSiblingOrderChange?: (siblingOrder: Record<string, string[]>) => void;
   // Focus separator - divides focused (left) from unfocused (right) items
-  focusSeparatorX?: number | null; // null means no separator
-  onFocusSeparatorChange?: (x: number | null) => void;
+  // Index indicates separator position in root siblings (0 = before first, 1 = after first, etc.)
+  focusSeparatorIndex?: number | null; // null means no separator
+  onFocusSeparatorIndexChange?: (index: number | null) => void;
 }
 
 interface DragState {
@@ -101,18 +102,12 @@ export default function BranchGraph({
   filterEnabled = false,
   siblingOrder = {},
   onSiblingOrderChange,
-  focusSeparatorX = null,
-  onFocusSeparatorChange,
+  focusSeparatorIndex = null,
+  onFocusSeparatorIndexChange,
 }: BranchGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
-
-  // Focus separator drag state
-  const [separatorDragState, setSeparatorDragState] = useState<{
-    startX: number;
-    currentX: number;
-  } | null>(null);
 
   // Column reorder drag state
   const [columnDragState, setColumnDragState] = useState<{
@@ -123,6 +118,13 @@ export default function BranchGraph({
     currentX: number;
     offsetX: number; // offset from node center to mouse position
     currentInsertIndex: number; // current swap position (updates on swap)
+  } | null>(null);
+
+  // Separator drag state
+  const [separatorDragState, setSeparatorDragState] = useState<{
+    startX: number;
+    currentX: number;
+    startIndex: number;
   } | null>(null);
 
   // Prevent browser back/forward gesture on horizontal scroll (only when at scroll boundary)
@@ -819,7 +821,7 @@ export default function BranchGraph({
     };
   }, [columnDragState, getSVGCoords, layoutNodes, onSiblingOrderChange, siblingOrder, getColumnBoundsHelper]);
 
-  // Handle focus separator drag
+  // Handle separator drag
   useEffect(() => {
     if (!separatorDragState) return;
 
@@ -828,13 +830,53 @@ export default function BranchGraph({
 
     const handleMouseMove = (e: MouseEvent) => {
       const coords = getSVGCoords(e);
-      setSeparatorDragState(prev => prev ? { ...prev, currentX: coords.x } : null);
+      const newX = coords.x;
+
+      // Get root siblings for boundary calculation
+      const children = edges.filter(e => e.parent === defaultBranch).map(e => e.child);
+      const childNodes = layoutNodes.filter(n => children.includes(n.id));
+      const sortedSiblings = childNodes.sort((a, b) => a.x - b.x);
+
+      // Calculate new index based on position
+      let newIndex = separatorDragState.startIndex;
+
+      // Check if we should move left
+      if (newIndex > 0) {
+        const leftSibling = sortedSiblings[newIndex - 1];
+        if (leftSibling) {
+          const leftBounds = getColumnBoundsHelper(leftSibling.id);
+          const leftCenter = leftBounds ? (leftBounds.left + leftBounds.right) / 2 : leftSibling.x + NODE_WIDTH / 2;
+          if (newX < leftCenter) {
+            newIndex = newIndex - 1;
+          }
+        }
+      }
+
+      // Check if we should move right
+      if (newIndex < sortedSiblings.length) {
+        const rightSibling = sortedSiblings[newIndex];
+        if (rightSibling) {
+          const rightBounds = getColumnBoundsHelper(rightSibling.id);
+          const rightCenter = rightBounds ? (rightBounds.left + rightBounds.right) / 2 : rightSibling.x + NODE_WIDTH / 2;
+          if (newX > rightCenter) {
+            newIndex = newIndex + 1;
+          }
+        }
+      }
+
+      setSeparatorDragState(prev => prev ? {
+        ...prev,
+        currentX: newX,
+        startIndex: newIndex,
+      } : null);
+
+      // Update parent state if index changed
+      if (newIndex !== separatorDragState.startIndex && onFocusSeparatorIndexChange) {
+        onFocusSeparatorIndexChange(newIndex);
+      }
     };
 
     const handleMouseUp = () => {
-      if (separatorDragState && onFocusSeparatorChange) {
-        onFocusSeparatorChange(separatorDragState.currentX);
-      }
       setSeparatorDragState(null);
     };
 
@@ -846,17 +888,34 @@ export default function BranchGraph({
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.userSelect = originalUserSelect;
     };
-  }, [separatorDragState, getSVGCoords, onFocusSeparatorChange]);
+  }, [separatorDragState, getSVGCoords, edges, defaultBranch, layoutNodes, getColumnBoundsHelper, onFocusSeparatorIndexChange]);
 
-  // Calculate current separator X (either from drag or prop)
-  const currentSeparatorX = separatorDragState?.currentX ?? focusSeparatorX;
+  // Get root siblings (children of default branch) sorted by X position
+  const rootSiblings = useMemo(() => {
+    const children = edges.filter(e => e.parent === defaultBranch).map(e => e.child);
+    const childNodes = layoutNodes.filter(n => children.includes(n.id));
+    return childNodes.sort((a, b) => a.x - b.x).map(n => n.id);
+  }, [edges, defaultBranch, layoutNodes]);
 
-  // Helper to check if a node is on the unfocused (right) side
-  const isUnfocused = useCallback((nodeX: number, nodeWidth: number): boolean => {
-    if (currentSeparatorX === null) return false;
-    // Node is unfocused if its left edge is to the right of the separator
-    return nodeX > currentSeparatorX;
-  }, [currentSeparatorX]);
+  // Effective separator index: if null, place at the end (all items focused)
+  const effectiveSeparatorIndex = focusSeparatorIndex ?? rootSiblings.length;
+
+  // Helper to check if a branch is on the unfocused (right) side of separator
+  const isUnfocusedBranch = useCallback((branchId: string): boolean => {
+    // Find which root sibling this branch belongs to
+    const findRootSibling = (id: string): string | null => {
+      if (rootSiblings.includes(id)) return id;
+      const parent = edges.find(e => e.child === id)?.parent;
+      if (!parent || parent === defaultBranch) return null;
+      return findRootSibling(parent);
+    };
+
+    const rootSibling = findRootSibling(branchId);
+    if (!rootSibling) return false;
+
+    const siblingIndex = rootSiblings.indexOf(rootSibling);
+    return siblingIndex >= effectiveSeparatorIndex;
+  }, [effectiveSeparatorIndex, rootSiblings, edges, defaultBranch]);
 
   const renderEdge = (edge: LayoutEdge, index: number) => {
     // Vertical edge: from bottom of parent to top of child
@@ -882,9 +941,7 @@ export default function BranchGraph({
     const strokeDash = edge.isTentative ? "4,4" : undefined;
 
     // Check if edge is unfocused (either endpoint is on the right side of separator)
-    const fromX = edge.from.x + fromOffsetX;
-    const toX = edge.to.x + toOffsetX;
-    const edgeUnfocused = isUnfocused(fromX, fromWidth) || isUnfocused(toX, toWidth);
+    const edgeUnfocused = isUnfocusedBranch(edge.from.id) || isUnfocusedBranch(edge.to.id);
     const baseOpacity = edge.isTentative ? 0.7 : 1;
     const edgeOpacity = edgeUnfocused ? baseOpacity * 0.3 : baseOpacity;
 
@@ -1086,7 +1143,7 @@ export default function BranchGraph({
     } : undefined;
 
     // Check if node is unfocused (to the right of separator)
-    const nodeUnfocused = isUnfocused(x, nodeWidth);
+    const nodeUnfocused = isUnfocusedBranch(id);
     const baseNodeOpacity = isTentative ? 0.8 : isDragging ? 0.5 : isMerged ? 0.6 : 1;
     const nodeOpacity = nodeUnfocused ? baseNodeOpacity * 0.3 : baseNodeOpacity;
 
@@ -1765,44 +1822,76 @@ export default function BranchGraph({
             );
           })()}
 
-          {/* Focus separator line */}
-          {(currentSeparatorX !== null || onFocusSeparatorChange) && (
-            <g className="branch-graph__focus-separator">
-              {/* Separator line */}
-              <line
-                x1={currentSeparatorX ?? width - 50}
-                y1={0}
-                x2={currentSeparatorX ?? width - 50}
-                y2={height}
-                stroke="#6366f1"
-                strokeWidth={2}
-                strokeDasharray="6,4"
-                opacity={currentSeparatorX !== null ? 0.8 : 0.3}
-              />
-              {/* Draggable handle */}
-              <rect
-                x={(currentSeparatorX ?? width - 50) - 8}
-                y={height / 2 - 30}
-                width={16}
-                height={60}
-                rx={4}
-                fill="#4f46e5"
-                stroke="#818cf8"
-                strokeWidth={1}
-                style={{ cursor: "ew-resize" }}
-                opacity={currentSeparatorX !== null ? 1 : 0.5}
-                onMouseDown={(e) => {
-                  e.stopPropagation();
-                  const coords = getSVGCoords(e);
-                  setSeparatorDragState({ startX: coords.x, currentX: currentSeparatorX ?? width - 50 });
-                }}
-              />
-              {/* Handle grip dots */}
-              <circle cx={currentSeparatorX ?? width - 50} cy={height / 2 - 12} r={2} fill="#a5b4fc" style={{ pointerEvents: "none" }} />
-              <circle cx={currentSeparatorX ?? width - 50} cy={height / 2} r={2} fill="#a5b4fc" style={{ pointerEvents: "none" }} />
-              <circle cx={currentSeparatorX ?? width - 50} cy={height / 2 + 12} r={2} fill="#a5b4fc" style={{ pointerEvents: "none" }} />
-            </g>
-          )}
+          {/* Focus separator line - always show if there are root siblings */}
+          {rootSiblings.length > 0 && (() => {
+            // Calculate separator X position based on effective index
+            // Separator appears between column at index-1 and index (or at the start if index is 0)
+            let separatorX: number;
+            if (effectiveSeparatorIndex <= 0) {
+              // Before first column
+              const firstNode = layoutNodes.find(n => n.id === rootSiblings[0]);
+              separatorX = (firstNode?.x ?? LEFT_PADDING) - HORIZONTAL_GAP / 2;
+            } else if (effectiveSeparatorIndex >= rootSiblings.length) {
+              // After last column - use rightmost edge of last column
+              const lastSibling = rootSiblings[rootSiblings.length - 1];
+              const lastBounds = getColumnBoundsHelper(lastSibling);
+              separatorX = (lastBounds?.right ?? width - 50) + HORIZONTAL_GAP / 2;
+            } else {
+              // Between two columns
+              const leftSibling = rootSiblings[effectiveSeparatorIndex - 1];
+              const rightSibling = rootSiblings[effectiveSeparatorIndex];
+              const leftBounds = getColumnBoundsHelper(leftSibling);
+              const rightBounds = getColumnBoundsHelper(rightSibling);
+              const leftRight = leftBounds?.right ?? 0;
+              const rightLeft = rightBounds?.left ?? width;
+              separatorX = (leftRight + rightLeft) / 2;
+            }
+
+            return (
+              <g className="branch-graph__focus-separator">
+                {/* Separator line - extends full height */}
+                <line
+                  x1={separatorX}
+                  y1={0}
+                  x2={separatorX}
+                  y2={9999}
+                  stroke="#6b7280"
+                  strokeWidth={2}
+                  strokeDasharray="6,4"
+                  opacity={0.6}
+                />
+                {/* Draggable handle - only in edit mode */}
+                {editMode && (
+                  <>
+                    <rect
+                      x={separatorX - 8}
+                      y={height / 2 - 30}
+                      width={16}
+                      height={60}
+                      rx={4}
+                      fill={separatorDragState ? "#6b7280" : "#4b5563"}
+                      stroke="#9ca3af"
+                      strokeWidth={separatorDragState ? 2 : 1}
+                      style={{ cursor: "ew-resize" }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        const coords = getSVGCoords(e);
+                        setSeparatorDragState({
+                          startX: coords.x,
+                          currentX: coords.x,
+                          startIndex: effectiveSeparatorIndex,
+                        });
+                      }}
+                    />
+                    {/* Handle grip dots */}
+                    <circle cx={separatorX} cy={height / 2 - 12} r={2} fill="#9ca3af" style={{ pointerEvents: "none" }} />
+                    <circle cx={separatorX} cy={height / 2} r={2} fill="#9ca3af" style={{ pointerEvents: "none" }} />
+                    <circle cx={separatorX} cy={height / 2 + 12} r={2} fill="#9ca3af" style={{ pointerEvents: "none" }} />
+                  </>
+                )}
+              </g>
+            );
+          })()}
         </g>
       </svg>
     </div>

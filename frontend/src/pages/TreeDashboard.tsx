@@ -118,18 +118,18 @@ export default function TreeDashboard() {
     localStorage.setItem("branchGraph.zoom", String(graphZoom));
   }, [graphZoom]);
 
-  // Focus separator position (persisted in localStorage)
-  const [focusSeparatorX, setFocusSeparatorX] = useState<number | null>(() => {
-    const saved = localStorage.getItem("branchGraph.focusSeparatorX");
-    return saved ? parseFloat(saved) : null;
+  // Focus separator index (persisted in localStorage)
+  const [focusSeparatorIndex, setFocusSeparatorIndex] = useState<number | null>(() => {
+    const saved = localStorage.getItem("branchGraph.focusSeparatorIndex");
+    return saved ? parseInt(saved, 10) : null;
   });
   useEffect(() => {
-    if (focusSeparatorX !== null) {
-      localStorage.setItem("branchGraph.focusSeparatorX", String(focusSeparatorX));
+    if (focusSeparatorIndex !== null) {
+      localStorage.setItem("branchGraph.focusSeparatorIndex", String(focusSeparatorIndex));
     } else {
-      localStorage.removeItem("branchGraph.focusSeparatorX");
+      localStorage.removeItem("branchGraph.focusSeparatorIndex");
     }
-  }, [focusSeparatorX]);
+  }, [focusSeparatorIndex]);
 
   // Branch graph filter (persisted in localStorage)
   const [checkedBranches, setCheckedBranches] = useState<Set<string>>(() => {
@@ -1693,8 +1693,8 @@ export default function TreeDashboard() {
                           };
                         });
                       }}
-                      focusSeparatorX={focusSeparatorX}
-                      onFocusSeparatorChange={setFocusSeparatorX}
+                      focusSeparatorIndex={focusSeparatorIndex}
+                      onFocusSeparatorIndexChange={setFocusSeparatorIndex}
                     />
                   </div>
                 </div>

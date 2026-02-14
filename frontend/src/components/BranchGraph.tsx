@@ -23,6 +23,10 @@ interface BranchGraphProps {
   // Zoom control (external)
   zoom?: number;
   onZoomChange?: (zoom: number) => void;
+  // Filter control
+  checkedBranches?: Set<string>;
+  onCheckedChange?: (branchName: string, checked: boolean) => void;
+  filterEnabled?: boolean;
 }
 
 interface DragState {
@@ -37,6 +41,7 @@ interface LayoutNode {
   id: string;
   x: number;
   y: number;
+  width: number;
   node: TreeNode;
   depth: number;
   row: number;
@@ -55,7 +60,6 @@ interface LayoutEdge {
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 80;
 const MINIMIZED_NODE_WIDTH = 120;
-const MINIMIZED_NODE_HEIGHT = 28;
 const TENTATIVE_NODE_HEIGHT = 60;
 const HORIZONTAL_GAP = 28;
 const VERTICAL_GAP = 50;
@@ -168,6 +172,12 @@ export default function BranchGraph({
       return { layoutNodes: [], layoutEdges: [], width: 400, height: 200 };
     }
 
+    // Helper to check if a branch should be minimized (for layout calculation)
+    const shouldMinimize = (branchName: string) => {
+      if (branchName === defaultBranch) return false;
+      return filterEnabled && checkedBranches.has(branchName);
+    };
+
     // Build adjacency map (parent -> children)
     const childrenMap = new Map<string, string[]>();
     const parentMap = new Map<string, string>();
@@ -190,7 +200,7 @@ export default function BranchGraph({
       return a.branchName.localeCompare(b.branchName);
     });
 
-    // Layout nodes - vertical tree (root on top-left, children below)
+    // Phase 1: Assign columns to all nodes (without X positions yet)
     const layoutNodes: LayoutNode[] = [];
     const nodeMap = new Map<string, LayoutNode>();
 
@@ -206,11 +216,15 @@ export default function BranchGraph({
       // Left-aligned: use minCol directly
       const col = minCol;
 
-      // Vertical layout: depth controls Y, col controls X
+      // Determine node width based on minimized state
+      const nodeWidth = shouldMinimize(branchName) ? MINIMIZED_NODE_WIDTH : NODE_WIDTH;
+
+      // Vertical layout: depth controls Y, col controls X (X will be recalculated later)
       const layoutNode: LayoutNode = {
         id: branchName,
-        x: LEFT_PADDING + col * (NODE_WIDTH + HORIZONTAL_GAP),
+        x: 0, // Will be calculated in Phase 2
         y: TOP_PADDING + depth * (NODE_HEIGHT + VERTICAL_GAP),
+        width: nodeWidth,
         node,
         depth,
         row: col,
@@ -245,10 +259,13 @@ export default function BranchGraph({
         const depth = 0;
         const col = nextCol++;
 
+        const nodeWidth = shouldMinimize(node.branchName) ? MINIMIZED_NODE_WIDTH : NODE_WIDTH;
+
         const layoutNode: LayoutNode = {
           id: node.branchName,
-          x: LEFT_PADDING + col * (NODE_WIDTH + HORIZONTAL_GAP),
+          x: 0, // Will be calculated in Phase 2
           y: TOP_PADDING + depth * (NODE_HEIGHT + VERTICAL_GAP),
+          width: nodeWidth,
           node,
           depth,
           row: col,
@@ -256,6 +273,29 @@ export default function BranchGraph({
         layoutNodes.push(layoutNode);
         nodeMap.set(node.branchName, layoutNode);
       }
+    });
+
+    // Phase 2: Calculate column max widths and X positions
+    // Find max width for each column
+    const columnMaxWidths = new Map<number, number>();
+    layoutNodes.forEach((n) => {
+      const currentMax = columnMaxWidths.get(n.row) ?? 0;
+      columnMaxWidths.set(n.row, Math.max(currentMax, n.width));
+    });
+
+    // Calculate cumulative X positions for each column
+    const columnXPositions = new Map<number, number>();
+    let currentX = LEFT_PADDING;
+    const maxColumn = Math.max(...layoutNodes.map((n) => n.row), 0);
+    for (let col = 0; col <= maxColumn; col++) {
+      columnXPositions.set(col, currentX);
+      const colWidth = columnMaxWidths.get(col) ?? NODE_WIDTH;
+      currentX += colWidth + HORIZONTAL_GAP;
+    }
+
+    // Update X positions for all nodes
+    layoutNodes.forEach((n) => {
+      n.x = columnXPositions.get(n.row) ?? LEFT_PADDING;
     });
 
     // Add tentative nodes from planning session
@@ -370,8 +410,9 @@ export default function BranchGraph({
 
         const layoutNode: LayoutNode = {
           id: branchName,
-          x: LEFT_PADDING + col * (NODE_WIDTH + HORIZONTAL_GAP),
+          x: 0, // Will be recalculated after all nodes are placed
           y: TOP_PADDING + tentDepth * (NODE_HEIGHT + VERTICAL_GAP),
+          width: NODE_WIDTH, // Tentative nodes always use full width
           node: tentDummyNode,
           depth: tentDepth,
           row: col,
@@ -405,6 +446,26 @@ export default function BranchGraph({
       let tentativeCol = maxExistingCol + 1; // Start tentative nodes after all existing branches
       rootTentativeNodes.forEach((task) => {
         tentativeCol = layoutTentativeSubtree(task.id, tentativeCol) + 1;
+      });
+
+      // Recalculate column widths and X positions after adding tentative nodes
+      columnMaxWidths.clear();
+      layoutNodes.forEach((n) => {
+        const curMax = columnMaxWidths.get(n.row) ?? 0;
+        columnMaxWidths.set(n.row, Math.max(curMax, n.width));
+      });
+
+      columnXPositions.clear();
+      let recalcX = LEFT_PADDING;
+      const newMaxColumn = Math.max(...layoutNodes.map((n) => n.row), 0);
+      for (let col = 0; col <= newMaxColumn; col++) {
+        columnXPositions.set(col, recalcX);
+        const colWidth = columnMaxWidths.get(col) ?? NODE_WIDTH;
+        recalcX += colWidth + HORIZONTAL_GAP;
+      }
+
+      layoutNodes.forEach((n) => {
+        n.x = columnXPositions.get(n.row) ?? LEFT_PADDING;
       });
 
       // Create edges for tentative nodes
@@ -457,7 +518,7 @@ export default function BranchGraph({
 
     // Calculate canvas size (add extra space for badges below nodes)
     const BADGE_HEIGHT = 20; // Space for badges below nodes
-    const maxX = Math.max(...layoutNodes.map((n) => n.x), 0) + NODE_WIDTH + LEFT_PADDING;
+    const maxX = Math.max(...layoutNodes.map((n) => n.x + n.width), 0) + LEFT_PADDING;
     const maxY = Math.max(
       ...layoutNodes.map((n) => n.y + (n.isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT) + BADGE_HEIGHT),
       0
@@ -469,14 +530,16 @@ export default function BranchGraph({
       width: Math.max(400, maxX),
       height: Math.max(150, maxY),
     };
-  }, [nodes, edges, defaultBranch, tentativeNodes, tentativeEdges, tentativeBaseBranch]);
+  }, [nodes, edges, defaultBranch, tentativeNodes, tentativeEdges, tentativeBaseBranch, checkedBranches, filterEnabled]);
 
   const renderEdge = (edge: LayoutEdge, index: number) => {
     // Vertical edge: from bottom of parent to top of child
     const fromHeight = edge.from.isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT;
-    const startX = edge.from.x + NODE_WIDTH / 2;
+    const fromWidth = edge.from.width ?? NODE_WIDTH;
+    const toWidth = edge.to.width ?? NODE_WIDTH;
+    const startX = edge.from.x + fromWidth / 2;
     const startY = edge.from.y + fromHeight;
-    const endX = edge.to.x + NODE_WIDTH / 2;
+    const endX = edge.to.x + toWidth / 2;
     const endY = edge.to.y;
 
     // Simple path: go down, then horizontal, then down to target
@@ -572,7 +635,8 @@ export default function BranchGraph({
     // Check if this node should be minimized
     const nodeIsMinimized = !isTentative && isMinimized(id);
     const nodeWidth = nodeIsMinimized ? MINIMIZED_NODE_WIDTH : NODE_WIDTH;
-    const nodeHeight = nodeIsMinimized ? MINIMIZED_NODE_HEIGHT : (isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT);
+    // Height stays the same even when minimized (only width changes)
+    const nodeHeight = isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT;
     const isChecked = checkedBranches.has(id);
 
     // Get description label (first word/token before whitespace)
@@ -582,7 +646,7 @@ export default function BranchGraph({
     // In edit mode, the whole node is draggable (line starts from top edge of node for vertical layout)
     const handleNodeMouseDown = canDrag ? (e: React.MouseEvent) => {
       e.stopPropagation();
-      handleDragStart(id, x + NODE_WIDTH / 2, y);
+      handleDragStart(id, x + nodeWidth / 2, y);
     } : undefined;
 
     return (
@@ -617,8 +681,8 @@ export default function BranchGraph({
           onClick={() => !isTentative && !dragState && onSelectBranch(id)}
         />
 
-        {/* Checkbox for filtering - only for non-tentative, non-default, non-minimized nodes */}
-        {!isTentative && !isDefault && !nodeIsMinimized && (
+        {/* Checkbox for filtering - only for non-tentative, non-default nodes (including minimized) */}
+        {!isTentative && !isDefault && (
           <foreignObject
             x={x + 4}
             y={y + nodeHeight - 20}
@@ -646,29 +710,29 @@ export default function BranchGraph({
 
         {/* Node content using foreignObject */}
         <foreignObject
-          x={x + 8}
+          x={nodeIsMinimized ? x + 22 : x + 8}
           y={y + 4}
-          width={nodeWidth - 16}
+          width={nodeIsMinimized ? nodeWidth - 26 : nodeWidth - 16}
           height={nodeHeight - 8}
           style={{ pointerEvents: "none", overflow: "visible" }}
         >
           {nodeIsMinimized ? (
-            /* Minimized view - description label + CI status */
+            /* Minimized view - description label + CI status (80px height) */
             <div
               style={{
-                width: nodeWidth - 16,
+                width: "100%",
                 height: "100%",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "center",
-                gap: 2,
+                gap: 6,
                 overflow: "hidden",
               }}
             >
               {descriptionLabel && (
                 <span style={{
                   fontSize: 10,
-                  padding: "1px 5px",
+                  padding: "2px 6px",
                   borderRadius: 3,
                   background: "#1e3a5f",
                   border: "1px solid #3b82f6",
@@ -681,8 +745,8 @@ export default function BranchGraph({
               )}
               {prLink?.checksStatus && (
                 <span style={{
-                  fontSize: 9,
-                  padding: "1px 4px",
+                  fontSize: 10,
+                  padding: "2px 6px",
                   borderRadius: 3,
                   background: prLink.checksStatus === "success" ? "#14532d" : prLink.checksStatus === "failure" ? "#7f1d1d" : "#78350f",
                   border: `1px solid ${prLink.checksStatus === "success" ? "#22c55e" : prLink.checksStatus === "failure" ? "#ef4444" : "#f59e0b"}`,

@@ -35,12 +35,25 @@ async function getGitDescription(localPath: string, branchName: string): Promise
   }
 }
 
-// Helper: set git branch description
+// Helper: set git branch description with retry for lock conflicts
 async function setGitDescription(localPath: string, branchName: string, description: string): Promise<void> {
-  if (description) {
-    await execAsync(`cd "${localPath}" && git config branch.${branchName}.description "${description.replace(/"/g, '\\"')}"`);
-  } else {
-    await execAsync(`cd "${localPath}" && git config --unset branch.${branchName}.description 2>/dev/null || true`);
+  const maxRetries = 3;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      if (description) {
+        await execAsync(`cd "${localPath}" && git config branch.${branchName}.description "${description.replace(/"/g, '\\"')}"`);
+      } else {
+        await execAsync(`cd "${localPath}" && git config --unset branch.${branchName}.description 2>/dev/null || true`);
+      }
+      return;
+    } catch (err: unknown) {
+      const isLockError = err instanceof Error && err.message.includes("could not lock config file");
+      if (isLockError && i < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, 100 * (i + 1))); // 100ms, 200ms, 300ms
+        continue;
+      }
+      throw err;
+    }
   }
 }
 

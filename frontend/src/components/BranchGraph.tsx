@@ -1399,20 +1399,19 @@ export default function BranchGraph({
           </g>
 
           {/* Column reorder drag handles - rendered last to be on top */}
-          {editMode && (
+          {editMode && !columnDragState && (
             <g className="branch-graph__drag-handles">
               {layoutNodes.map((node) => {
                 const { id, x, y, width: nodeWidth = NODE_WIDTH, isTentative, parentBranch, siblings } = node;
                 const isDefault = id === defaultBranch;
                 const canReorder = !isTentative && !isDefault && parentBranch && siblings && siblings.length > 1;
-                const isColumnDragging = columnDragState?.draggingBranch === id;
 
                 if (!canReorder) return null;
 
                 return (
                   <g
                     key={`drag-handle-${id}`}
-                    style={{ cursor: isColumnDragging ? "grabbing" : "grab" }}
+                    style={{ cursor: "grab" }}
                     onMouseDown={(e) => {
                       e.stopPropagation();
                       const coords = getSVGCoords(e);
@@ -1426,8 +1425,8 @@ export default function BranchGraph({
                       height={12}
                       rx={3}
                       ry={3}
-                      fill={isColumnDragging ? "#6366f1" : "#374151"}
-                      stroke={isColumnDragging ? "#818cf8" : "#4b5563"}
+                      fill="#374151"
+                      stroke="#4b5563"
                       strokeWidth={1}
                     />
                     <circle cx={x + nodeWidth / 2 - 8} cy={y - 10} r={2} fill="#9ca3af" />
@@ -1438,6 +1437,100 @@ export default function BranchGraph({
               })}
             </g>
           )}
+
+          {/* Column reorder bars during drag - kanban-style */}
+          {editMode && columnDragState && (() => {
+            const { draggingBranch, parentBranch, siblings, currentX } = columnDragState;
+
+            // Get layout info for all siblings
+            const siblingNodes = siblings.map(s => {
+              const node = layoutNodes.find(n => n.id === s);
+              return { id: s, x: node?.x ?? 0, y: node?.y ?? 0, width: node?.width ?? NODE_WIDTH };
+            });
+
+            // Calculate slot positions (evenly spaced based on original positions)
+            const sortedByX = [...siblingNodes].sort((a, b) => a.x - b.x);
+            const slotPositions = sortedByX.map(n => n.x + n.width / 2);
+
+            // Find where dragging item should be inserted based on currentX
+            let insertIndex = 0;
+            for (let i = 0; i < slotPositions.length; i++) {
+              if (currentX > slotPositions[i]) {
+                insertIndex = i + 1;
+              }
+            }
+
+            // Build new order with dragging item at insertIndex
+            const othersInOrder = sortedByX.filter(n => n.id !== draggingBranch);
+            const reorderedIds: string[] = [];
+            let otherIdx = 0;
+            for (let i = 0; i <= othersInOrder.length; i++) {
+              if (i === insertIndex) {
+                reorderedIds.push(draggingBranch);
+              }
+              if (otherIdx < othersInOrder.length) {
+                reorderedIds.push(othersInOrder[otherIdx].id);
+                otherIdx++;
+              }
+            }
+            if (!reorderedIds.includes(draggingBranch)) {
+              reorderedIds.push(draggingBranch);
+            }
+
+            // Get common Y position (use first sibling's Y)
+            const commonY = siblingNodes[0]?.y ?? 0;
+            const barWidth = 60;
+            const barHeight = 16;
+
+            return (
+              <g className="branch-graph__drag-bars">
+                {reorderedIds.map((id, slotIndex) => {
+                  const isDragging = id === draggingBranch;
+                  const slotX = slotPositions[slotIndex] ?? slotPositions[slotPositions.length - 1];
+
+                  // Dragging bar follows mouse, others animate to slot positions
+                  const barX = isDragging ? currentX - barWidth / 2 : slotX - barWidth / 2;
+
+                  return (
+                    <g
+                      key={`drag-bar-${id}`}
+                      style={{
+                        cursor: isDragging ? "grabbing" : "default",
+                        transition: isDragging ? "none" : "transform 0.15s ease-out",
+                      }}
+                    >
+                      <rect
+                        x={barX}
+                        y={commonY - 20}
+                        width={barWidth}
+                        height={barHeight}
+                        rx={4}
+                        ry={4}
+                        fill={isDragging ? "#6366f1" : "#374151"}
+                        stroke={isDragging ? "#818cf8" : "#4b5563"}
+                        strokeWidth={isDragging ? 2 : 1}
+                        style={{
+                          filter: isDragging ? "drop-shadow(0 4px 6px rgba(0,0,0,0.3))" : "none",
+                        }}
+                      />
+                      <text
+                        x={barX + barWidth / 2}
+                        y={commonY - 12}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fontSize={9}
+                        fill={isDragging ? "#e0e7ff" : "#9ca3af"}
+                        fontWeight={isDragging ? 600 : 400}
+                        style={{ pointerEvents: "none" }}
+                      >
+                        {id.length > 8 ? id.slice(0, 8) + "…" : id}
+                      </text>
+                    </g>
+                  );
+                })}
+              </g>
+            );
+          })()}
         </g>
       </svg>
     </div>

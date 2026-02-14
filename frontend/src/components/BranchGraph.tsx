@@ -54,11 +54,13 @@ interface LayoutEdge {
 
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 70;
+const MINIMIZED_NODE_HEIGHT = 28;
 const TENTATIVE_NODE_HEIGHT = 60;
 const HORIZONTAL_GAP = 28;
 const VERTICAL_GAP = 50;
 const TOP_PADDING = 30;
 const LEFT_PADDING = 16;
+const FILTER_TOOLBAR_HEIGHT = 36;
 
 
 // Zoom constraints (exported for external use)
@@ -86,6 +88,52 @@ export default function BranchGraph({
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+
+  // Filter state: checked branches and filter toggle
+  const [checkedBranches, setCheckedBranches] = useState<Set<string>>(() => {
+    // Initialize all branches as checked
+    return new Set(nodes.map(n => n.branchName));
+  });
+  const [filterEnabled, setFilterEnabled] = useState(false);
+
+  // Update checked branches when nodes change (add new branches as checked)
+  useEffect(() => {
+    setCheckedBranches(prev => {
+      const newSet = new Set(prev);
+      nodes.forEach(n => {
+        if (!newSet.has(n.branchName)) {
+          newSet.add(n.branchName);
+        }
+      });
+      return newSet;
+    });
+  }, [nodes]);
+
+  const handleCheckChange = useCallback((branchName: string, checked: boolean) => {
+    setCheckedBranches(prev => {
+      const newSet = new Set(prev);
+      if (checked) {
+        newSet.add(branchName);
+      } else {
+        newSet.delete(branchName);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const handleCheckAll = useCallback(() => {
+    setCheckedBranches(new Set(nodes.map(n => n.branchName)));
+  }, [nodes]);
+
+  const handleUncheckAll = useCallback(() => {
+    // Keep default branch checked
+    setCheckedBranches(new Set([defaultBranch]));
+  }, [defaultBranch]);
+
+  // Helper to check if a node should be minimized
+  const isMinimized = useCallback((branchName: string) => {
+    return filterEnabled && !checkedBranches.has(branchName);
+  }, [filterEnabled, checkedBranches]);
 
   // Get SVG coordinates from mouse event (accounting for zoom)
   const getSVGCoords = useCallback((e: React.MouseEvent | MouseEvent) => {
@@ -556,7 +604,11 @@ export default function BranchGraph({
     const displayText = isTentative && tentativeTitle ? tentativeTitle : id;
     // For tentative nodes, also show branch name
     const branchNameDisplay = isTentative ? id : null;
-    const nodeHeight = isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT;
+
+    // Check if this node should be minimized
+    const nodeIsMinimized = !isTentative && isMinimized(id);
+    const nodeHeight = nodeIsMinimized ? MINIMIZED_NODE_HEIGHT : (isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT);
+    const isChecked = checkedBranches.has(id);
 
     // Get description label (first word/token before whitespace)
     const fullDescription = branchDescriptions.get(id);
@@ -600,17 +652,69 @@ export default function BranchGraph({
           onClick={() => !isTentative && !dragState && onSelectBranch(id)}
         />
 
+        {/* Checkbox for filtering - only for non-tentative nodes */}
+        {!isTentative && (
+          <foreignObject
+            x={x + 4}
+            y={y + 4}
+            width={20}
+            height={20}
+            style={{ overflow: "visible" }}
+          >
+            <input
+              type="checkbox"
+              checked={isChecked}
+              onChange={(e) => {
+                e.stopPropagation();
+                handleCheckChange(id, e.target.checked);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: 14,
+                height: 14,
+                cursor: "pointer",
+                accentColor: "#3b82f6",
+              }}
+            />
+          </foreignObject>
+        )}
+
         {/* Node content using foreignObject */}
         <foreignObject
-          x={x + 8}
+          x={x + (isTentative ? 8 : 24)}
           y={y + 4}
-          width={NODE_WIDTH - 16}
+          width={NODE_WIDTH - (isTentative ? 16 : 32)}
           height={nodeHeight - 8}
           style={{ pointerEvents: "none", overflow: "visible" }}
         >
+          {nodeIsMinimized ? (
+            /* Minimized view - just branch name */
+            <div
+              style={{
+                width: NODE_WIDTH - 32,
+                height: "100%",
+                display: "flex",
+                alignItems: "center",
+                overflow: "hidden",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  fontFamily: "monospace",
+                  color: "#9ca3af",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {id}
+              </span>
+            </div>
+          ) : (
           <div
             style={{
-              width: NODE_WIDTH - 16,
+              width: NODE_WIDTH - (isTentative ? 16 : 32),
               height: "100%",
               display: "flex",
               flexDirection: "column",
@@ -793,10 +897,11 @@ export default function BranchGraph({
               </div>
             )}
           </div>
+          )}
         </foreignObject>
 
-        {/* Worktree label on top + active border effect */}
-        {hasWorktree && (() => {
+        {/* Worktree label on top + active border effect (hidden when minimized) */}
+        {!nodeIsMinimized && hasWorktree && (() => {
           const worktreeName = node.worktree?.path?.split("/").pop() || "worktree";
           const isActive = node.worktree?.isActive;
           const labelWidth = Math.min(worktreeName.length * 7 + 16, NODE_WIDTH);
@@ -844,8 +949,8 @@ export default function BranchGraph({
         })()}
 
 
-        {/* All badges in a single horizontal row below the node */}
-        {(() => {
+        {/* All badges in a single horizontal row below the node (hidden when minimized) */}
+        {!nodeIsMinimized && (() => {
           const badges: Array<{ label: string; color: string }> = [];
           // Local ahead/behind (vs parent branch)
           if (node.aheadBehind?.ahead && node.aheadBehind.ahead > 0) {
@@ -894,8 +999,8 @@ export default function BranchGraph({
           );
         })()}
 
-        {/* Add branch button - positioned at bottom right of node */}
-        {onBranchCreate && !isTentative && !isMerged && (
+        {/* Add branch button - positioned at bottom right of node (hidden when minimized) */}
+        {!nodeIsMinimized && onBranchCreate && !isTentative && !isMerged && (
           <g
             style={{ cursor: "pointer" }}
             onClick={(e) => {
@@ -939,14 +1044,79 @@ export default function BranchGraph({
     );
   }
 
+  const uncheckedCount = nodes.length - checkedBranches.size;
+
   return (
-    <div className="branch-graph" style={{ width: "100%", height: "100%" }}>
+    <div className="branch-graph" style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
+      {/* Filter toolbar */}
+      <div
+        style={{
+          height: FILTER_TOOLBAR_HEIGHT,
+          minHeight: FILTER_TOOLBAR_HEIGHT,
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "0 12px",
+          background: "#1f2937",
+          borderBottom: "1px solid #374151",
+        }}
+      >
+        <button
+          onClick={() => setFilterEnabled(!filterEnabled)}
+          style={{
+            padding: "4px 10px",
+            fontSize: 12,
+            background: filterEnabled ? "#3b82f6" : "#374151",
+            color: filterEnabled ? "#fff" : "#9ca3af",
+            border: "1px solid",
+            borderColor: filterEnabled ? "#3b82f6" : "#4b5563",
+            borderRadius: 4,
+            cursor: "pointer",
+          }}
+        >
+          {filterEnabled ? "Filter ON" : "Filter OFF"}
+        </button>
+        {filterEnabled && uncheckedCount > 0 && (
+          <span style={{ fontSize: 11, color: "#9ca3af" }}>
+            {uncheckedCount} minimized
+          </span>
+        )}
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={handleCheckAll}
+          style={{
+            padding: "4px 8px",
+            fontSize: 11,
+            background: "#374151",
+            color: "#9ca3af",
+            border: "1px solid #4b5563",
+            borderRadius: 4,
+            cursor: "pointer",
+          }}
+        >
+          Check All
+        </button>
+        <button
+          onClick={handleUncheckAll}
+          style={{
+            padding: "4px 8px",
+            fontSize: 11,
+            background: "#374151",
+            color: "#9ca3af",
+            border: "1px solid #4b5563",
+            borderRadius: 4,
+            cursor: "pointer",
+          }}
+        >
+          Uncheck All
+        </button>
+      </div>
       <svg
         ref={svgRef}
         className="branch-graph__svg"
         style={{
           width: "100%",
-          height: "100%",
+          flex: 1,
           minWidth: width * zoom,
           minHeight: height * zoom,
           cursor: dragState ? "grabbing" : undefined,

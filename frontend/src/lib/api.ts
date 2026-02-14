@@ -436,6 +436,7 @@ export interface BranchLink {
   labels: string | null; // JSON array
   reviewers: string | null; // JSON array
   projectStatus: string | null;
+  baseBranch: string | null; // PR base branch (target branch)
   createdAt: string;
   updatedAt: string;
 }

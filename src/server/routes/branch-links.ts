@@ -71,12 +71,13 @@ interface GitHubPRInfo {
   labels: GitHubLabel[];
   reviewers: string[];
   projectStatus?: string;
+  baseBranch: string;
 }
 
 async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<GitHubPRInfo | null> {
   try {
     const result = (await execAsync(
-      `gh pr view ${prNumber} --repo "${repoId}" --json number,title,state,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems`
+      `gh pr view ${prNumber} --repo "${repoId}" --json number,title,state,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems,baseRefName`
     )).trim();
     const data = JSON.parse(result);
 
@@ -140,6 +141,7 @@ async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<GitH
       labels: (data.labels || []).map((l: { name: string; color: string }) => ({ name: l.name, color: l.color })),
       reviewers,
       projectStatus,
+      baseBranch: data.baseRefName || "",
     };
   } catch (err) {
     console.error(`Failed to fetch PR #${prNumber}:`, err);
@@ -348,6 +350,7 @@ branchLinksRouter.post("/", async (c) => {
   let labels: string | null = null;
   let reviewers: string | null = null;
   let projectStatus: string | null = null;
+  let baseBranch: string | null = null;
 
   if (input.number) {
     if (input.linkType === "issue") {
@@ -369,6 +372,7 @@ branchLinksRouter.post("/", async (c) => {
         labels = JSON.stringify(prInfo.labels);
         reviewers = JSON.stringify(prInfo.reviewers);
         projectStatus = prInfo.projectStatus ?? null;
+        baseBranch = prInfo.baseBranch || null;
       }
     }
   }
@@ -389,6 +393,7 @@ branchLinksRouter.post("/", async (c) => {
       labels,
       reviewers,
       projectStatus,
+      baseBranch,
       createdAt: now,
       updatedAt: now,
     })
@@ -510,6 +515,7 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
   let labels = existing.labels;
   let reviewers = existing.reviewers;
   let projectStatus = existing.projectStatus;
+  let baseBranch = existing.baseBranch;
 
   if (existing.linkType === "issue") {
     const issueInfo = await fetchGitHubIssueInfo(existing.repoId, existing.number);
@@ -530,6 +536,7 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
       labels = JSON.stringify(prInfo.labels);
       reviewers = JSON.stringify(prInfo.reviewers);
       projectStatus = prInfo.projectStatus ?? null;
+      baseBranch = prInfo.baseBranch || null;
     }
   }
 
@@ -544,6 +551,7 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
       labels,
       reviewers,
       projectStatus,
+      baseBranch,
       updatedAt: now,
     })
     .where(eq(schema.branchLinks.id, id));
@@ -576,7 +584,7 @@ branchLinksRouter.post("/detect", async (c) => {
   // Try to find PR for this branch
   try {
     const result = (await execAsync(
-      `gh pr view "${input.branchName}" --repo "${input.repoId}" --json number,title,state,url,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems`
+      `gh pr view "${input.branchName}" --repo "${input.repoId}" --json number,title,state,url,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems,baseRefName`
     )).trim();
 
     if (!result) {
@@ -657,6 +665,7 @@ branchLinksRouter.post("/detect", async (c) => {
       labels: JSON.stringify((data.labels || []).map((l: { name: string; color: string }) => ({ name: l.name, color: l.color }))),
       reviewers: JSON.stringify(reviewers),
       projectStatus,
+      baseBranch: data.baseRefName || null,
       updatedAt: now,
     };
 

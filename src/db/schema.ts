@@ -274,6 +274,7 @@ export const branchLinks = sqliteTable("branch_links", {
   labels: text("labels"), // JSON array of label names
   reviewers: text("reviewers"), // JSON array of reviewer logins
   projectStatus: text("project_status"), // GitHub Projects status
+  baseBranch: text("base_branch"), // PR: base branch (target branch)
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

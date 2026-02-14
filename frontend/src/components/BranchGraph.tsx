@@ -508,6 +508,11 @@ export default function BranchGraph({
     const prLink = branchLinks.get(id)?.find(l => l.linkType === "pr");
     const hasPR = !!prLink;
     const isMerged = prLink?.status === "merged";
+
+    // Check if PR base branch matches graph parent
+    const graphParent = edges.find(e => e.child === id)?.parent;
+    const prBaseBranch = prLink?.baseBranch;
+    const hasPRBaseMismatch = hasPR && prBaseBranch && graphParent && prBaseBranch !== graphParent;
     const isDragging = dragState?.fromBranch === id;
     const isDropTarget = dropTarget === id && dragState && dragState.fromBranch !== id;
     const canDrag = editMode && !isTentative && !isDefault && onEdgeCreate;
@@ -713,6 +718,24 @@ export default function BranchGraph({
                   color: isMerged ? "#c084fc" : "#e5e7eb",
                   whiteSpace: "nowrap",
                 }}>PR</span>
+                {/* Warning if PR base doesn't match graph parent */}
+                {hasPRBaseMismatch && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      padding: "1px 5px",
+                      borderRadius: 3,
+                      background: "#78350f",
+                      border: "1px solid #f59e0b",
+                      color: "#fbbf24",
+                      whiteSpace: "nowrap",
+                      cursor: "help",
+                    }}
+                    title={`PR targets "${prBaseBranch}" but graph shows parent as "${graphParent}"`}
+                  >
+                    ⚠
+                  </span>
+                )}
               </div>
             )}
 

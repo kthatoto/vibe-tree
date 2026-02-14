@@ -1449,24 +1449,37 @@ export default function TreeDashboard() {
         {/* Spacer to push logs and warnings to bottom */}
         <div className="sidebar__spacer" />
 
-        {/* Logs - fills remaining space, 2 lines max */}
+        {/* Logs section */}
         <div style={{
           flex: 1,
           display: "flex",
           flexDirection: "column",
-          justifyContent: "flex-end",
           minHeight: 0,
           padding: "0 8px",
-          marginBottom: 4,
         }}>
           <div style={{
+            fontSize: 11,
+            color: "#6b7280",
+            marginBottom: 4,
+            fontWeight: 500,
+          }}>
+            Logs
+          </div>
+          <div style={{
+            flex: 1,
             fontSize: 10,
             color: "#9ca3af",
             fontFamily: "monospace",
-            overflow: "hidden",
+            overflow: "auto",
           }}>
-            {logs.slice(-2).map((log) => (
-              <div key={log.id} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {logs.map((log) => (
+              <div key={log.id} style={{
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+                marginBottom: 2,
+              }}>
                 <span style={{ color: "#6b7280" }}>{log.timestamp.toLocaleTimeString()}</span>{" "}
                 {log.message}
               </div>
@@ -1474,9 +1487,12 @@ export default function TreeDashboard() {
           </div>
         </div>
 
+        {/* Separator line */}
+        <div style={{ borderTop: "1px solid #374151", margin: "8px 0" }} />
+
         {/* Warnings - always at bottom */}
         {snapshot && (
-          <div className="sidebar__section sidebar__section--bottom">
+          <div className="sidebar__section sidebar__section--bottom" style={{ paddingTop: 0 }}>
             <button
               className="sidebar__warnings-btn"
               onClick={() => setShowWarnings(true)}

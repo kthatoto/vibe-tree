@@ -1470,7 +1470,7 @@ export default function TreeDashboard() {
             fontFamily: "monospace",
             overflow: "auto",
           }}>
-            {logs.map((log) => {
+            {[...logs].reverse().map((log) => {
               const pad = (n: number) => n.toString().padStart(2, "0");
               const t = log.timestamp;
               const timeStr = `${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;

@@ -1954,13 +1954,14 @@ export default function BranchGraph({
                 const lastBounds = getColumnBoundsHelper(lastSibling);
                 separatorX = (lastBounds?.right ?? width - 50) + HORIZONTAL_GAP / 2;
               } else {
-                // Between two columns - separator is in the middle of the gap
-                // Note: unfocused (right) columns are shifted by SEPARATOR_HALF_WIDTH * 2
+                // Between two columns - separator is in the middle of the total gap
+                // Total gap = HORIZONTAL_GAP + SEPARATOR_HALF_WIDTH * 2
+                // Unfocused (right) columns are shifted right by SEPARATOR_HALF_WIDTH * 2
                 const leftSibling = rootSiblings[effectiveSeparatorIndex - 1];
                 const leftBounds = getColumnBoundsHelper(leftSibling);
                 const leftRight = leftBounds?.right ?? 0;
-                // Separator is at the center of the gap (left edge + half the separator spacing)
-                separatorX = leftRight + SEPARATOR_HALF_WIDTH;
+                // Separator is at the center: leftRight + (HORIZONTAL_GAP + separator width) / 2
+                separatorX = leftRight + (HORIZONTAL_GAP + SEPARATOR_HALF_WIDTH * 2) / 2;
               }
             }
 

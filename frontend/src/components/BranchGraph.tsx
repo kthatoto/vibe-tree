@@ -110,6 +110,7 @@ export default function BranchGraph({
     siblings: string[];
     startX: number;
     currentX: number;
+    offsetX: number; // offset from node center to mouse position
   } | null>(null);
 
   // Prevent browser back/forward gesture on horizontal scroll (only when at scroll boundary)
@@ -216,14 +217,18 @@ export default function BranchGraph({
     branchName: string,
     parentBranch: string,
     siblings: string[],
-    startX: number
+    startX: number,
+    nodeX: number,
+    nodeWidth: number
   ) => {
+    const nodeCenterX = nodeX + nodeWidth / 2;
     setColumnDragState({
       draggingBranch: branchName,
       parentBranch,
       siblings,
       startX,
       currentX: startX,
+      offsetX: startX - nodeCenterX,
     });
   }, []);
 
@@ -724,9 +729,14 @@ export default function BranchGraph({
     const fromHeight = edge.from.isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT;
     const fromWidth = edge.from.width ?? NODE_WIDTH;
     const toWidth = edge.to.width ?? NODE_WIDTH;
-    const startX = edge.from.x + fromWidth / 2;
+
+    // Apply drag offset based on which column each node belongs to
+    const fromOffsetX = getNodeOffset(edge.from.id);
+    const toOffsetX = getNodeOffset(edge.to.id);
+
+    const startX = edge.from.x + fromWidth / 2 + fromOffsetX;
     const startY = edge.from.y + fromHeight;
-    const endX = edge.to.x + toWidth / 2;
+    const endX = edge.to.x + toWidth / 2 + toOffsetX;
     const endY = edge.to.y;
 
     // Simple path: go down, then horizontal, then down to target
@@ -755,8 +765,118 @@ export default function BranchGraph({
     );
   };
 
+  // Helper to check if a node belongs to a specific sibling's column
+  const getColumnRoot = useCallback((nodeId: string): string | null => {
+    if (!columnDragState) return null;
+    const { siblings } = columnDragState;
+
+    // If this node is a sibling root, return it
+    if (siblings.includes(nodeId)) return nodeId;
+
+    // Check ancestors to find which sibling column this belongs to
+    const getAncestors = (id: string): string[] => {
+      const parent = edges.find(e => e.child === id)?.parent;
+      if (!parent) return [];
+      return [parent, ...getAncestors(parent)];
+    };
+    const ancestors = getAncestors(nodeId);
+    return siblings.find(s => ancestors.includes(s)) ?? null;
+  }, [columnDragState, edges]);
+
+  // Helper to check if a node is in the dragging column
+  const isInDraggingColumn = useCallback((nodeId: string): boolean => {
+    if (!columnDragState) return false;
+    return getColumnRoot(nodeId) === columnDragState.draggingBranch;
+  }, [columnDragState, getColumnRoot]);
+
+  // Calculate column offsets for swapping animation
+  const columnOffsets = useMemo(() => {
+    if (!columnDragState) return new Map<string, number>();
+
+    const { draggingBranch, siblings, currentX, offsetX } = columnDragState;
+
+    // Get sibling positions sorted by X (using left edge)
+    const siblingPositions = siblings.map(s => {
+      const node = layoutNodes.find(n => n.id === s);
+      const x = node?.x ?? 0;
+      const width = node?.width ?? NODE_WIDTH;
+      return { id: s, left: x, right: x + width, centerX: x + width / 2, width };
+    }).sort((a, b) => a.left - b.left);
+
+    // Current drag position (center of dragging column)
+    const dragCenterX = currentX - offsetX;
+    const draggingInfo = siblingPositions.find(s => s.id === draggingBranch);
+    const draggingOriginalCenterX = draggingInfo?.centerX ?? 0;
+    const draggingWidth = draggingInfo?.width ?? NODE_WIDTH;
+
+    // Original index of dragging column
+    const originalIndex = siblingPositions.findIndex(s => s.id === draggingBranch);
+
+    // Calculate boundaries between columns (midpoint of gaps)
+    const boundaries: number[] = [];
+    for (let i = 0; i < siblingPositions.length - 1; i++) {
+      const rightEdge = siblingPositions[i].right;
+      const leftEdge = siblingPositions[i + 1].left;
+      boundaries.push((rightEdge + leftEdge) / 2);
+    }
+
+    // Find insert position based on drag center crossing boundaries
+    let insertIndex = originalIndex;
+    for (let i = 0; i < boundaries.length; i++) {
+      if (i < originalIndex && dragCenterX < boundaries[i]) {
+        insertIndex = i;
+        break;
+      } else if (i >= originalIndex && dragCenterX > boundaries[i]) {
+        insertIndex = i + 1;
+      }
+    }
+
+    // Calculate offsets for each sibling
+    const offsets = new Map<string, number>();
+    const shiftAmount = draggingWidth + HORIZONTAL_GAP;
+
+    for (let i = 0; i < siblingPositions.length; i++) {
+      const sibling = siblingPositions[i];
+      if (sibling.id === draggingBranch) {
+        // Dragging column follows mouse
+        offsets.set(sibling.id, dragCenterX - draggingOriginalCenterX);
+      } else {
+        // Other columns shift based on insert position
+        let offset = 0;
+        if (i < originalIndex && i >= insertIndex) {
+          // Columns between insert and original: shift right
+          offset = shiftAmount;
+        } else if (i > originalIndex && i <= insertIndex) {
+          // Columns between original and insert: shift left
+          offset = -shiftAmount;
+        }
+        offsets.set(sibling.id, offset);
+      }
+    }
+
+    return offsets;
+  }, [columnDragState, layoutNodes]);
+
+  // Get offset for a specific node based on its column
+  const getNodeOffset = useCallback((nodeId: string): number => {
+    const columnRoot = getColumnRoot(nodeId);
+    if (!columnRoot) return 0;
+    return columnOffsets.get(columnRoot) ?? 0;
+  }, [getColumnRoot, columnOffsets]);
+
+  // For backwards compatibility
+  const columnDragOffset = useMemo(() => {
+    if (!columnDragState) return 0;
+    return columnOffsets.get(columnDragState.draggingBranch) ?? 0;
+  }, [columnDragState, columnOffsets]);
+
   const renderNode = (layoutNode: LayoutNode) => {
-    const { id, x, y, node, isTentative, tentativeTitle, parentBranch, siblings } = layoutNode;
+    const { id, x: originalX, y, node, isTentative, tentativeTitle, parentBranch, siblings } = layoutNode;
+
+    // Apply drag offset based on which column this node belongs to
+    const nodeOffset = getNodeOffset(id);
+    const x = originalX + nodeOffset;
+
     const isSelected = selectedBranch === id;
     const isDefault = id === defaultBranch;
     const hasWorktree = !!node.worktree;
@@ -1415,7 +1535,7 @@ export default function BranchGraph({
                     onMouseDown={(e) => {
                       e.stopPropagation();
                       const coords = getSVGCoords(e);
-                      handleColumnDragStart(id, parentBranch!, siblings!, coords.x);
+                      handleColumnDragStart(id, parentBranch!, siblings!, coords.x, x, nodeWidth);
                     }}
                   >
                     <rect
@@ -1438,94 +1558,66 @@ export default function BranchGraph({
             </g>
           )}
 
-          {/* Column reorder bars during drag - kanban-style */}
+          {/* Column drag overlay - shows borders around all sibling columns */}
           {editMode && columnDragState && (() => {
-            const { draggingBranch, parentBranch, siblings, currentX } = columnDragState;
+            const { draggingBranch, siblings } = columnDragState;
 
-            // Get layout info for all siblings
-            const siblingNodes = siblings.map(s => {
-              const node = layoutNodes.find(n => n.id === s);
-              return { id: s, x: node?.x ?? 0, y: node?.y ?? 0, width: node?.width ?? NODE_WIDTH };
-            });
-
-            // Calculate slot positions (evenly spaced based on original positions)
-            const sortedByX = [...siblingNodes].sort((a, b) => a.x - b.x);
-            const slotPositions = sortedByX.map(n => n.x + n.width / 2);
-
-            // Find where dragging item should be inserted based on currentX
-            let insertIndex = 0;
-            for (let i = 0; i < slotPositions.length; i++) {
-              if (currentX > slotPositions[i]) {
-                insertIndex = i + 1;
+            // Helper to get all descendants of a branch
+            const getDescendants = (branchId: string): string[] => {
+              const children = edges.filter(e => e.parent === branchId).map(e => e.child);
+              const descendants: string[] = [];
+              for (const child of children) {
+                descendants.push(child);
+                descendants.push(...getDescendants(child));
               }
-            }
+              return descendants;
+            };
 
-            // Build new order with dragging item at insertIndex
-            const othersInOrder = sortedByX.filter(n => n.id !== draggingBranch);
-            const reorderedIds: string[] = [];
-            let otherIdx = 0;
-            for (let i = 0; i <= othersInOrder.length; i++) {
-              if (i === insertIndex) {
-                reorderedIds.push(draggingBranch);
-              }
-              if (otherIdx < othersInOrder.length) {
-                reorderedIds.push(othersInOrder[otherIdx].id);
-                otherIdx++;
-              }
-            }
-            if (!reorderedIds.includes(draggingBranch)) {
-              reorderedIds.push(draggingBranch);
-            }
+            // Get column nodes (branch + all descendants)
+            const getColumnNodes = (branchId: string) => {
+              const ids = [branchId, ...getDescendants(branchId)];
+              return layoutNodes.filter(n => ids.includes(n.id));
+            };
 
-            // Get common Y position (use first sibling's Y)
-            const commonY = siblingNodes[0]?.y ?? 0;
-            const barWidth = 60;
-            const barHeight = 16;
+            // Get bounding box for a column (with offset applied)
+            const getColumnBounds = (branchId: string) => {
+              const columnNodes = getColumnNodes(branchId);
+              if (columnNodes.length === 0) return null;
+              const offset = columnOffsets.get(branchId) ?? 0;
+              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+              for (const node of columnNodes) {
+                const w = node.width ?? NODE_WIDTH;
+                const h = node.isTentative ? TENTATIVE_NODE_HEIGHT : NODE_HEIGHT;
+                minX = Math.min(minX, node.x + offset);
+                minY = Math.min(minY, node.y);
+                maxX = Math.max(maxX, node.x + offset + w);
+                maxY = Math.max(maxY, node.y + h);
+              }
+              return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+            };
 
             return (
-              <g className="branch-graph__drag-bars">
-                {reorderedIds.map((id, slotIndex) => {
-                  const isDragging = id === draggingBranch;
-                  const slotX = slotPositions[slotIndex] ?? slotPositions[slotPositions.length - 1];
-
-                  // Dragging bar follows mouse, others animate to slot positions
-                  const barX = isDragging ? currentX - barWidth / 2 : slotX - barWidth / 2;
+              <g className="branch-graph__column-drag">
+                {/* Borders around all sibling columns */}
+                {siblings.map((siblingId) => {
+                  const bounds = getColumnBounds(siblingId);
+                  if (!bounds) return null;
+                  const isDragging = siblingId === draggingBranch;
 
                   return (
-                    <g
-                      key={`drag-bar-${id}`}
-                      style={{
-                        cursor: isDragging ? "grabbing" : "default",
-                        transition: isDragging ? "none" : "transform 0.15s ease-out",
-                      }}
-                    >
-                      <rect
-                        x={barX}
-                        y={commonY - 20}
-                        width={barWidth}
-                        height={barHeight}
-                        rx={4}
-                        ry={4}
-                        fill={isDragging ? "#6366f1" : "#374151"}
-                        stroke={isDragging ? "#818cf8" : "#4b5563"}
-                        strokeWidth={isDragging ? 2 : 1}
-                        style={{
-                          filter: isDragging ? "drop-shadow(0 4px 6px rgba(0,0,0,0.3))" : "none",
-                        }}
-                      />
-                      <text
-                        x={barX + barWidth / 2}
-                        y={commonY - 12}
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        fontSize={9}
-                        fill={isDragging ? "#e0e7ff" : "#9ca3af"}
-                        fontWeight={isDragging ? 600 : 400}
-                        style={{ pointerEvents: "none" }}
-                      >
-                        {id.length > 8 ? id.slice(0, 8) + "…" : id}
-                      </text>
-                    </g>
+                    <rect
+                      key={`column-border-${siblingId}`}
+                      x={bounds.x - 6}
+                      y={bounds.y - 6}
+                      width={bounds.width + 12}
+                      height={bounds.height + 12}
+                      rx={8}
+                      ry={8}
+                      fill={isDragging ? "rgba(99, 102, 241, 0.15)" : "rgba(75, 85, 99, 0.1)"}
+                      stroke={isDragging ? "#818cf8" : "#6b7280"}
+                      strokeWidth={isDragging ? 3 : 2}
+                      style={{ pointerEvents: "none" }}
+                    />
                   );
                 })}
               </g>

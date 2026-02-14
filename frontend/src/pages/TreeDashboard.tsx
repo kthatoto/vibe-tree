@@ -1462,126 +1462,124 @@ export default function TreeDashboard() {
                           </button>
                         </>
                       ) : (
-                        <>
-                          <button
-                            className="btn-icon"
-                            onClick={() => {
-                              // Save current edges before entering edit mode
-                              setOriginalTreeSpecEdges(snapshot.treeSpec?.specJson.edges ?? []);
-                              setBranchGraphEditMode(true);
-                            }}
-                            title="Edit branch structure"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className="btn-icon"
-                            onClick={() => selectedPin && handleFetch(selectedPin.localPath)}
-                            disabled={fetching}
-                            title="Fetch from remote"
-                          >
-                            {fetching ? (fetchProgress || "Fetching...") : "Fetch"}
-                          </button>
-                          <span style={{ width: 1, height: 20, background: "#4b5563", margin: "0 4px" }} />
-                          <button
-                            className="btn-icon"
-                            onClick={() => setFilterEnabled(!filterEnabled)}
-                            title={filterEnabled ? "Disable filter" : "Enable filter"}
-                          >
-                            {filterEnabled ? "Filter ON" : "Filter"}
-                          </button>
-                          <div style={{ position: "relative" }}>
-                            <button
-                              className="btn-icon"
-                              onClick={(e) => { e.stopPropagation(); setShowMoreMenu(!showMoreMenu); }}
-                              title="More options"
-                            >
-                              ⋮
-                            </button>
-                            {showMoreMenu && (
-                              <div
-                                onClick={(e) => e.stopPropagation()}
-                                style={{
-                                  position: "absolute",
-                                  top: "100%",
-                                  right: 0,
-                                  background: "#1f2937",
-                                  border: "1px solid #374151",
-                                  borderRadius: 6,
-                                  padding: 4,
-                                  zIndex: 100,
-                                  minWidth: 150,
-                                }}
-                              >
-                                <button
-                                  style={{
-                                    display: "block",
-                                    width: "100%",
-                                    padding: "8px 12px",
-                                    background: "transparent",
-                                    border: "none",
-                                    color: "#e5e7eb",
-                                    textAlign: "left",
-                                    cursor: "pointer",
-                                    borderRadius: 4,
-                                    whiteSpace: "nowrap",
-                                  }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.background = "#374151")}
-                                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                                  onClick={() => {
-                                    if (!snapshot) return;
-                                    const nonDefaultBranches = snapshot.nodes
-                                      .filter((n) => n.branchName !== snapshot.defaultBranch)
-                                      .map((n) => n.branchName);
-                                    const allChecked = nonDefaultBranches.every((b) => checkedBranches.has(b));
-                                    if (allChecked) {
-                                      setCheckedBranches(new Set());
-                                    } else {
-                                      setCheckedBranches(new Set(nonDefaultBranches));
-                                    }
-                                    setShowMoreMenu(false);
-                                  }}
-                                >
-                                  Toggle All Checkboxes
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                          {/* Zoom controls */}
-                          <span className="zoom-controls">
-                            <button
-                              className="btn-icon btn-icon--small"
-                              onClick={() => setGraphZoom((z) => Math.max(MIN_ZOOM, z - ZOOM_STEP))}
-                              disabled={graphZoom <= MIN_ZOOM}
-                              title="Zoom out"
-                            >
-                              −
-                            </button>
-                            <button
-                              className="btn-icon btn-icon--small zoom-controls__value"
-                              onClick={() => setGraphZoom(1)}
-                              title="Reset zoom"
-                            >
-                              {Math.round(graphZoom * 100)}%
-                            </button>
-                            <button
-                              className="btn-icon btn-icon--small"
-                              onClick={() => setGraphZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP))}
-                              disabled={graphZoom >= MAX_ZOOM}
-                              title="Zoom in"
-                            >
-                              +
-                            </button>
-                          </span>
-                          <button
-                            className="btn-icon"
-                            onClick={() => setGraphFullscreen(!graphFullscreen)}
-                            title={graphFullscreen ? "Exit fullscreen" : "Fullscreen"}
-                          >
-                            {graphFullscreen ? "⤓" : "⤢"}
-                          </button>
-                        </>
+                        <button
+                          className="btn-icon"
+                          onClick={() => {
+                            // Save current edges before entering edit mode
+                            setOriginalTreeSpecEdges(snapshot.treeSpec?.specJson.edges ?? []);
+                            setBranchGraphEditMode(true);
+                          }}
+                          title="Edit branch structure"
+                        >
+                          Edit
+                        </button>
                       )}
+                      <button
+                        className="btn-icon"
+                        onClick={() => selectedPin && handleFetch(selectedPin.localPath)}
+                        disabled={fetching}
+                        title="Fetch from remote"
+                      >
+                        {fetching ? (fetchProgress || "Fetching...") : "Fetch"}
+                      </button>
+                      <span style={{ width: 1, height: 20, background: "#4b5563", margin: "0 4px" }} />
+                      <button
+                        className="btn-icon"
+                        onClick={() => setFilterEnabled(!filterEnabled)}
+                        title={filterEnabled ? "Disable filter" : "Enable filter"}
+                      >
+                        {filterEnabled ? "Filter ON" : "Filter"}
+                      </button>
+                      <div style={{ position: "relative" }}>
+                        <button
+                          className="btn-icon"
+                          onClick={(e) => { e.stopPropagation(); setShowMoreMenu(!showMoreMenu); }}
+                          title="More options"
+                        >
+                          ⋮
+                        </button>
+                        {showMoreMenu && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              position: "absolute",
+                              top: "100%",
+                              right: 0,
+                              background: "#1f2937",
+                              border: "1px solid #374151",
+                              borderRadius: 6,
+                              padding: 4,
+                              zIndex: 100,
+                              minWidth: 150,
+                            }}
+                          >
+                            <button
+                              style={{
+                                display: "block",
+                                width: "100%",
+                                padding: "8px 12px",
+                                background: "transparent",
+                                border: "none",
+                                color: "#e5e7eb",
+                                textAlign: "left",
+                                cursor: "pointer",
+                                borderRadius: 4,
+                                whiteSpace: "nowrap",
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = "#374151")}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                              onClick={() => {
+                                if (!snapshot) return;
+                                const nonDefaultBranches = snapshot.nodes
+                                  .filter((n) => n.branchName !== snapshot.defaultBranch)
+                                  .map((n) => n.branchName);
+                                const allChecked = nonDefaultBranches.every((b) => checkedBranches.has(b));
+                                if (allChecked) {
+                                  setCheckedBranches(new Set());
+                                } else {
+                                  setCheckedBranches(new Set(nonDefaultBranches));
+                                }
+                                setShowMoreMenu(false);
+                              }}
+                            >
+                              Toggle All Checkboxes
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {/* Zoom controls */}
+                      <span className="zoom-controls">
+                        <button
+                          className="btn-icon btn-icon--small"
+                          onClick={() => setGraphZoom((z) => Math.max(MIN_ZOOM, z - ZOOM_STEP))}
+                          disabled={graphZoom <= MIN_ZOOM}
+                          title="Zoom out"
+                        >
+                          −
+                        </button>
+                        <button
+                          className="btn-icon btn-icon--small zoom-controls__value"
+                          onClick={() => setGraphZoom(1)}
+                          title="Reset zoom"
+                        >
+                          {Math.round(graphZoom * 100)}%
+                        </button>
+                        <button
+                          className="btn-icon btn-icon--small"
+                          onClick={() => setGraphZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP))}
+                          disabled={graphZoom >= MAX_ZOOM}
+                          title="Zoom in"
+                        >
+                          +
+                        </button>
+                      </span>
+                      <button
+                        className="btn-icon"
+                        onClick={() => setGraphFullscreen(!graphFullscreen)}
+                        title={graphFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                      >
+                        {graphFullscreen ? "⤓" : "⤢"}
+                      </button>
                     </div>
                   </div>
                   <div className="graph-container">

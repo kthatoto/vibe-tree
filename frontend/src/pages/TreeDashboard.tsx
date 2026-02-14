@@ -1446,16 +1446,14 @@ export default function TreeDashboard() {
           </div>
         )}
 
-        {/* Spacer to push logs and warnings to bottom */}
-        <div className="sidebar__spacer" />
-
-        {/* Logs section */}
+        {/* Logs section - fills all remaining space */}
         <div style={{
           flex: 1,
           display: "flex",
           flexDirection: "column",
           minHeight: 0,
           padding: "0 8px",
+          marginTop: 8,
         }}>
           <div style={{
             fontSize: 11,
@@ -1472,18 +1470,35 @@ export default function TreeDashboard() {
             fontFamily: "monospace",
             overflow: "auto",
           }}>
-            {logs.map((log) => (
-              <div key={log.id} style={{
-                display: "-webkit-box",
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: "vertical",
-                overflow: "hidden",
-                marginBottom: 2,
-              }}>
-                <span style={{ color: "#6b7280" }}>{log.timestamp.toLocaleTimeString()}</span>{" "}
-                {log.message}
-              </div>
-            ))}
+            {logs.map((log) => {
+              const pad = (n: number) => n.toString().padStart(2, "0");
+              const t = log.timestamp;
+              const timeStr = `${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
+              const color = log.type === "error" ? "#f87171"
+                : log.type === "scan" ? "#60a5fa"
+                : log.type === "branch" ? "#a78bfa"
+                : log.type === "fetch" ? "#34d399"
+                : "#9ca3af";
+              return (
+                <div key={log.id} style={{
+                  display: "flex",
+                  gap: 6,
+                  marginBottom: 3,
+                }}>
+                  <span style={{ color: "#4b5563", flexShrink: 0 }}>{timeStr}</span>
+                  <span style={{
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                    wordBreak: "break-all",
+                    color,
+                  }}>
+                    {log.message}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
 

@@ -842,26 +842,55 @@ export default function BranchGraph({
     // Original index of dragging column
     const originalIndex = siblingBounds.findIndex(s => s.id === draggingBranch);
 
-    // Calculate boundaries between columns (midpoint of gaps)
-    const boundaries: number[] = [];
-    for (let i = 0; i < siblingBounds.length - 1; i++) {
-      const rightEdge = siblingBounds[i].right;
-      const leftEdge = siblingBounds[i + 1].left;
-      boundaries.push((rightEdge + leftEdge) / 2);
-    }
-
-    // Find insert position based on drag center crossing boundaries
+    // Iteratively find insert position - boundaries update after each swap
     let insertIndex = originalIndex;
-    for (let i = 0; i < boundaries.length; i++) {
-      if (i < originalIndex && dragCenterX < boundaries[i]) {
-        insertIndex = i;
-        break;
-      } else if (i >= originalIndex && dragCenterX > boundaries[i]) {
-        insertIndex = i + 1;
+    let iterations = 0;
+    const maxIterations = siblingBounds.length; // Prevent infinite loop
+
+    while (iterations < maxIterations) {
+      iterations++;
+
+      // Build current order with dragging item at insertIndex
+      const currentOrder = siblingBounds.filter(s => s.id !== draggingBranch);
+      currentOrder.splice(insertIndex, 0, draggingInfo!);
+
+      // Calculate positions in current order (layout from left to right)
+      let currentX_layout = siblingBounds[0].left; // Start from leftmost original position
+      const positions: { id: string; left: number; right: number; centerX: number }[] = [];
+
+      for (const col of currentOrder) {
+        const left = currentX_layout;
+        const right = left + col.width;
+        positions.push({ id: col.id, left, right, centerX: (left + right) / 2 });
+        currentX_layout = right + HORIZONTAL_GAP;
       }
+
+      // Calculate boundaries based on current positions
+      const boundaries: number[] = [];
+      for (let i = 0; i < positions.length - 1; i++) {
+        boundaries.push((positions[i].right + positions[i + 1].left) / 2);
+      }
+
+      // Check if drag position crosses any boundary
+      let newInsertIndex = insertIndex;
+      const draggingPos = positions.find(p => p.id === draggingBranch);
+
+      if (insertIndex > 0 && dragCenterX < boundaries[insertIndex - 1]) {
+        // Move left
+        newInsertIndex = insertIndex - 1;
+      } else if (insertIndex < boundaries.length && dragCenterX > boundaries[insertIndex]) {
+        // Move right
+        newInsertIndex = insertIndex + 1;
+      }
+
+      if (newInsertIndex === insertIndex) {
+        // No more swaps needed
+        break;
+      }
+      insertIndex = newInsertIndex;
     }
 
-    // Calculate offsets for each sibling
+    // Calculate final offsets based on insertIndex
     const offsets = new Map<string, number>();
     const shiftAmount = draggingWidth + HORIZONTAL_GAP;
 

@@ -431,12 +431,12 @@ export default function TreeDashboard() {
       if (data.isFinal) {
         const analysis = analyzeChanges(snapshot, data.snapshot, newVersion);
 
-        if (analysis.hasSafeChanges && !branchGraphEditMode) {
-          // Auto-merge safe changes (node attributes + new branches)
+        // Always merge safe fields (including warnings) unless in edit mode
+        if (!branchGraphEditMode) {
           setSnapshot((prev) => {
             if (!prev) return data.snapshot!;
 
-            // Merge node attributes
+            // Merge node attributes (also merges warnings, worktrees, etc.)
             let merged = mergeNodeAttributes(prev, data.snapshot!);
 
             // Add inferred edges for new branches

@@ -1640,7 +1640,7 @@ export default function TreeDashboard() {
                         onClick={() => setGraphFullscreen(!graphFullscreen)}
                         title={graphFullscreen ? "Exit fullscreen" : "Fullscreen"}
                       >
-                        {graphFullscreen ? "⤓" : "⤢"}
+                        {graphFullscreen ? "↑" : "↓"}
                       </button>
                     </div>
                   </div>

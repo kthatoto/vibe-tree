@@ -59,7 +59,7 @@ interface LayoutEdge {
 
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 80;
-const MINIMIZED_NODE_WIDTH = 120;
+const MINIMIZED_NODE_WIDTH = 90;
 const TENTATIVE_NODE_HEIGHT = 60;
 const HORIZONTAL_GAP = 28;
 const VERTICAL_GAP = 50;
@@ -293,9 +293,12 @@ export default function BranchGraph({
       currentX += colWidth + HORIZONTAL_GAP;
     }
 
-    // Update X positions for all nodes
+    // Update X positions for all nodes (centered within column)
     layoutNodes.forEach((n) => {
-      n.x = columnXPositions.get(n.row) ?? LEFT_PADDING;
+      const colX = columnXPositions.get(n.row) ?? LEFT_PADDING;
+      const colWidth = columnMaxWidths.get(n.row) ?? NODE_WIDTH;
+      // Center the node within the column
+      n.x = colX + (colWidth - n.width) / 2;
     });
 
     // Add tentative nodes from planning session
@@ -465,7 +468,10 @@ export default function BranchGraph({
       }
 
       layoutNodes.forEach((n) => {
-        n.x = columnXPositions.get(n.row) ?? LEFT_PADDING;
+        const colX = columnXPositions.get(n.row) ?? LEFT_PADDING;
+        const colWidth = columnMaxWidths.get(n.row) ?? NODE_WIDTH;
+        // Center the node within the column
+        n.x = colX + (colWidth - n.width) / 2;
       });
 
       // Create edges for tentative nodes
@@ -717,47 +723,24 @@ export default function BranchGraph({
           style={{ pointerEvents: "none", overflow: "visible" }}
         >
           {nodeIsMinimized ? (
-            /* Minimized view - description label + CI status (80px height) */
+            /* Minimized view - branch name only, left-aligned */
             <div
               style={{
                 width: "100%",
                 height: "100%",
                 display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-                gap: 6,
+                alignItems: "center",
                 overflow: "hidden",
               }}
             >
-              {descriptionLabel && (
-                <span style={{
-                  fontSize: 10,
-                  padding: "2px 6px",
-                  borderRadius: 3,
-                  background: "#1e3a5f",
-                  border: "1px solid #3b82f6",
-                  color: "#93c5fd",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  alignSelf: "flex-start",
-                }}>{descriptionLabel}</span>
-              )}
-              {prLink?.checksStatus && (
-                <span style={{
-                  fontSize: 10,
-                  padding: "2px 6px",
-                  borderRadius: 3,
-                  background: prLink.checksStatus === "success" ? "#14532d" : prLink.checksStatus === "failure" ? "#7f1d1d" : "#78350f",
-                  border: `1px solid ${prLink.checksStatus === "success" ? "#22c55e" : prLink.checksStatus === "failure" ? "#ef4444" : "#f59e0b"}`,
-                  color: prLink.checksStatus === "success" ? "#4ade80" : prLink.checksStatus === "failure" ? "#f87171" : "#fbbf24",
-                  whiteSpace: "nowrap",
-                  alignSelf: "flex-start",
-                }}>{prLink.checksStatus === "success" ? "CI ✔" : prLink.checksStatus === "failure" ? "CI ✗" : "CI ●"}</span>
-              )}
-              {!descriptionLabel && !prLink?.checksStatus && (
-                <span style={{ fontSize: 10, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{id}</span>
-              )}
+              <span style={{
+                fontSize: 11,
+                fontFamily: "monospace",
+                color: "#9ca3af",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}>{id}</span>
             </div>
           ) : (
           <div

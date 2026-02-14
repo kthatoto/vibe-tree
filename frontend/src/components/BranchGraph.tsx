@@ -1884,11 +1884,14 @@ export default function BranchGraph({
               return layoutNodes.filter(n => ids.includes(n.id));
             };
 
-            // Get bounding box for a column (with offset applied)
+            // Get bounding box for a column (with offset applied including separator spacing)
             const getColumnBounds = (branchId: string) => {
               const columnNodes = getColumnNodes(branchId);
               if (columnNodes.length === 0) return null;
-              const offset = columnOffsets.get(branchId) ?? 0;
+              // Include both drag offset and separator spacing
+              const dragOffset = columnOffsets.get(branchId) ?? 0;
+              const separatorOffset = isUnfocusedBranch(branchId) ? SEPARATOR_HALF_WIDTH * 2 : 0;
+              const offset = dragOffset + separatorOffset;
               let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
               for (const node of columnNodes) {
                 const w = node.width ?? NODE_WIDTH;

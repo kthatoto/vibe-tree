@@ -93,11 +93,21 @@ export default function TreeDashboard() {
   // Branch graph edit mode
   const [branchGraphEditMode, setBranchGraphEditMode] = useState(false);
 
-  // Chat fullscreen mode
-  const [chatFullscreen, setChatFullscreen] = useState(false);
+  // Chat fullscreen mode (persisted in localStorage)
+  const [chatFullscreen, setChatFullscreen] = useState(() => {
+    return localStorage.getItem("treeView.chatFullscreen") === "true";
+  });
+  useEffect(() => {
+    localStorage.setItem("treeView.chatFullscreen", String(chatFullscreen));
+  }, [chatFullscreen]);
 
-  // Branch graph fullscreen mode
-  const [graphFullscreen, setGraphFullscreen] = useState(false);
+  // Branch graph fullscreen mode (persisted in localStorage)
+  const [graphFullscreen, setGraphFullscreen] = useState(() => {
+    return localStorage.getItem("treeView.graphFullscreen") === "true";
+  });
+  useEffect(() => {
+    localStorage.setItem("treeView.graphFullscreen", String(graphFullscreen));
+  }, [graphFullscreen]);
 
   // Branch graph zoom (persisted in localStorage)
   const [graphZoom, setGraphZoom] = useState(() => {
@@ -166,11 +176,17 @@ export default function TreeDashboard() {
   const [showWarnings, setShowWarnings] = useState(false);
   const [warningFilter, setWarningFilter] = useState<string | null>(null);
 
-  // Bottom panel resize state
+  // Bottom panel resize state (persisted in localStorage)
   const DEFAULT_BOTTOM_HEIGHT = 500;
   const MIN_BOTTOM_HEIGHT = 350;
   const MAX_BOTTOM_HEIGHT = 800;
-  const [bottomHeight, setBottomHeight] = useState(DEFAULT_BOTTOM_HEIGHT);
+  const [bottomHeight, setBottomHeight] = useState(() => {
+    const saved = localStorage.getItem("treeView.bottomHeight");
+    return saved ? parseInt(saved, 10) : DEFAULT_BOTTOM_HEIGHT;
+  });
+  useEffect(() => {
+    localStorage.setItem("treeView.bottomHeight", String(bottomHeight));
+  }, [bottomHeight]);
   const [isResizingBottom, setIsResizingBottom] = useState(false);
   const resizeStartY = useRef(0);
   const resizeStartHeight = useRef(0);

@@ -103,13 +103,18 @@ export function PlanningPanel({
     const saved = localStorage.getItem("vibe-tree-sidebar-width");
     return saved ? parseInt(saved, 10) : 420;
   });
-  const [sidebarFullscreen, setSidebarFullscreen] = useState(false);
+  const [sidebarFullscreen, setSidebarFullscreen] = useState(() => {
+    return localStorage.getItem("vibe-tree-sidebar-fullscreen") === "true";
+  });
   const isResizing = useRef(false);
 
-  // Save sidebar width to localStorage when it changes
+  // Save sidebar width and fullscreen to localStorage when they change
   useEffect(() => {
     localStorage.setItem("vibe-tree-sidebar-width", sidebarWidth.toString());
   }, [sidebarWidth]);
+  useEffect(() => {
+    localStorage.setItem("vibe-tree-sidebar-fullscreen", String(sidebarFullscreen));
+  }, [sidebarFullscreen]);
 
   // Ref to track the latest selected session for async operations
   const selectedSessionRef = useRef(selectedSession);

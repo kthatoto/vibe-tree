@@ -222,9 +222,15 @@ export function TaskDetailPanel({
   const [creatingWorktree, setCreatingWorktree] = useState(false);
   const worktreePath = node?.worktree?.path;
 
-  // Resizable instruction section
+  // Resizable instruction section (persisted in localStorage)
   const DEFAULT_INSTRUCTION_HEIGHT = 120;
-  const [instructionHeight, setInstructionHeight] = useState(DEFAULT_INSTRUCTION_HEIGHT);
+  const [instructionHeight, setInstructionHeight] = useState(() => {
+    const saved = localStorage.getItem("taskDetail.instructionHeight");
+    return saved ? parseInt(saved, 10) : DEFAULT_INSTRUCTION_HEIGHT;
+  });
+  useEffect(() => {
+    localStorage.setItem("taskDetail.instructionHeight", String(instructionHeight));
+  }, [instructionHeight]);
   const [isResizing, setIsResizing] = useState(false);
   const resizeStartY = useRef(0);
   const resizeStartHeight = useRef(0);

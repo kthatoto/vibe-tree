@@ -1049,9 +1049,8 @@ export default function BranchGraph({
 
   // Helper to check if a node belongs to a specific sibling's column
   const getColumnRoot = useCallback((nodeId: string): string | null => {
-    // Get siblings from column drag state or root siblings for separator drag
-    const siblings = columnDragState?.siblings ?? (separatorDragState ? rootSiblings : null);
-    if (!siblings) return null;
+    if (!columnDragState) return null;
+    const { siblings } = columnDragState;
 
     // If this node is a sibling root, return it
     if (siblings.includes(nodeId)) return nodeId;
@@ -1064,7 +1063,7 @@ export default function BranchGraph({
     };
     const ancestors = getAncestors(nodeId);
     return siblings.find(s => ancestors.includes(s)) ?? null;
-  }, [columnDragState, separatorDragState, rootSiblings, edges]);
+  }, [columnDragState, edges]);
 
   // Helper to check if a node is in the dragging column
   const isInDraggingColumn = useCallback((nodeId: string): boolean => {
@@ -1127,51 +1126,11 @@ export default function BranchGraph({
       }
     }
 
-    // Handle separator drag - shift columns based on separator's current position
-    if (separatorDragState && rootSiblings.length > 0) {
-      const { currentIndex } = separatorDragState;
-      const originalSepIndex = focusSeparatorIndex ?? rootSiblings.length;
-
-      // Get column bounds sorted by left edge
-      const siblingBounds = rootSiblings.map(s => {
-        const bounds = getColumnBoundsHelper(s);
-        return {
-          id: s,
-          left: bounds?.left ?? 0,
-          right: bounds?.right ?? NODE_WIDTH,
-          width: bounds?.width ?? NODE_WIDTH,
-        };
-      }).sort((a, b) => a.left - b.left);
-
-      // Calculate shift amount (average column width + gap)
-      const avgWidth = siblingBounds.reduce((sum, b) => sum + b.width, 0) / siblingBounds.length;
-      const shiftAmount = avgWidth + HORIZONTAL_GAP;
-
-      // Columns between original and current separator position shift
-      for (let i = 0; i < siblingBounds.length; i++) {
-        const sibling = siblingBounds[i];
-        let offset = 0;
-
-        if (currentIndex < originalSepIndex) {
-          // Separator moved left - columns between currentIndex and originalSepIndex shift right
-          if (i >= currentIndex && i < originalSepIndex) {
-            offset = shiftAmount;
-          }
-        } else if (currentIndex > originalSepIndex) {
-          // Separator moved right - columns between originalSepIndex and currentIndex shift left
-          if (i >= originalSepIndex && i < currentIndex) {
-            offset = -shiftAmount;
-          }
-        }
-
-        if (offset !== 0) {
-          offsets.set(sibling.id, offset);
-        }
-      }
-    }
+    // Note: During separator drag, columns don't shift - the separator follows the mouse
+    // and only updates its index when crossing column boundaries
 
     return offsets;
-  }, [columnDragState, separatorDragState, getColumnBoundsHelper, rootSiblings, focusSeparatorIndex]);
+  }, [columnDragState, getColumnBoundsHelper]);
 
   // Get offset for a specific node based on its column
   const getNodeOffset = useCallback((nodeId: string): number => {
@@ -1960,40 +1919,35 @@ export default function BranchGraph({
 
           {/* Focus separator line - always show if there are root siblings */}
           {rootSiblings.length > 0 && (() => {
-            // Helper to get column bounds with offset applied
-            const getColumnBoundsWithOffset = (branchId: string) => {
-              const bounds = getColumnBoundsHelper(branchId);
-              if (!bounds) return null;
-              const offset = columnOffsets.get(branchId) ?? 0;
-              return {
-                left: bounds.left + offset,
-                right: bounds.right + offset,
-                centerX: bounds.centerX + offset,
-              };
-            };
-
-            // Calculate separator X position based on effective index
-            // Separator appears between column at index-1 and index (or at the start if index is 0)
             let separatorX: number;
-            if (effectiveSeparatorIndex <= 0) {
-              // Before first column
-              const firstSibling = rootSiblings[0];
-              const firstBounds = getColumnBoundsWithOffset(firstSibling);
-              separatorX = (firstBounds?.left ?? LEFT_PADDING) - HORIZONTAL_GAP / 2;
-            } else if (effectiveSeparatorIndex >= rootSiblings.length) {
-              // After last column - use rightmost edge of last column
-              const lastSibling = rootSiblings[rootSiblings.length - 1];
-              const lastBounds = getColumnBoundsWithOffset(lastSibling);
-              separatorX = (lastBounds?.right ?? width - 50) + HORIZONTAL_GAP / 2;
+
+            // During separator drag, follow the mouse position
+            if (separatorDragState) {
+              separatorX = separatorDragState.currentX;
             } else {
-              // Between two columns
-              const leftSibling = rootSiblings[effectiveSeparatorIndex - 1];
-              const rightSibling = rootSiblings[effectiveSeparatorIndex];
-              const leftBounds = getColumnBoundsWithOffset(leftSibling);
-              const rightBounds = getColumnBoundsWithOffset(rightSibling);
-              const leftRight = leftBounds?.right ?? 0;
-              const rightLeft = rightBounds?.left ?? width;
-              separatorX = (leftRight + rightLeft) / 2;
+              // Calculate separator X position based on effective index
+              // During column drag, use static positions (no offsets) so separator stays fixed
+              // Separator appears between column at index-1 and index (or at the start if index is 0)
+              if (effectiveSeparatorIndex <= 0) {
+                // Before first column
+                const firstSibling = rootSiblings[0];
+                const firstBounds = getColumnBoundsHelper(firstSibling);
+                separatorX = (firstBounds?.left ?? LEFT_PADDING) - HORIZONTAL_GAP / 2;
+              } else if (effectiveSeparatorIndex >= rootSiblings.length) {
+                // After last column - use rightmost edge of last column
+                const lastSibling = rootSiblings[rootSiblings.length - 1];
+                const lastBounds = getColumnBoundsHelper(lastSibling);
+                separatorX = (lastBounds?.right ?? width - 50) + HORIZONTAL_GAP / 2;
+              } else {
+                // Between two columns
+                const leftSibling = rootSiblings[effectiveSeparatorIndex - 1];
+                const rightSibling = rootSiblings[effectiveSeparatorIndex];
+                const leftBounds = getColumnBoundsHelper(leftSibling);
+                const rightBounds = getColumnBoundsHelper(rightSibling);
+                const leftRight = leftBounds?.right ?? 0;
+                const rightLeft = rightBounds?.left ?? width;
+                separatorX = (leftRight + rightLeft) / 2;
+              }
             }
 
             return (

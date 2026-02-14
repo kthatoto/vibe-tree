@@ -2121,15 +2121,15 @@ export default function TreeDashboard() {
               )}
             </div>
             <div className="modal__footer" style={{ display: "flex", justifyContent: "space-between" }}>
+              <button className="btn-secondary" onClick={() => setShowWarnings(false)}>
+                Close
+              </button>
               <button
                 className="btn-secondary"
                 onClick={() => selectedPin && handleFetch(selectedPin.localPath)}
                 disabled={fetching || !selectedPin}
               >
                 {fetching ? "Fetching..." : "↻ Fetch"}
-              </button>
-              <button className="btn-secondary" onClick={() => setShowWarnings(false)}>
-                Close
               </button>
             </div>
           </div>

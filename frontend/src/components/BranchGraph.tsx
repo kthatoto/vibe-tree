@@ -730,9 +730,9 @@ export default function BranchGraph({
 
         {/* Node content using foreignObject */}
         <foreignObject
-          x={nodeIsMinimized ? x + 22 : x + 8}
+          x={x + 8}
           y={y + 4}
-          width={nodeIsMinimized ? nodeWidth - 26 : nodeWidth - 16}
+          width={nodeWidth - 16}
           height={nodeHeight - 8}
           style={{ pointerEvents: "none", overflow: "visible" }}
         >
@@ -774,14 +774,14 @@ export default function BranchGraph({
                   }}>{prLink.checksStatus === "success" ? "CI ✔" : prLink.checksStatus === "failure" ? "CI ✗" : "CI …"}</span>
                 )}
               </div>
-              {/* Row 2: Branch name (full width, wrap if needed) */}
+              {/* Row 2: Branch name (single line) */}
               <div style={{
                 fontSize: 10,
                 fontFamily: "monospace",
                 color: "#9ca3af",
-                lineHeight: 1.2,
-                wordBreak: "break-all",
+                whiteSpace: "nowrap",
                 overflow: "hidden",
+                textOverflow: "ellipsis",
               }}>{id}</div>
             </div>
           ) : (

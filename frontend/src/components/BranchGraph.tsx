@@ -70,7 +70,7 @@ interface LayoutEdge {
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 80;
 const MINIMIZED_NODE_WIDTH = 90;
-const MINIMIZED_NODE_HEIGHT = 50;
+const MINIMIZED_NODE_HEIGHT = 40;
 const TENTATIVE_NODE_HEIGHT = 60;
 const HORIZONTAL_GAP = 28;
 const VERTICAL_GAP = 50;
@@ -1350,8 +1350,8 @@ export default function BranchGraph({
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "flex-start",
-                justifyContent: "flex-start",
-                gap: 4,
+                justifyContent: "center",
+                gap: 1,
                 overflow: "hidden",
               }}
             >

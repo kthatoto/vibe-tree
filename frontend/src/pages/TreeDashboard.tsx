@@ -671,6 +671,14 @@ export default function TreeDashboard() {
       });
     });
 
+    // Log which PRs were scanned (for debugging)
+    const unsubPrScanned = wsClient.on("pr.scanned", (msg) => {
+      const data = msg.data as { branches: string[] };
+      if (data.branches && data.branches.length > 0) {
+        addLog("pr", `Scanned: ${data.branches.join(", ")}`);
+      }
+    });
+
     return () => {
       unsubScan();
       unsubBranches();
@@ -680,6 +688,7 @@ export default function TreeDashboard() {
       unsubFetchCompleted();
       unsubFetchError();
       unsubPrUpdated();
+      unsubPrScanned();
     };
   }, [snapshot?.repoId, selectedPin, triggerScan, addLog]);
 

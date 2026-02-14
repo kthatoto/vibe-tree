@@ -771,7 +771,13 @@ scanRouter.post("/", async (c) => {
           .map(s => freshPrMap.get(s.branchName))
           .filter((pr): pr is NonNullable<typeof pr> => pr != null);
 
+        // Broadcast which PRs were selected for scanning (for debugging)
         if (relevantPrs.length > 0) {
+          broadcast({
+            type: "pr.scanned",
+            repoId,
+            data: { branches: relevantPrs.map(pr => pr.branch) },
+          });
           const now = new Date().toISOString();
           const updatedPrs: { branch: string; checks: string | null; state: string; reason: string; oldChecks: string | null }[] = [];
           for (const pr of relevantPrs) {

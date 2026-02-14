@@ -750,20 +750,7 @@ export default function BranchGraph({
                 overflow: "hidden",
               }}
             >
-              {/* Row 1: Worktree name (if exists) */}
-              {hasWorktree && (
-                <span style={{
-                  fontSize: 10,
-                  padding: "1px 4px",
-                  borderRadius: 3,
-                  background: node.worktree?.isActive ? "#14532d" : "#1e3a5f",
-                  border: `1px solid ${node.worktree?.isActive ? "#22c55e" : "#3b82f6"}`,
-                  color: node.worktree?.isActive ? "#4ade80" : "#93c5fd",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                }}>{node.worktree?.path?.split("/").pop() || "worktree"}</span>
-              )}
-              {/* Row 2: Description label */}
+              {/* Row 1: Description label */}
               {descriptionLabel && (
                 <span style={{
                   fontSize: 10,
@@ -1015,11 +1002,11 @@ export default function BranchGraph({
           )}
         </foreignObject>
 
-        {/* Worktree label on top + active border effect (hidden when minimized) */}
-        {!nodeIsMinimized && hasWorktree && (() => {
+        {/* Worktree label on top + active border effect */}
+        {hasWorktree && (() => {
           const worktreeName = node.worktree?.path?.split("/").pop() || "worktree";
           const isActive = node.worktree?.isActive;
-          const labelWidth = Math.min(worktreeName.length * 7 + 16, NODE_WIDTH);
+          const labelWidth = Math.min(worktreeName.length * 7 + 16, nodeWidth);
           return (
             <g>
               {/* Active glow effect */}
@@ -1027,7 +1014,7 @@ export default function BranchGraph({
                 <rect
                   x={x - 2}
                   y={y - 2}
-                  width={NODE_WIDTH + 4}
+                  width={nodeWidth + 4}
                   height={nodeHeight + 4}
                   rx={8}
                   ry={8}
@@ -1064,8 +1051,8 @@ export default function BranchGraph({
         })()}
 
 
-        {/* All badges in a single horizontal row below the node (hidden when minimized) */}
-        {!nodeIsMinimized && (() => {
+        {/* All badges in a single horizontal row below the node */}
+        {(() => {
           const badges: Array<{ label: string; color: string }> = [];
           // Local ahead/behind (vs parent branch)
           if (node.aheadBehind?.ahead && node.aheadBehind.ahead > 0) {

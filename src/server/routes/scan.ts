@@ -718,6 +718,7 @@ scanRouter.post("/", async (c) => {
         const freshPrs = await getPRs(localPath);
         if (freshPrs.length > 0) {
           const now = new Date().toISOString();
+          const updatedPrs: { branch: string; checks: string | null; state: string }[] = [];
           for (const pr of freshPrs) {
             const existing = await db.select().from(schema.branchLinks)
               .where(and(
@@ -738,11 +739,28 @@ scanRouter.post("/", async (c) => {
               updatedAt: now,
             };
 
+            // Track if PR data actually changed
+            const oldChecks = existing[0]?.checksStatus ?? null;
+            const newChecks = prData.checksStatus;
+            if (oldChecks !== newChecks) {
+              updatedPrs.push({ branch: pr.branch, checks: newChecks, state: prData.status });
+            }
+
             if (existing[0]) {
               await db.update(schema.branchLinks).set(prData).where(eq(schema.branchLinks.id, existing[0].id));
             } else {
               await db.insert(schema.branchLinks).values({ repoId, branchName: pr.branch, linkType: "pr", url: pr.url, number: pr.number, ...prData, createdAt: now });
+              updatedPrs.push({ branch: pr.branch, checks: newChecks, state: prData.status });
             }
+          }
+
+          // Broadcast PR updates if any changed
+          if (updatedPrs.length > 0) {
+            broadcast({
+              type: "pr.updated",
+              repoId,
+              data: { prs: updatedPrs },
+            });
           }
         }
       } catch (err) {

@@ -637,6 +637,37 @@ export default function TreeDashboard() {
       addLog("error", `Fetch error: ${(msg.data as { message?: string })?.message || "Unknown"}`);
     });
 
+    // PR/CI status updates
+    const unsubPrUpdated = wsClient.on("pr.updated", (msg) => {
+      const data = msg.data as { prs: { branch: string; checks: string | null; state: string }[] };
+      if (!data.prs || data.prs.length === 0) return;
+
+      // Log the update
+      for (const pr of data.prs) {
+        const checksLabel = pr.checks === "success" ? "✔" : pr.checks === "failure" ? "✗" : "⏳";
+        addLog("pr", `CI ${checksLabel} ${pr.branch}`);
+      }
+
+      // Update snapshot nodes with new CI status
+      setSnapshot((prev) => {
+        if (!prev) return prev;
+        const updatedNodes = prev.nodes.map((node) => {
+          const prUpdate = data.prs.find((p) => p.branch === node.branchName);
+          if (prUpdate && node.pr) {
+            return {
+              ...node,
+              pr: {
+                ...node.pr,
+                checks: prUpdate.checks?.toUpperCase() as "PENDING" | "SUCCESS" | "FAILURE" | undefined,
+              },
+            };
+          }
+          return node;
+        });
+        return { ...prev, nodes: updatedNodes };
+      });
+    });
+
     return () => {
       unsubScan();
       unsubBranches();
@@ -645,6 +676,7 @@ export default function TreeDashboard() {
       unsubFetchProgress();
       unsubFetchCompleted();
       unsubFetchError();
+      unsubPrUpdated();
     };
   }, [snapshot?.repoId, selectedPin, triggerScan, addLog]);
 

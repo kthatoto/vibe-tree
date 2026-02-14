@@ -608,6 +608,15 @@ export default function TreeDashboard() {
     setTentativeEdges(edges);
   }, []);
 
+  const handleActiveSessionChange = useCallback((sessionId: string | null) => {
+    if (sessionId) {
+      navigate(`/projects/${urlPinId}/sessions/${sessionId}`, { replace: true });
+    } else if (urlSessionId) {
+      // Session was deselected, go back to project URL
+      navigate(`/projects/${urlPinId}`, { replace: true });
+    }
+  }, [navigate, urlPinId, urlSessionId]);
+
   const handleAddRepoPin = async () => {
     if (!newLocalPath.trim()) return;
     try {
@@ -1778,14 +1787,7 @@ export default function TreeDashboard() {
                   chatFullscreen={chatFullscreen}
                   onToggleFullscreen={() => setChatFullscreen(!chatFullscreen)}
                   initialSessionId={urlSessionId}
-                  onActiveSessionChange={(sessionId) => {
-                    if (sessionId) {
-                      navigate(`/projects/${urlPinId}/sessions/${sessionId}`, { replace: true });
-                    } else if (urlSessionId) {
-                      // Session was deselected, go back to project URL
-                      navigate(`/projects/${urlPinId}`, { replace: true });
-                    }
-                  }}
+                  onActiveSessionChange={handleActiveSessionChange}
                 />
               </div>
             </div>

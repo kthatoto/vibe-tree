@@ -60,9 +60,28 @@ export function PlanningPanel({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Tab management
-  const [openTabIds, setOpenTabIds] = useState<string[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  // Tab management (persisted in localStorage per repo)
+  const [openTabIds, setOpenTabIds] = useState<string[]>(() => {
+    const saved = localStorage.getItem(`vibe-tree-open-tabs-${repoId}`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Filter out empty tabs on load
+        return parsed.filter((id: string) => !id.startsWith("__new__"));
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [activeTabId, setActiveTabId] = useState<string | null>(() => {
+    const saved = localStorage.getItem(`vibe-tree-active-tab-${repoId}`);
+    // Don't restore empty tabs
+    if (saved && !saved.startsWith("__new__")) {
+      return saved;
+    }
+    return null;
+  });
   const [emptyTabCounter, setEmptyTabCounter] = useState(0);
 
   // Helper to check if a tab ID is an empty tab
@@ -120,6 +139,20 @@ export function PlanningPanel({
   useEffect(() => {
     localStorage.setItem("vibe-tree-sidebar-fullscreen", String(sidebarFullscreen));
   }, [sidebarFullscreen]);
+
+  // Save open tabs and active tab to localStorage when they change
+  useEffect(() => {
+    // Filter out empty tabs before saving
+    const tabsToSave = openTabIds.filter(id => !id.startsWith("__new__"));
+    localStorage.setItem(`vibe-tree-open-tabs-${repoId}`, JSON.stringify(tabsToSave));
+  }, [openTabIds, repoId]);
+  useEffect(() => {
+    if (activeTabId && !activeTabId.startsWith("__new__")) {
+      localStorage.setItem(`vibe-tree-active-tab-${repoId}`, activeTabId);
+    } else {
+      localStorage.removeItem(`vibe-tree-active-tab-${repoId}`);
+    }
+  }, [activeTabId, repoId]);
 
   // Ref to track the latest selected session for async operations
   const selectedSessionRef = useRef(selectedSession);
@@ -383,6 +416,27 @@ export function PlanningPanel({
     api.getPlanningSessions(repoId)
       .then((data) => {
         setSessions(data);
+        // Restore tabs from localStorage after sessions load
+        const savedTabs = localStorage.getItem(`vibe-tree-open-tabs-${repoId}`);
+        const savedActive = localStorage.getItem(`vibe-tree-active-tab-${repoId}`);
+        if (savedTabs) {
+          try {
+            const parsedTabs = JSON.parse(savedTabs) as string[];
+            // Filter to only tabs that exist in loaded sessions
+            const validTabs = parsedTabs.filter(id => data.some(s => s.id === id));
+            if (validTabs.length > 0) {
+              setOpenTabIds(validTabs);
+              // Restore active tab if it's valid
+              if (savedActive && validTabs.includes(savedActive)) {
+                setActiveTabId(savedActive);
+              } else {
+                setActiveTabId(validTabs[0]);
+              }
+            }
+          } catch {
+            // Invalid JSON, ignore
+          }
+        }
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));

@@ -30,7 +30,7 @@ interface GhPR {
   reviewDecision: string;
   reviewRequests: { login?: string; name?: string; slug?: string }[]; // User has login, Team has name/slug
   reviews: { author: { login: string }; state: string }[];
-  statusCheckRollup?: { conclusion?: string }[];
+  statusCheckRollup?: { conclusion?: string; name?: string; completedAt?: string }[];
   additions: number;
   deletions: number;
   changedFiles: number;
@@ -199,9 +199,24 @@ export async function getPRs(repoPath: string): Promise<PRInfo[]> {
         changedFiles: pr.changedFiles,
       };
       // Compute overall check status from all checks
-      // Filter out CANCELLED checks (they don't affect the overall status)
+      // GitHub returns all check runs including historical re-runs
+      // We need to deduplicate by check name and use only the latest run
       if (pr.statusCheckRollup && pr.statusCheckRollup.length > 0) {
-        const activeChecks = pr.statusCheckRollup.filter(
+        // Group checks by name, keeping only the latest (most recent completedAt)
+        const checksByName = new Map<string, { conclusion: string | null; completedAt: string | null }>();
+        for (const check of pr.statusCheckRollup) {
+          const name = check.name || "unknown";
+          const existing = checksByName.get(name);
+          const completedAt = check.completedAt || null;
+          const conclusion = check.conclusion || null;
+          if (!existing || (completedAt && (!existing.completedAt || completedAt > existing.completedAt))) {
+            checksByName.set(name, { conclusion, completedAt });
+          }
+        }
+
+        // Filter out CANCELLED checks (they don't affect the overall status)
+        const latestChecks = Array.from(checksByName.values());
+        const activeChecks = latestChecks.filter(
           (c) => c.conclusion !== "CANCELLED"
         );
         if (activeChecks.length === 0) {

@@ -68,7 +68,8 @@ const STAGE_LABELS: Record<string, string> = {
   aheadBehind: "Calculating commits...",
   remoteAheadBehind: "Checking remote...",
   final: "Finalizing...",
-  pr_refreshed: "Refreshing PRs...",
+  pr_refreshing: "Refreshing PRs...",
+  pr_refreshed: "Complete!",
   complete: "Complete!",
 };
 
@@ -135,7 +136,7 @@ function ScanProgressBar({ nextScanTime, interval, mode, scanProgress, isPolling
 
   // Calculate scan progress percentage (0% if no progress yet)
   const scanPercent = scanProgress ? Math.round((scanProgress.current / scanProgress.total) * 100) : 0;
-  const scanTotal = scanProgress?.total ?? 7; // Default to 7 steps
+  const scanTotal = scanProgress?.total ?? 8; // Default to 8 steps
   const stageLabel = scanProgress?.stage ? (STAGE_LABELS[scanProgress.stage] ?? scanProgress.stage) : "Starting...";
 
   const formatInterval = (ms: number) => {

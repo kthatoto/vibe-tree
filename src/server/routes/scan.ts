@@ -541,8 +541,8 @@ scanRouter.post("/", async (c) => {
 
       console.log(`[Scan] Step 1 complete: ${currentEdges.length} edges from DB cache`);
       // Note: Intermediate broadcasts are for progress indication only, UI should NOT auto-update from these
-      // Progress: 7 total steps (edges_cached, worktrees, tree, aheadBehind, remoteAheadBehind, final, pr_refresh)
-      const TOTAL_STEPS = 7;
+      // Progress: 8 total steps (edges_cached, worktrees, tree, aheadBehind, remoteAheadBehind, final, pr_refreshing, complete)
+      const TOTAL_STEPS = 8;
       broadcast({
         type: "scan.updated",
         repoId,
@@ -729,6 +729,20 @@ scanRouter.post("/", async (c) => {
       console.log(`[Scan] Background scan completed for ${repoId}`);
 
       // Step 7: Smart PR refresh - prioritize local branches, gradually update others
+      // Broadcast progress immediately so UI shows "Refreshing PRs..." during the slow gh pr list call
+      broadcast({
+        type: "scan.updated",
+        repoId,
+        data: {
+          version: newVersion,
+          stage: "pr_refreshing",
+          isFinal: false,
+          isComplete: false,
+          progress: { current: 7, total: TOTAL_STEPS },
+          snapshot: finalSnapshot,
+        },
+      });
+
       try {
         // Load polling settings for PR fetch count
         const pollingRules = await db.select().from(schema.projectRules)

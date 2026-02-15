@@ -15,8 +15,7 @@ import {
   getDefaultBranch,
   getBranches,
   getWorktrees,
-  getPRListLight,
-  getPRDetail,
+  getPRs,
   buildTree,
   calculateAheadBehind,
   calculateRemoteAheadBehind,
@@ -756,9 +755,8 @@ scanRouter.post("/", async (c) => {
         const pollingSettings = pollingRule ? JSON.parse(pollingRule.ruleJson) : null;
         const prFetchCount = pollingSettings?.prFetchCount ?? 5;
 
-        // Step 1: Get lightweight PR list (fast - minimal fields)
-        const prListLight = await getPRListLight(localPath);
-        if (prListLight.length === 0) {
+        const freshPrs = await getPRs(localPath);
+        if (freshPrs.length === 0) {
           // No PRs found, send complete signal
           broadcast({
             type: "scan.updated",
@@ -784,24 +782,25 @@ scanRouter.post("/", async (c) => {
         const localBranchSet = new Set(branchNames);
         const worktreeBranchSet = new Set(worktrees.map(w => w.branch).filter(Boolean) as string[]);
 
-        // Filter to local branches only
-        const localPrs = prListLight.filter(pr => localBranchSet.has(pr.branch));
+        // Build a map of fresh PRs for quick lookup (only for LOCAL branches)
+        const freshPrMap = new Map(
+          freshPrs
+            .filter(pr => localBranchSet.has(pr.branch))
+            .map(pr => [pr.branch, pr])
+        );
 
         // Build cache lookup for updatedAt
         const cacheMap = new Map(
           cachedPRs.map(c => [c.branchName, c])
         );
 
-        // Build a map of PR number by branch for quick lookup
-        const prNumberMap = new Map(localPrs.map(pr => [pr.branch, pr.number]));
-
-        // Score and select PRs to refresh (using cached checksStatus for scoring)
-        const { selectPRsToRefresh } = await import("../lib/pr-scoring");
-        const prsForScoring = localPrs.map(pr => {
+        // Score and select PRs to refresh (only PRs that exist in freshPrMap)
+        const { selectPRsToRefresh, calculatePRScore } = await import("../lib/pr-scoring");
+        const prsForScoring = Array.from(freshPrMap.values()).map(pr => {
           const cached = cacheMap.get(pr.branch);
           return {
             branchName: pr.branch,
-            checksStatus: cached?.checksStatus ?? null,
+            checksStatus: pr.checks?.toLowerCase() ?? null,
             updatedAt: cached?.updatedAt ?? null,
           };
         });
@@ -816,50 +815,23 @@ scanRouter.post("/", async (c) => {
           maxTotal: prFetchCount,
         });
 
-        // Step 2: Fetch each selected PR's details one by one with progress
-        const totalPrs = selected.length;
-        let processedPrs = 0;
-        const freshPrMap = new Map<string, import("../../shared/types").PRInfo>();
+        // Filter fresh PRs to only selected ones
+        const relevantPrs = selected
+          .map(s => freshPrMap.get(s.branchName))
+          .filter((pr): pr is NonNullable<typeof pr> => pr != null);
 
-        // Broadcast which PRs will be scanned (for debugging)
-        if (totalPrs > 0) {
+        // Broadcast which PRs were selected for scanning (for debugging)
+        if (relevantPrs.length > 0) {
           broadcast({
             type: "pr.scanned",
             repoId,
-            data: { branches: selected.map(s => s.branchName) },
+            data: { branches: relevantPrs.map(pr => pr.branch) },
           });
           const now = new Date().toISOString();
           const updatedPrs: { branch: string; checks: string | null; state: string; changes: { type: string; old?: string | null; new?: string | null }[] }[] = [];
-
-          for (const sel of selected) {
-            // Fetch PR detail (this is the slow part - one API call per PR)
-            const prNumber = prNumberMap.get(sel.branchName);
-            if (!prNumber) {
-              processedPrs++;
-              continue;
-            }
-
-            const pr = await getPRDetail(localPath, prNumber);
-            if (!pr) {
-              processedPrs++;
-              broadcast({
-                type: "scan.updated",
-                repoId,
-                data: {
-                  version: newVersion,
-                  stage: "pr_refreshing",
-                  isFinal: false,
-                  isComplete: false,
-                  progress: { current: 7, total: TOTAL_STEPS, prProgress: { current: processedPrs, total: totalPrs } },
-                  snapshot: finalSnapshot,
-                },
-              });
-              continue;
-            }
-
-            freshPrMap.set(pr.branch, pr);
-
-            // Update DB
+          const totalPrs = relevantPrs.length;
+          let processedPrs = 0;
+          for (const pr of relevantPrs) {
             const existing = await db.select().from(schema.branchLinks)
               .where(and(
                 eq(schema.branchLinks.repoId, repoId),
@@ -941,7 +913,7 @@ scanRouter.post("/", async (c) => {
               updatedPrs.push({ branch: pr.branch, checks: prData.checksStatus, state: prData.status, changes: [{ type: "new" }] });
             }
 
-            // Broadcast progress after each PR fetch (this is the key part - progress moves per PR)
+            // Broadcast progress after each PR
             processedPrs++;
             broadcast({
               type: "scan.updated",
@@ -951,7 +923,7 @@ scanRouter.post("/", async (c) => {
                 stage: "pr_refreshing",
                 isFinal: false,
                 isComplete: false,
-                progress: { current: 7, total: TOTAL_STEPS, prProgress: { current: processedPrs, total: totalPrs } },
+                progress: { current: 7, total: 8, prProgress: { current: processedPrs, total: totalPrs } },
                 snapshot: finalSnapshot,
               },
             });

@@ -148,111 +148,83 @@ export async function getWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
   }
 }
 
-// Lightweight PR list - just basic info for filtering
-export async function getPRListLight(repoPath: string): Promise<{ number: number; branch: string; state: string }[]> {
-  try {
-    const output = await execAsync(
-      `cd "${repoPath}" && gh pr list --state all --json number,headRefName,state --limit 50`
-    );
-    const prs = JSON.parse(output) as { number: number; headRefName: string; state: string }[];
-    return prs.map(pr => ({ number: pr.number, branch: pr.headRefName, state: pr.state }));
-  } catch (err) {
-    console.error("getPRListLight error:", err);
-    return [];
-  }
-}
-
-// Get full details for a single PR
-export async function getPRDetail(repoPath: string, prNumber: number): Promise<PRInfo | null> {
-  try {
-    const output = await execAsync(
-      `cd "${repoPath}" && gh pr view ${prNumber} --json number,title,state,url,headRefName,isDraft,labels,assignees,reviewDecision,reviewRequests,reviews,statusCheckRollup,additions,deletions,changedFiles`
-    );
-    const pr: GhPR = JSON.parse(output);
-    return parsePRInfo(pr);
-  } catch (err) {
-    console.error(`getPRDetail error for PR #${prNumber}:`, err);
-    return null;
-  }
-}
-
-function parsePRInfo(pr: GhPR): PRInfo {
-  // Filter out bot reviewers (e.g., GitHub Copilot)
-  const isBot = (name: string | undefined) =>
-    name && (name.toLowerCase().includes("copilot") || name.endsWith("[bot]"));
-
-  // Get reviewers - supports both User (login) and Team (name/slug)
-  const humanReviewers = (pr.reviewRequests ?? [])
-    .map((r) => r.login || r.slug || r.name)
-    .filter((name): name is string => !!name && !isBot(name));
-
-  // Check if there are any human reviews submitted (exclude bots)
-  const humanReviews = (pr.reviews ?? []).filter(
-    (r) => r.author?.login && !isBot(r.author.login)
-  );
-  const hasReviews = humanReviews.length > 0;
-
-  // Compute review status
-  let reviewStatus: "none" | "requested" | "reviewed" | "approved" = "none";
-  if (pr.reviewDecision === "APPROVED") {
-    reviewStatus = "approved";
-  } else if (hasReviews) {
-    reviewStatus = "reviewed";
-  } else if (humanReviewers.length > 0) {
-    reviewStatus = "requested";
-  }
-
-  const prInfo: PRInfo = {
-    number: pr.number,
-    title: pr.title,
-    state: pr.state,
-    url: pr.url,
-    branch: pr.headRefName,
-    isDraft: pr.isDraft,
-    labels: pr.labels?.map((l) => ({ name: l.name, color: l.color })) ?? [],
-    assignees: pr.assignees?.map((a) => a.login) ?? [],
-    reviewDecision: pr.reviewDecision,
-    reviewStatus,
-    reviewers: humanReviewers,
-    additions: pr.additions,
-    deletions: pr.deletions,
-    changedFiles: pr.changedFiles,
-  };
-
-  // Compute overall check status
-  if (pr.statusCheckRollup && pr.statusCheckRollup.length > 0) {
-    const activeChecks = pr.statusCheckRollup.filter(
-      (c) => c.conclusion !== "CANCELLED"
-    );
-    if (activeChecks.length === 0) {
-      prInfo.checks = "SUCCESS";
-    } else {
-      const hasFailure = activeChecks.some(
-        (c) => c.conclusion === "FAILURE" || c.conclusion === "ERROR"
-      );
-      const allSuccess = activeChecks.every(
-        (c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED"
-      );
-      if (hasFailure) {
-        prInfo.checks = "FAILURE";
-      } else if (allSuccess) {
-        prInfo.checks = "SUCCESS";
-      } else {
-        prInfo.checks = "PENDING";
-      }
-    }
-  }
-
-  return prInfo;
-}
-
 export async function getPRs(repoPath: string): Promise<PRInfo[]> {
   try {
     const output = await execAsync(
       `cd "${repoPath}" && gh pr list --state all --json number,title,state,url,headRefName,isDraft,labels,assignees,reviewDecision,reviewRequests,reviews,statusCheckRollup,additions,deletions,changedFiles --limit 50`
     );
     const prs: GhPR[] = JSON.parse(output);
-    return prs.map((pr) => parsePRInfo(pr));
+    return prs.map((pr) => {
+      // Filter out bot reviewers (e.g., GitHub Copilot)
+      const isBot = (name: string | undefined) =>
+        name && (name.toLowerCase().includes("copilot") || name.endsWith("[bot]"));
+
+      // Get reviewers - supports both User (login) and Team (name/slug)
+      const humanReviewers = (pr.reviewRequests ?? [])
+        .map((r) => r.login || r.slug || r.name) // User has login, Team has slug/name
+        .filter((name): name is string => !!name && !isBot(name));
+
+      // Check if there are any human reviews submitted (exclude bots)
+      const humanReviews = (pr.reviews ?? []).filter(
+        (r) => r.author?.login && !isBot(r.author.login)
+      );
+      const hasReviews = humanReviews.length > 0;
+
+      // Compute review status
+      let reviewStatus: "none" | "requested" | "reviewed" | "approved" = "none";
+      if (pr.reviewDecision === "APPROVED") {
+        reviewStatus = "approved";
+      } else if (hasReviews) {
+        // Has reviews but not approved (could be CHANGES_REQUESTED or pending)
+        reviewStatus = "reviewed";
+      } else if (humanReviewers.length > 0) {
+        // Reviewers assigned but no reviews yet
+        reviewStatus = "requested";
+      }
+
+      const prInfo: PRInfo = {
+        number: pr.number,
+        title: pr.title,
+        state: pr.state,
+        url: pr.url,
+        branch: pr.headRefName,
+        isDraft: pr.isDraft,
+        labels: pr.labels?.map((l) => ({ name: l.name, color: l.color })) ?? [],
+        assignees: pr.assignees?.map((a) => a.login) ?? [],
+        reviewDecision: pr.reviewDecision,
+        reviewStatus,
+        reviewers: humanReviewers,
+        additions: pr.additions,
+        deletions: pr.deletions,
+        changedFiles: pr.changedFiles,
+      };
+      // Compute overall check status from all checks
+      // Filter out CANCELLED checks (they don't affect the overall status)
+      if (pr.statusCheckRollup && pr.statusCheckRollup.length > 0) {
+        const activeChecks = pr.statusCheckRollup.filter(
+          (c) => c.conclusion !== "CANCELLED"
+        );
+        if (activeChecks.length === 0) {
+          // All checks were cancelled, treat as success
+          prInfo.checks = "SUCCESS";
+        } else {
+          const hasFailure = activeChecks.some(
+            (c) => c.conclusion === "FAILURE" || c.conclusion === "ERROR"
+          );
+          const allSuccess = activeChecks.every(
+            (c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED"
+          );
+          if (hasFailure) {
+            prInfo.checks = "FAILURE";
+          } else if (allSuccess) {
+            prInfo.checks = "SUCCESS";
+          } else {
+            prInfo.checks = "PENDING";
+          }
+        }
+      }
+      return prInfo;
+    });
   } catch (err) {
     console.error("getPRs error:", err);
     return [];

@@ -1524,18 +1524,24 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>{prLink.checksStatus === "success" ? "CI✔" : prLink.checksStatus === "failure" ? "CI✗" : "CI"}</span>
                 )}
-                {/* PR badge */}
-                {hasPR && (
-                  <span style={{
-                    fontSize: 10,
-                    padding: "1px 4px",
-                    borderRadius: 3,
-                    background: isMerged ? "#3b0764" : "#374151",
-                    border: isMerged ? "1px solid #9333ea" : "1px solid #4b5563",
-                    color: isMerged ? "#c084fc" : "#e5e7eb",
-                    whiteSpace: "nowrap",
-                  }}>PR</span>
-                )}
+                {/* PR badge - shows ✓ when approved by human reviewer */}
+                {hasPR && (() => {
+                  const isApproved = prLink?.reviewDecision === "APPROVED" && prLink?.reviewers && (() => {
+                    const reviewers = JSON.parse(prLink.reviewers) as string[];
+                    return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
+                  })();
+                  return (
+                    <span style={{
+                      fontSize: 10,
+                      padding: "1px 4px",
+                      borderRadius: 3,
+                      background: isMerged ? "#3b0764" : isApproved ? "#14532d" : "#374151",
+                      border: isMerged ? "1px solid #9333ea" : isApproved ? "1px solid #22c55e" : "1px solid #4b5563",
+                      color: isMerged ? "#c084fc" : isApproved ? "#4ade80" : "#e5e7eb",
+                      whiteSpace: "nowrap",
+                    }}>{isApproved ? "PR ✓" : "PR"}</span>
+                  );
+                })()}
               </div>
               {/* Row 3: (default) label */}
               {isDefault && (
@@ -1587,20 +1593,7 @@ export default function BranchGraph({
                 {hasPR && (
                   <div style={{ display: "flex", gap: 6, flexWrap: "nowrap" }}>
                 {/* Review status - based on reviewDecision from branchLinks (only show if human reviewers exist) */}
-                {prLink?.reviewDecision === "APPROVED" && prLink?.reviewers && (() => {
-                  const reviewers = JSON.parse(prLink.reviewers) as string[];
-                  return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
-                })() && (
-                  <span style={{
-                    fontSize: 10,
-                    padding: "1px 5px",
-                    borderRadius: 3,
-                    background: "#14532d",
-                    border: "1px solid #22c55e",
-                    color: "#4ade80",
-                    whiteSpace: "nowrap",
-                  }}>Approved ✔</span>
-                )}
+                {/* Approved status is now shown in the PR badge */}
                 {prLink?.reviewDecision === "CHANGES_REQUESTED" && prLink?.reviewers && (() => {
                   const reviewers = JSON.parse(prLink.reviewers) as string[];
                   return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
@@ -1680,16 +1673,24 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>CI …</span>
                 )}
-                {/* PR indicator - with background */}
-                <span style={{
-                  fontSize: 10,
-                  padding: "1px 5px",
-                  borderRadius: 3,
-                  background: isMerged ? "#3b0764" : "#374151",
-                  border: isMerged ? "1px solid #9333ea" : "1px solid #4b5563",
-                  color: isMerged ? "#c084fc" : "#e5e7eb",
-                  whiteSpace: "nowrap",
-                }}>PR</span>
+                {/* PR indicator - shows ✓ when approved by human reviewer */}
+                {(() => {
+                  const isApproved = prLink?.reviewDecision === "APPROVED" && prLink?.reviewers && (() => {
+                    const reviewers = JSON.parse(prLink.reviewers) as string[];
+                    return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
+                  })();
+                  return (
+                    <span style={{
+                      fontSize: 10,
+                      padding: "1px 5px",
+                      borderRadius: 3,
+                      background: isMerged ? "#3b0764" : isApproved ? "#14532d" : "#374151",
+                      border: isMerged ? "1px solid #9333ea" : isApproved ? "1px solid #22c55e" : "1px solid #4b5563",
+                      color: isMerged ? "#c084fc" : isApproved ? "#4ade80" : "#e5e7eb",
+                      whiteSpace: "nowrap",
+                    }}>{isApproved ? "PR ✓" : "PR"}</span>
+                  );
+                })()}
                     {/* Warning if PR base doesn't match graph parent */}
                     {hasPRBaseMismatch && (
                       <span

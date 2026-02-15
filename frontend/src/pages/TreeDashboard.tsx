@@ -75,13 +75,14 @@ const STAGE_LABELS: Record<string, string> = {
 // Display state: "scanning" when we have progress, "countdown" when we have nextScanTime
 type DisplayState = "scanning" | "countdown" | "idle";
 
-function ScanProgressBar({ nextScanTime, interval, mode, scanProgress, isPollingScanning, isInitialLoad }: {
+function ScanProgressBar({ nextScanTime, interval, mode, scanProgress, isPollingScanning, isInitialLoad, onTriggerScan }: {
   nextScanTime: number;
   interval: number;
   mode: PollingMode;
   scanProgress: ScanProgress | null;
   isPollingScanning: boolean; // true when scan triggered but no progress yet
   isInitialLoad: boolean; // true until first scan completes
+  onTriggerScan?: () => void;
 }) {
   const modeInfo = MODE_LABELS[mode];
 
@@ -152,6 +153,23 @@ function ScanProgressBar({ nextScanTime, interval, mode, scanProgress, isPolling
         marginBottom: 2,
       }}>
         <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          {onTriggerScan && displayState === "countdown" && (
+            <button
+              onClick={onTriggerScan}
+              title="Scan now"
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                color: "#6b7280",
+                fontSize: 12,
+                lineHeight: 1,
+              }}
+            >
+              ↻
+            </button>
+          )}
           {displayState === "scanning" ? stageLabel : "Next scan"}
           {displayState === "countdown" && (
             <span style={{
@@ -165,11 +183,13 @@ function ScanProgressBar({ nextScanTime, interval, mode, scanProgress, isPolling
             </span>
           )}
         </span>
-        {displayState === "scanning" ? (
-          <span>{scanPercent}% ({scanProgress?.current ?? 0}/{scanTotal})</span>
-        ) : displayState === "countdown" ? (
-          <span>{secondsLeft}s ({formatInterval(interval)})</span>
-        ) : null}
+        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {displayState === "scanning" ? (
+            <span>{scanPercent}% ({scanProgress?.current ?? 0}/{scanTotal})</span>
+          ) : displayState === "countdown" ? (
+            <span>{secondsLeft}s ({formatInterval(interval)})</span>
+          ) : null}
+        </span>
       </div>
       <div style={{
         height: 3,
@@ -1910,6 +1930,7 @@ export default function TreeDashboard() {
             scanProgress={scanProgress}
             isPollingScanning={pollingState.isScanning}
             isInitialLoad={!hasCompletedFirstScan}
+            onTriggerScan={triggerImmediateScan}
           />
         )}
 

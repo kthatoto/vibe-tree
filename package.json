@@ -3,7 +3,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -n backend,frontend -c blue,green \"bun run dev:backend\" \"bun run dev:frontend\"",
-    "dev:backend": "bun run --watch src/server/index.ts",
+    "dev:backend": "lsof -ti:3000 | xargs kill -9 2>/dev/null; bun run --watch src/server/index.ts",
     "dev:frontend": "cd frontend && bun run dev",
     "build": "cd frontend && bun run build",
     "test": "bun test",

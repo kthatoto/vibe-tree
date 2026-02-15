@@ -286,12 +286,12 @@ export default function TreeDashboard() {
   const [warningFilter, setWarningFilter] = useState<string | null>(null);
 
   // Logs state
-  type LogEntry = { id: number; timestamp: Date; type: string; message: string };
+  type LogEntry = { id: number; timestamp: Date; type: string; message: string; html?: string };
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const logIdRef = useRef(0);
-  const addLog = useCallback((type: string, message: string) => {
+  const addLog = useCallback((type: string, message: string, html?: string) => {
     const id = ++logIdRef.current;
-    setLogs((prev) => [...prev.slice(-99), { id, timestamp: new Date(), type, message }]); // Keep last 100
+    setLogs((prev) => [...prev.slice(-99), { id, timestamp: new Date(), type, message, html }]); // Keep last 100
   }, []);
 
   // Next scan countdown
@@ -504,19 +504,9 @@ export default function TreeDashboard() {
 
       const data = msg.data as { version?: number; stage?: string; isFinal?: boolean; snapshot?: ScanSnapshot; repoId?: string };
 
-      // Log scan progress
+      // Track scan stage (no logging)
       if (data.stage) {
-        // Log scan start on first stage
-        if (data.stage === "edges_cached") {
-          addLog("scan", "Scan start");
-        }
-        setScanStage(data.stage);
-        if (data.isFinal) {
-          addLog("scan", "Scan complete");
-          setScanStage(null);
-        } else {
-          addLog("scan", `Scan: ${data.stage}`);
-        }
+        setScanStage(data.isFinal ? null : data.stage);
       }
 
       // Verify repoId matches to prevent cross-project updates
@@ -633,7 +623,6 @@ export default function TreeDashboard() {
 
     // Update branchLinks when PR info is refreshed (single source of truth)
     const unsubBranchLink = wsClient.on("branchLink.updated", (msg) => {
-      addLog("pr", `PR updated: ${(msg.data as BranchLink).branchName}`);
       const data = msg.data as BranchLink;
       setBranchLinks((prev) => {
         const newMap = new Map(prev);
@@ -680,15 +669,71 @@ export default function TreeDashboard() {
 
     // PR/CI status updates
     const unsubPrUpdated = wsClient.on("pr.updated", (msg) => {
-      const data = msg.data as { prs: { branch: string; checks: string | null; state: string; reason?: string; oldChecks?: string | null }[] };
+      const data = msg.data as {
+        prs: {
+          branch: string;
+          checks: string | null;
+          state: string;
+          changes: { type: string; old?: string | null; new?: string | null }[];
+        }[];
+      };
       if (!data.prs || data.prs.length === 0) return;
 
-      // Log the update with detailed reason
+      // Format change as HTML line
+      const formatChangeHtml = (change: { type: string; old?: string | null; new?: string | null }) => {
+        const ciHtml = (status: string | null | undefined) => {
+          if (status === "success") return '<span style="color:#22c55e">Success ✔</span>';
+          if (status === "failure") return '<span style="color:#ef4444">Failure ✗</span>';
+          if (status === "pending") return '<span style="color:#eab308">Pending ⏳</span>';
+          return '<span style="color:#9ca3af">?</span>';
+        };
+
+        switch (change.type) {
+          case "new":
+            return '<span style="color:#22c55e;font-weight:500">NEW PR</span>';
+          case "checks":
+            return `CI: ${ciHtml(change.old)} → ${ciHtml(change.new)}`;
+          case "labels": {
+            const parts: string[] = [];
+            if (change.new) {
+              change.new.split(",").forEach(label => {
+                parts.push(`<span style="background:#22c55e33;color:#22c55e;padding:1px 4px;border-radius:3px;font-size:11px">${label}</span>`);
+              });
+            }
+            if (change.old) {
+              change.old.split(",").forEach(label => {
+                parts.push(`<span style="background:#ef444433;color:#ef4444;padding:1px 4px;border-radius:3px;font-size:11px;text-decoration:line-through">${label}</span>`);
+              });
+            }
+            return `Labels: ${parts.join(" ")}`;
+          }
+          case "review":
+            return `Review: <span style="color:#9ca3af">${change.old || "none"}</span> → <span style="color:#a78bfa">${change.new || "none"}</span>`;
+          case "reviewers": {
+            const parts: string[] = [];
+            if (change.new) {
+              change.new.split(",").forEach(r => {
+                parts.push(`<span style="color:#22c55e">+${r}</span>`);
+              });
+            }
+            if (change.old) {
+              change.old.split(",").forEach(r => {
+                parts.push(`<span style="color:#ef4444;text-decoration:line-through">${r}</span>`);
+              });
+            }
+            return `Reviewers: ${parts.join(" ")}`;
+          }
+          default:
+            return change.type;
+        }
+      };
+
+      // Log the update with rich HTML formatting
       for (const pr of data.prs) {
-        const checksLabel = pr.checks === "success" ? "✔" : pr.checks === "failure" ? "✗" : "⏳";
-        const oldLabel = pr.oldChecks === "success" ? "✔" : pr.oldChecks === "failure" ? "✗" : pr.oldChecks === "pending" ? "⏳" : "null";
-        const reasonText = pr.reason === "new_pr" ? "[NEW]" : `[${oldLabel}→${checksLabel}]`;
-        addLog("pr", `${reasonText} ${pr.branch}`);
+        const lines = pr.changes.map(formatChangeHtml);
+        const html = `<div style="font-weight:500;margin-bottom:2px">${pr.branch}</div>${lines.map(l => `<div style="padding-left:8px;font-size:12px">${l}</div>`).join("")}`;
+        const plainText = `${pr.branch}: ${pr.changes.map(c => c.type).join(", ")}`;
+        addLog("pr", plainText, html);
       }
 
       // Update snapshot nodes with new CI status
@@ -711,17 +756,6 @@ export default function TreeDashboard() {
       });
     });
 
-    // Log which PRs were scanned (for debugging)
-    const unsubPrScanned = wsClient.on("pr.scanned", (msg) => {
-      const data = msg.data as { branches: string[] };
-      if (data.branches && data.branches.length > 0) {
-        addLog("pr", `Scanned ${data.branches.length} PRs:`);
-        for (const branch of data.branches) {
-          addLog("pr", `  → ${branch}`);
-        }
-      }
-    });
-
     return () => {
       unsubScan();
       unsubBranches();
@@ -731,7 +765,6 @@ export default function TreeDashboard() {
       unsubFetchCompleted();
       unsubFetchError();
       unsubPrUpdated();
-      unsubPrScanned();
     };
   }, [snapshot?.repoId, selectedPin, triggerScan, addLog]);
 
@@ -1651,19 +1684,26 @@ export default function TreeDashboard() {
                 <div key={log.id} style={{
                   display: "flex",
                   gap: 6,
-                  marginBottom: 3,
+                  marginBottom: 4,
                 }}>
                   <span style={{ color: "#4b5563", flexShrink: 0 }}>{timeStr}</span>
-                  <span style={{
-                    display: "-webkit-box",
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: "vertical",
-                    overflow: "hidden",
-                    wordBreak: "break-all",
-                    color,
-                  }}>
-                    {log.message}
-                  </span>
+                  {log.html ? (
+                    <div
+                      style={{ flex: 1, wordBreak: "break-all", color }}
+                      dangerouslySetInnerHTML={{ __html: log.html }}
+                    />
+                  ) : (
+                    <span style={{
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                      wordBreak: "break-all",
+                      color,
+                    }}>
+                      {log.message}
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -2340,17 +2380,20 @@ export default function TreeDashboard() {
                         <h3>Polling</h3>
                         <div className="settings-section">
                           <label>PR Fetch Count</label>
-                          <p style={{ marginBottom: 8, color: "#9ca3af" }}>
-                            Number of PRs to refresh per scan (1-20). Higher values provide more up-to-date PR status but increase API calls.
+                          <p style={{ marginTop: 4, color: "#9ca3af" }}>
+                            Number of PRs to refresh per scan. Higher values provide more up-to-date PR status but increase API calls.
                           </p>
-                          <input
-                            type="number"
-                            value={pollingPrFetchCount}
-                            onChange={(e) => setPollingPrFetchCount(Math.min(20, Math.max(1, parseInt(e.target.value) || 5)))}
-                            min={1}
-                            max={20}
-                            style={{ width: 80 }}
-                          />
+                          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
+                            <input
+                              type="range"
+                              value={pollingPrFetchCount}
+                              onChange={(e) => setPollingPrFetchCount(parseInt(e.target.value))}
+                              min={1}
+                              max={20}
+                              style={{ flex: 1 }}
+                            />
+                            <span style={{ minWidth: 24, textAlign: "center", fontWeight: 500 }}>{pollingPrFetchCount}</span>
+                          </div>
                         </div>
                       </>
                     )}

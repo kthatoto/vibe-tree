@@ -786,7 +786,7 @@ scanRouter.post("/", async (c) => {
             data: { branches: relevantPrs.map(pr => pr.branch) },
           });
           const now = new Date().toISOString();
-          const updatedPrs: { branch: string; checks: string | null; state: string; reason: string; oldChecks: string | null }[] = [];
+          const updatedPrs: { branch: string; checks: string | null; state: string; changes: { type: string; old?: string | null; new?: string | null }[] }[] = [];
           for (const pr of relevantPrs) {
             const existing = await db.select().from(schema.branchLinks)
               .where(and(
@@ -807,20 +807,57 @@ scanRouter.post("/", async (c) => {
               updatedAt: now,
             };
 
-            // Track if PR data actually changed
-            const oldChecks = existing[0]?.checksStatus ?? null;
-            const newChecks = prData.checksStatus;
-
             if (existing[0]) {
-              // Only broadcast if checks actually changed
-              if (oldChecks !== newChecks) {
-                updatedPrs.push({ branch: pr.branch, checks: newChecks, state: prData.status, reason: "checks_changed", oldChecks });
+              // Detect what changed with details
+              const changes: { type: string; old?: string | null; new?: string | null }[] = [];
+              const old = existing[0];
+
+              if ((old.checksStatus ?? null) !== prData.checksStatus) {
+                changes.push({ type: "checks", old: old.checksStatus, new: prData.checksStatus });
+              }
+              {
+                // Handle both string[] and {name: string}[] formats for backwards compatibility
+                const parseLabels = (json: string | null): string[] => {
+                  if (!json) return [];
+                  const parsed = JSON.parse(json);
+                  return parsed.map((l: string | { name: string }) => typeof l === "string" ? l : l.name);
+                };
+                const oldLabels = parseLabels(old.labels).sort();
+                const newLabels = parseLabels(prData.labels).sort();
+                const added = newLabels.filter(l => !oldLabels.includes(l));
+                const removed = oldLabels.filter(l => !newLabels.includes(l));
+                // Only add change if there are actual additions or removals
+                if (added.length > 0 || removed.length > 0) {
+                  changes.push({ type: "labels", old: removed.join(","), new: added.join(",") });
+                }
+              }
+              if ((old.reviewDecision ?? null) !== prData.reviewDecision) {
+                changes.push({ type: "review", old: old.reviewDecision, new: prData.reviewDecision });
+              }
+              {
+                const oldReviewers: string[] = old.reviewers ? JSON.parse(old.reviewers).sort() : [];
+                const newReviewers: string[] = prData.reviewers ? JSON.parse(prData.reviewers).sort() : [];
+                const added = newReviewers.filter(r => !oldReviewers.includes(r));
+                const removed = oldReviewers.filter(r => !newReviewers.includes(r));
+                if (added.length > 0 || removed.length > 0) {
+                  changes.push({ type: "reviewers", old: removed.join(","), new: added.join(",") });
+                }
+              }
+
+              // Only broadcast if something actually changed
+              if (changes.length > 0) {
+                updatedPrs.push({
+                  branch: pr.branch,
+                  checks: prData.checksStatus,
+                  state: prData.status,
+                  changes,
+                });
               }
               await db.update(schema.branchLinks).set(prData).where(eq(schema.branchLinks.id, existing[0].id));
             } else {
               // New PR - always broadcast
               await db.insert(schema.branchLinks).values({ repoId, branchName: pr.branch, linkType: "pr", url: pr.url, number: pr.number, ...prData, createdAt: now });
-              updatedPrs.push({ branch: pr.branch, checks: newChecks, state: prData.status, reason: "new_pr", oldChecks: null });
+              updatedPrs.push({ branch: pr.branch, checks: prData.checksStatus, state: prData.status, changes: [{ type: "new" }] });
             }
           }
 

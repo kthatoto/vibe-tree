@@ -81,6 +81,7 @@ const HORIZONTAL_GAP = 28;
 const VERTICAL_GAP = 50;
 const TOP_PADDING = 30;
 const LEFT_PADDING = 16;
+const RIGHT_PADDING = 32; // Extra space on right for scrolling
 const SEPARATOR_HALF_WIDTH = 12; // Half width of separator zone (total width = 24px)
 
 
@@ -724,7 +725,7 @@ export default function BranchGraph({
 
     // Calculate canvas size (add extra space for badges below nodes)
     const BADGE_HEIGHT = 20; // Space for badges below nodes
-    const maxX = Math.max(...layoutNodes.map((n) => n.x + n.width), 0) + LEFT_PADDING;
+    const maxX = Math.max(...layoutNodes.map((n) => n.x + n.width), 0) + RIGHT_PADDING;
     const maxY = Math.max(
       ...layoutNodes.map((n) => n.y + n.height + BADGE_HEIGHT),
       0

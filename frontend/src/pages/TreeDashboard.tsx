@@ -838,45 +838,8 @@ export default function TreeDashboard() {
           currentSnapshotVersion.current = newVersion;
         }
 
-        // Update branchLinks from snapshot nodes (for PR-related components)
-        // This ensures ExecuteSidebar, BranchGraph etc. get fresh PR data
-        if (data.snapshot?.nodes) {
-          setBranchLinks((prev) => {
-            const newMap = new Map(prev);
-            for (const node of data.snapshot!.nodes) {
-              if (node.pr) {
-                const existing = newMap.get(node.branchName) || [];
-                const prLinkIndex = existing.findIndex((l) => l.linkType === "pr");
-                const prLink: BranchLink = {
-                  id: prLinkIndex >= 0 ? existing[prLinkIndex].id : -1, // -1 for new
-                  repoId: data.snapshot!.repoId,
-                  branchName: node.branchName,
-                  linkType: "pr",
-                  url: node.pr.url,
-                  number: node.pr.number,
-                  title: node.pr.title,
-                  status: node.pr.state?.toLowerCase() ?? null,
-                  checksStatus: node.pr.checks?.toLowerCase() ?? null,
-                  reviewDecision: node.pr.reviewDecision ?? null,
-                  checks: null,
-                  labels: node.pr.labels ? JSON.stringify(node.pr.labels) : null,
-                  reviewers: node.pr.reviewers ? JSON.stringify(node.pr.reviewers) : null,
-                  projectStatus: null,
-                  baseBranch: null,
-                  createdAt: "",
-                  updatedAt: "",
-                };
-                if (prLinkIndex >= 0) {
-                  existing[prLinkIndex] = prLink;
-                  newMap.set(node.branchName, [...existing]);
-                } else {
-                  newMap.set(node.branchName, [prLink, ...existing]);
-                }
-              }
-            }
-            return newMap;
-          });
-        }
+        // branchLinks are updated via getBranchLinksBatch (DB is single source of truth)
+        // No need to update from snapshot - it may contain stale PR data
 
         // Only notify polling when scan is FULLY complete (isComplete flag)
         // When scan is fully complete, clear scanning state and start countdown

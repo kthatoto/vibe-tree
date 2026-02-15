@@ -2115,15 +2115,6 @@ export default function TreeDashboard() {
                       )}
                       <button
                         className="btn-icon"
-                        onClick={() => selectedPin && handleFetch(selectedPin.localPath)}
-                        disabled={fetching}
-                        title="Fetch from remote"
-                      >
-                        {fetching ? (fetchProgress || "Fetching...") : "Fetch"}
-                      </button>
-                      <span style={{ width: 1, height: 20, background: "#4b5563", margin: "0 4px" }} />
-                      <button
-                        className="btn-icon"
                         onClick={() => setFilterEnabled(!filterEnabled)}
                         title={filterEnabled ? "Disable filter" : "Enable filter"}
                       >

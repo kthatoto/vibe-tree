@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 
 // Debug mode helper
 function isDebugMode(): boolean {
@@ -114,8 +114,8 @@ export function useSmartPolling({
   customIntervals,
   customThresholds,
 }: SmartPollingOptions): SmartPollingState & SmartPollingControls {
-  // Merge custom intervals with defaults (convert seconds to ms)
-  const intervals = {
+  // Merge custom intervals with defaults (convert seconds to ms) - memoized to prevent infinite loops
+  const intervals = useMemo(() => ({
     burst: (customIntervals?.burst ?? 15) * 1000,
     dirty: (customIntervals?.dirty ?? 30) * 1000,
     ciPending: (customIntervals?.ciPending ?? 60) * 1000,
@@ -124,14 +124,14 @@ export function useSmartPolling({
     superIdle: (customIntervals?.superIdle ?? 300) * 1000,
     hidden: (customIntervals?.superIdle ?? 300) * 1000, // Same as superIdle
     debug: 10 * 1000, // Fixed at 10s
-  };
+  }), [customIntervals?.burst, customIntervals?.dirty, customIntervals?.ciPending, customIntervals?.active, customIntervals?.idle, customIntervals?.superIdle]);
 
-  // Merge custom thresholds with defaults (convert seconds to ms)
-  const thresholds = {
+  // Merge custom thresholds with defaults (convert seconds to ms) - memoized to prevent infinite loops
+  const thresholds = useMemo(() => ({
     idle: (customThresholds?.idle ?? 300) * 1000,
     superIdle: (customThresholds?.superIdle ?? 600) * 1000,
     ciPendingTimeout: (customThresholds?.ciPendingTimeout ?? 600) * 1000,
-  };
+  }), [customThresholds?.idle, customThresholds?.superIdle, customThresholds?.ciPendingTimeout]);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [state, setState] = useState<SmartPollingState>({
     interval: INTERVALS.ACTIVE_CLEAN,

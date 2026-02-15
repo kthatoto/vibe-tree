@@ -37,7 +37,7 @@ import { TaskCard } from "../components/TaskCard";
 import { DraggableTask, DroppableTreeNode } from "../components/DndComponents";
 import { PlanningPanel } from "../components/PlanningPanel";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
-import { useSmartPolling, INTERVALS } from "../hooks/useSmartPolling";
+import { useSmartPolling, INTERVALS, COUNTDOWN_INITIAL_PAUSE } from "../hooks/useSmartPolling";
 import type { PlanningSession, TaskNode, TaskEdge } from "../lib/api";
 
 // Scan progress bar component
@@ -113,13 +113,24 @@ function ScanProgressBar({ nextScanTime, interval, mode, scanProgress, isPolling
     }
   }, [displayState]);
 
-  // Visual countdown based on when UI started showing it
-  // This ensures bar starts at exactly 0% and progresses smoothly
-  // The 500ms delay in polling hook provides buffer for any timing differences
-  const visualTimeElapsed = countdownVisualStartTime ? Math.max(0, now - countdownVisualStartTime) : 0;
-  const countdownPercent = interval > 0 ? Math.min(100, (visualTimeElapsed / interval) * 100) : 0;
-  const visualTimeRemaining = Math.max(0, interval - visualTimeElapsed);
-  const secondsLeft = Math.ceil(visualTimeRemaining / 1000);
+  // Visual countdown with initial pause at 0%
+  const timeSinceCountdownStart = countdownVisualStartTime ? Math.max(0, now - countdownVisualStartTime) : 0;
+  const isInInitialPause = timeSinceCountdownStart < COUNTDOWN_INITIAL_PAUSE;
+
+  let countdownPercent: number;
+  let secondsLeft: number;
+
+  if (isInInitialPause) {
+    // During initial pause: stay at 0%
+    countdownPercent = 0;
+    secondsLeft = Math.ceil(interval / 1000);
+  } else {
+    // After pause: progress from 0% to 100%
+    const timeSincePauseEnded = timeSinceCountdownStart - COUNTDOWN_INITIAL_PAUSE;
+    countdownPercent = interval > 0 ? Math.min(100, (timeSincePauseEnded / interval) * 100) : 0;
+    const visualTimeRemaining = Math.max(0, interval - timeSincePauseEnded);
+    secondsLeft = Math.ceil(visualTimeRemaining / 1000);
+  }
 
   // Calculate scan progress percentage (0% if no progress yet)
   const scanPercent = scanProgress ? Math.round((scanProgress.current / scanProgress.total) * 100) : 0;
@@ -801,7 +812,7 @@ export default function TreeDashboard() {
           // Must match queueProgressUpdate(null) delay so countdown starts fresh
           setTimeout(() => {
             notifyScanCompleteRef.current();
-          }, 1500); // Same delay as progress clear
+          }, 2000); // Must match progress clear delay (2000ms)
         }
       }
     });

@@ -71,6 +71,12 @@ export const INTERVALS = {
 /** CI Pending timeout: after 10min, fall back to idle */
 const CI_PENDING_TIMEOUT = 10 * 60 * 1000;
 
+/** Initial pause at 0% before countdown bar starts moving (for testing: 5s, production: 500ms) */
+export const COUNTDOWN_INITIAL_PAUSE = 5000; // 5s for testing
+
+/** Delay at 100% before scan actually starts */
+export const SCAN_START_DELAY = 500;
+
 /**
  * Smart polling hook that adjusts polling frequency based on:
  * - Window visibility (active vs hidden)
@@ -191,7 +197,9 @@ export function useSmartPolling({
     }
 
     const { interval, mode } = getIntervalAndMode();
-    const nextScanTime = Date.now() + interval;
+    // Total time until scan = initial pause + countdown interval + delay at 100%
+    const totalTime = COUNTDOWN_INITIAL_PAUSE + interval + SCAN_START_DELAY;
+    const nextScanTime = Date.now() + totalTime;
     setState(prev => ({ ...prev, interval, mode, nextScanTime }));
 
     timerRef.current = setTimeout(() => {
@@ -201,22 +209,19 @@ export function useSmartPolling({
         return;
       }
 
-      // Brief delay at 100% before starting scan (let user see full progress bar)
-      setTimeout(() => {
-        // Trigger scan - don't schedule next until scan completes
-        const now = Date.now();
-        waitingForScanRef.current = true;
-        setState(prev => ({ ...prev, lastScanTime: now, isScanning: true, nextScanTime: null }));
-        onTriggerScan(localPath);
+      // Trigger scan
+      const now = Date.now();
+      waitingForScanRef.current = true;
+      setState(prev => ({ ...prev, lastScanTime: now, isScanning: true, nextScanTime: null }));
+      onTriggerScan(localPath);
 
-        // Decrement burst count if in burst mode
-        if (burstCount > 0) {
-          setBurstCount(prev => prev - 1);
-        }
+      // Decrement burst count if in burst mode
+      if (burstCount > 0) {
+        setBurstCount(prev => prev - 1);
+      }
 
-        // Note: next poll will be scheduled when notifyScanComplete is called
-      }, 500); // 0.5s delay at 100%
-    }, interval);
+      // Note: next poll will be scheduled when notifyScanComplete is called
+    }, totalTime);
   }, [enabled, localPath, isEditingEdge, getIntervalAndMode, onTriggerScan, burstCount]);
 
   /**

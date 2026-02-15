@@ -35,9 +35,28 @@ export interface WorktreeSettings {
   worktreeDeleteCommand?: string;
 }
 
+export interface PollingIntervals {
+  burst: number;        // After PR update detected (default: 15s)
+  dirty: number;        // When worktree has uncommitted changes (default: 30s)
+  ciPending: number;    // When PR has pending CI checks (default: 60s)
+  active: number;       // Normal active window (default: 60s)
+  idle: number;         // Idle tier 1 (default: 180s = 3min)
+  superIdle: number;    // Idle tier 2 (default: 300s = 5min)
+}
+
+export interface PollingThresholds {
+  idle: number;         // Time without changes before entering idle (default: 300s = 5min)
+  superIdle: number;    // Time without changes before entering super idle (default: 600s = 10min)
+  ciPendingTimeout: number; // Max time to stay in CI pending mode (default: 600s = 10min)
+}
+
 export interface PollingSettings {
   // Number of PRs to fetch during scan (1-20, default: 5)
   prFetchCount: number;
+  // Polling intervals (in seconds)
+  intervals?: PollingIntervals;
+  // Thresholds for phase transitions (in seconds)
+  thresholds?: PollingThresholds;
 }
 
 export interface ProjectRule {

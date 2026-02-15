@@ -28,9 +28,26 @@ export const pollingSettingsSchema = z.object({
   prFetchCount: z.number().int().min(1).max(20).default(5),
 });
 
+const pollingIntervalsSchema = z.object({
+  burst: z.number().int().min(5).max(300),
+  dirty: z.number().int().min(5).max(600),
+  ciPending: z.number().int().min(10).max(600),
+  active: z.number().int().min(10).max(600),
+  idle: z.number().int().min(30).max(1800),
+  superIdle: z.number().int().min(60).max(3600),
+}).optional();
+
+const pollingThresholdsSchema = z.object({
+  idle: z.number().int().min(60).max(1800),
+  superIdle: z.number().int().min(120).max(3600),
+  ciPendingTimeout: z.number().int().min(60).max(3600),
+}).optional();
+
 export const updatePollingSettingsSchema = z.object({
   repoId: repoIdSchema,
   prFetchCount: z.number().int().min(1).max(20),
+  intervals: pollingIntervalsSchema,
+  thresholds: pollingThresholdsSchema,
 });
 
 export type UpdatePollingSettingsInput = z.infer<typeof updatePollingSettingsSchema>;

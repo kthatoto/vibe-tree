@@ -260,6 +260,8 @@ projectRulesRouter.get("/polling", async (c) => {
       id: null,
       repoId: query.repoId,
       prFetchCount: 5,
+      intervals: undefined,
+      thresholds: undefined,
     });
   }
 
@@ -268,6 +270,8 @@ projectRulesRouter.get("/polling", async (c) => {
     id: rule.id,
     repoId: rule.repoId,
     prFetchCount: ruleData.prFetchCount ?? 5,
+    intervals: ruleData.intervals,
+    thresholds: ruleData.thresholds,
   });
 });
 
@@ -279,6 +283,8 @@ projectRulesRouter.post("/polling", async (c) => {
   const now = new Date().toISOString();
   const ruleJson = JSON.stringify({
     prFetchCount: input.prFetchCount,
+    intervals: input.intervals,
+    thresholds: input.thresholds,
   });
 
   // Check if rule exists
@@ -325,6 +331,8 @@ projectRulesRouter.post("/polling", async (c) => {
     id: ruleId,
     repoId: input.repoId,
     prFetchCount: input.prFetchCount,
+    intervals: input.intervals,
+    thresholds: input.thresholds,
   };
 
   // Broadcast update

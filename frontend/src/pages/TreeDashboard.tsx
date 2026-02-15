@@ -381,6 +381,21 @@ export default function TreeDashboard() {
   const [worktreePostDeleteScript, setWorktreePostDeleteScript] = useState("");
   // Polling settings
   const [pollingPrFetchCount, setPollingPrFetchCount] = useState(5);
+  // Polling intervals (in seconds)
+  const [pollingIntervals, setPollingIntervals] = useState<{
+    burst: number;
+    dirty: number;
+    ciPending: number;
+    active: number;
+    idle: number;
+    superIdle: number;
+  } | null>(null);
+  // Polling thresholds (in seconds)
+  const [pollingThresholds, setPollingThresholds] = useState<{
+    idle: number;
+    superIdle: number;
+    ciPendingTimeout: number;
+  } | null>(null);
   // Settings modal category
   const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "polling" | "cleanup" | "debug">("branch");
   const [debugModeEnabled, setDebugModeEnabled] = useState(() => localStorage.getItem("vibe-tree-debug-mode") === "true");
@@ -573,6 +588,8 @@ export default function TreeDashboard() {
     hasPendingCI,
     onTriggerScan: triggerScan,
     enabled: !!snapshot, // Only poll when we have a snapshot
+    customIntervals: pollingIntervals || undefined,
+    customThresholds: pollingThresholds || undefined,
   });
 
   // Ref for notifyScanComplete to avoid dependency issues in useEffect
@@ -1441,6 +1458,8 @@ export default function TreeDashboard() {
       setWorktreePostCreateScript(wtSettings.postCreateScript || "");
       setWorktreePostDeleteScript(wtSettings.postDeleteScript || "");
       setPollingPrFetchCount(pollSettings.prFetchCount ?? 5);
+      setPollingIntervals(pollSettings.intervals || null);
+      setPollingThresholds(pollSettings.thresholds || null);
     } catch {
       // No rule exists yet
       setSettingsRule({ patterns: [] });
@@ -1449,6 +1468,8 @@ export default function TreeDashboard() {
       setWorktreePostCreateScript("");
       setWorktreePostDeleteScript("");
       setPollingPrFetchCount(5);
+      setPollingIntervals(null);
+      setPollingThresholds(null);
     } finally {
       setSettingsLoading(false);
     }
@@ -1480,6 +1501,8 @@ export default function TreeDashboard() {
       await api.updatePollingSettings({
         repoId: snapshot.repoId,
         prFetchCount: pollingPrFetchCount,
+        intervals: pollingIntervals || undefined,
+        thresholds: pollingThresholds || undefined,
       });
 
       // Save default branch (empty string clears it)
@@ -2643,19 +2666,184 @@ export default function TreeDashboard() {
                         <div className="settings-section">
                           <label>PR Fetch Count</label>
                           <p style={{ marginTop: 4, color: "#9ca3af" }}>
-                            Number of PRs to refresh per scan. Higher values provide more up-to-date PR status but increase API calls.
+                            Number of PRs to refresh per scan (1-20). Higher values = more API calls.
                           </p>
-                          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
+                          <input
+                            type="number"
+                            value={pollingPrFetchCount}
+                            onChange={(e) => setPollingPrFetchCount(Math.min(20, Math.max(1, parseInt(e.target.value) || 1)))}
+                            min={1}
+                            max={20}
+                            style={{ width: 80, padding: "4px 8px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "white" }}
+                          />
+                        </div>
+
+                        <h4 style={{ marginTop: 24, marginBottom: 8, color: "#e5e7eb" }}>Polling Intervals (seconds)</h4>
+                        <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 16 }}>
+                          How often to scan based on current state. Leave empty to use defaults.
+                        </p>
+
+                        <div className="settings-section" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                          <div>
+                            <label style={{ fontSize: 13 }}>Burst</label>
+                            <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>After PR update detected</p>
                             <input
-                              type="range"
-                              value={pollingPrFetchCount}
-                              onChange={(e) => setPollingPrFetchCount(parseInt(e.target.value))}
-                              min={1}
-                              max={20}
-                              style={{ flex: 1 }}
+                              type="number"
+                              value={pollingIntervals?.burst ?? ""}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                setPollingIntervals(prev => prev ? { ...prev, burst: val || 15 } : { burst: val || 15, dirty: 30, ciPending: 60, active: 60, idle: 180, superIdle: 300 });
+                              }}
+                              placeholder="15"
+                              min={5}
+                              max={300}
+                              style={{ width: 80, padding: "4px 8px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "white" }}
                             />
-                            <span style={{ minWidth: 24, textAlign: "center", fontWeight: 500 }}>{pollingPrFetchCount}</span>
                           </div>
+                          <div>
+                            <label style={{ fontSize: 13 }}>Dirty</label>
+                            <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>Worktree has uncommitted changes</p>
+                            <input
+                              type="number"
+                              value={pollingIntervals?.dirty ?? ""}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                setPollingIntervals(prev => prev ? { ...prev, dirty: val || 30 } : { burst: 15, dirty: val || 30, ciPending: 60, active: 60, idle: 180, superIdle: 300 });
+                              }}
+                              placeholder="30"
+                              min={5}
+                              max={600}
+                              style={{ width: 80, padding: "4px 8px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "white" }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 13 }}>CI Pending</label>
+                            <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>PR has pending CI checks</p>
+                            <input
+                              type="number"
+                              value={pollingIntervals?.ciPending ?? ""}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                setPollingIntervals(prev => prev ? { ...prev, ciPending: val || 60 } : { burst: 15, dirty: 30, ciPending: val || 60, active: 60, idle: 180, superIdle: 300 });
+                              }}
+                              placeholder="60"
+                              min={10}
+                              max={600}
+                              style={{ width: 80, padding: "4px 8px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "white" }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 13 }}>Active</label>
+                            <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>Normal active window</p>
+                            <input
+                              type="number"
+                              value={pollingIntervals?.active ?? ""}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                setPollingIntervals(prev => prev ? { ...prev, active: val || 60 } : { burst: 15, dirty: 30, ciPending: 60, active: val || 60, idle: 180, superIdle: 300 });
+                              }}
+                              placeholder="60"
+                              min={10}
+                              max={600}
+                              style={{ width: 80, padding: "4px 8px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "white" }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 13 }}>Idle</label>
+                            <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>No changes for a while</p>
+                            <input
+                              type="number"
+                              value={pollingIntervals?.idle ?? ""}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                setPollingIntervals(prev => prev ? { ...prev, idle: val || 180 } : { burst: 15, dirty: 30, ciPending: 60, active: 60, idle: val || 180, superIdle: 300 });
+                              }}
+                              placeholder="180"
+                              min={30}
+                              max={1800}
+                              style={{ width: 80, padding: "4px 8px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "white" }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 13 }}>Super Idle</label>
+                            <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>Long time without changes</p>
+                            <input
+                              type="number"
+                              value={pollingIntervals?.superIdle ?? ""}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                setPollingIntervals(prev => prev ? { ...prev, superIdle: val || 300 } : { burst: 15, dirty: 30, ciPending: 60, active: 60, idle: 180, superIdle: val || 300 });
+                              }}
+                              placeholder="300"
+                              min={60}
+                              max={3600}
+                              style={{ width: 80, padding: "4px 8px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "white" }}
+                            />
+                          </div>
+                        </div>
+
+                        <h4 style={{ marginTop: 24, marginBottom: 8, color: "#e5e7eb" }}>Phase Transition Thresholds (seconds)</h4>
+                        <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 16 }}>
+                          How long without activity before transitioning to slower polling. Leave empty to use defaults.
+                        </p>
+
+                        <div className="settings-section" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                          <div>
+                            <label style={{ fontSize: 13 }}>Idle Threshold</label>
+                            <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>Time before entering idle mode</p>
+                            <input
+                              type="number"
+                              value={pollingThresholds?.idle ?? ""}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                setPollingThresholds(prev => prev ? { ...prev, idle: val || 300 } : { idle: val || 300, superIdle: 600, ciPendingTimeout: 600 });
+                              }}
+                              placeholder="300"
+                              min={60}
+                              max={1800}
+                              style={{ width: 80, padding: "4px 8px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "white" }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 13 }}>Super Idle Threshold</label>
+                            <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>Time before entering super idle</p>
+                            <input
+                              type="number"
+                              value={pollingThresholds?.superIdle ?? ""}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                setPollingThresholds(prev => prev ? { ...prev, superIdle: val || 600 } : { idle: 300, superIdle: val || 600, ciPendingTimeout: 600 });
+                              }}
+                              placeholder="600"
+                              min={120}
+                              max={3600}
+                              style={{ width: 80, padding: "4px 8px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "white" }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 13 }}>CI Pending Timeout</label>
+                            <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>Max time in CI pending mode</p>
+                            <input
+                              type="number"
+                              value={pollingThresholds?.ciPendingTimeout ?? ""}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                setPollingThresholds(prev => prev ? { ...prev, ciPendingTimeout: val || 600 } : { idle: 300, superIdle: 600, ciPendingTimeout: val || 600 });
+                              }}
+                              placeholder="600"
+                              min={60}
+                              max={3600}
+                              style={{ width: 80, padding: "4px 8px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "white" }}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: 24, padding: 12, background: "#1f2937", borderRadius: 6, fontSize: 13 }}>
+                          <p style={{ color: "#9ca3af", margin: 0 }}>
+                            <strong style={{ color: "#e5e7eb" }}>Current mode:</strong> {pollingState.mode}
+                            {" • "}
+                            <strong style={{ color: "#e5e7eb" }}>Interval:</strong> {pollingState.interval / 1000}s
+                          </p>
                         </div>
                       </>
                     )}

@@ -5,6 +5,21 @@ function isDebugMode(): boolean {
   return localStorage.getItem("vibe-tree-debug-mode") === "true";
 }
 
+export interface PollingIntervalsConfig {
+  burst?: number;        // seconds
+  dirty?: number;        // seconds
+  ciPending?: number;    // seconds
+  active?: number;       // seconds
+  idle?: number;         // seconds
+  superIdle?: number;    // seconds
+}
+
+export interface PollingThresholdsConfig {
+  idle?: number;         // seconds
+  superIdle?: number;    // seconds
+  ciPendingTimeout?: number; // seconds
+}
+
 interface SmartPollingOptions {
   /** Local path of the repository */
   localPath: string | null;
@@ -18,6 +33,10 @@ interface SmartPollingOptions {
   onTriggerScan: (localPath: string) => void;
   /** Whether polling is enabled */
   enabled?: boolean;
+  /** Custom polling intervals (in seconds) */
+  customIntervals?: PollingIntervalsConfig;
+  /** Custom thresholds for phase transitions (in seconds) */
+  customThresholds?: PollingThresholdsConfig;
 }
 
 type PollingMode = "burst" | "dirty" | "ci_pending" | "active" | "idle" | "super_idle" | "hidden" | "debug";
@@ -92,7 +111,27 @@ export function useSmartPolling({
   hasPendingCI = false,
   onTriggerScan,
   enabled = true,
+  customIntervals,
+  customThresholds,
 }: SmartPollingOptions): SmartPollingState & SmartPollingControls {
+  // Merge custom intervals with defaults (convert seconds to ms)
+  const intervals = {
+    burst: (customIntervals?.burst ?? 15) * 1000,
+    dirty: (customIntervals?.dirty ?? 30) * 1000,
+    ciPending: (customIntervals?.ciPending ?? 60) * 1000,
+    active: (customIntervals?.active ?? 60) * 1000,
+    idle: (customIntervals?.idle ?? 180) * 1000,
+    superIdle: (customIntervals?.superIdle ?? 300) * 1000,
+    hidden: (customIntervals?.superIdle ?? 300) * 1000, // Same as superIdle
+    debug: 10 * 1000, // Fixed at 10s
+  };
+
+  // Merge custom thresholds with defaults (convert seconds to ms)
+  const thresholds = {
+    idle: (customThresholds?.idle ?? 300) * 1000,
+    superIdle: (customThresholds?.superIdle ?? 600) * 1000,
+    ciPendingTimeout: (customThresholds?.ciPendingTimeout ?? 600) * 1000,
+  };
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [state, setState] = useState<SmartPollingState>({
     interval: INTERVALS.ACTIVE_CLEAN,
@@ -141,47 +180,45 @@ export function useSmartPolling({
   const getIntervalAndMode = useCallback((): { interval: number; mode: PollingMode } => {
     // Debug mode = always 10s
     if (isDebugMode()) {
-      return { interval: INTERVALS.DEBUG, mode: "debug" };
+      return { interval: intervals.debug, mode: "debug" };
     }
 
     // Document hidden = long interval
     if (document.visibilityState === "hidden") {
-      return { interval: INTERVALS.HIDDEN, mode: "hidden" };
+      return { interval: intervals.hidden, mode: "hidden" };
     }
 
     // Burst mode = fast polling
     if (burstCount > 0) {
-      return { interval: INTERVALS.BURST, mode: "burst" };
+      return { interval: intervals.burst, mode: "burst" };
     }
 
     // Active + dirty worktree = short interval
     if (hasDirtyWorktree) {
-      return { interval: INTERVALS.ACTIVE_DIRTY, mode: "dirty" };
+      return { interval: intervals.dirty, mode: "dirty" };
     }
 
-    // Active + pending CI = 1min interval (but timeout after 10min)
+    // Active + pending CI (but timeout after threshold)
     if (hasPendingCI) {
       const ciPendingDuration = ciPendingStartTime ? Date.now() - ciPendingStartTime : 0;
-      if (ciPendingDuration < CI_PENDING_TIMEOUT) {
-        return { interval: INTERVALS.CI_PENDING, mode: "ci_pending" };
+      if (ciPendingDuration < thresholds.ciPendingTimeout) {
+        return { interval: intervals.ciPending, mode: "ci_pending" };
       }
       // CI Pending for too long, fall through to idle check
     }
 
     // Check idle time
     const idleTime = Date.now() - lastChangeTime;
-    if (idleTime > 10 * 60 * 1000) {
-      // 10min without changes
-      return { interval: INTERVALS.IDLE_2, mode: "super_idle" };
+    if (idleTime > thresholds.superIdle) {
+      return { interval: intervals.superIdle, mode: "super_idle" };
     }
-    if (idleTime > 5 * 60 * 1000) {
-      // 5min without changes
-      return { interval: INTERVALS.IDLE_1, mode: "idle" };
+    if (idleTime > thresholds.idle) {
+      return { interval: intervals.idle, mode: "idle" };
     }
 
     // Active + clean = moderate interval
-    return { interval: INTERVALS.ACTIVE_CLEAN, mode: "active" };
-  }, [burstCount, hasDirtyWorktree, hasPendingCI, lastChangeTime, ciPendingStartTime]);
+    return { interval: intervals.active, mode: "active" };
+  }, [burstCount, hasDirtyWorktree, hasPendingCI, lastChangeTime, ciPendingStartTime, intervals, thresholds]);
 
   /**
    * Schedule the next poll

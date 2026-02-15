@@ -24,6 +24,21 @@ export interface WorktreeSettings {
 
 export interface PollingSettings {
   prFetchCount: number;
+  // Polling intervals (in seconds)
+  intervals?: {
+    burst: number;        // After PR update detected (default: 15s)
+    dirty: number;        // When worktree has uncommitted changes (default: 30s)
+    ciPending: number;    // When PR has pending CI checks (default: 60s)
+    active: number;       // Normal active window (default: 60s)
+    idle: number;         // Idle tier 1 (default: 180s = 3min)
+    superIdle: number;    // Idle tier 2 (default: 300s = 5min)
+  };
+  // Thresholds for transitioning to idle phases (in seconds)
+  thresholds?: {
+    idle: number;         // Time without changes before entering idle (default: 300s = 5min)
+    superIdle: number;    // Time without changes before entering super idle (default: 600s = 10min)
+    ciPendingTimeout: number; // Max time to stay in CI pending mode (default: 600s = 10min)
+  };
 }
 
 export interface Plan {
@@ -516,7 +531,7 @@ export const api = {
     fetchJson<PollingSettings & { id: number | null; repoId: string }>(
       `${API_BASE}/project-rules/polling?repoId=${encodeURIComponent(repoId)}`
     ),
-  updatePollingSettings: (data: { repoId: string; prFetchCount: number }) =>
+  updatePollingSettings: (data: { repoId: string } & PollingSettings) =>
     fetchJson<PollingSettings>(`${API_BASE}/project-rules/polling`, {
       method: "POST",
       body: JSON.stringify(data),

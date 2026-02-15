@@ -1427,7 +1427,7 @@ export default function BranchGraph({
               attributeName="stroke-dashoffset"
               from="0"
               to="24"
-              dur="0.8s"
+              dur="1.5s"
               repeatCount="indefinite"
             />
           </rect>

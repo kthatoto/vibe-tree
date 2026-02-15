@@ -54,43 +54,82 @@ const MODE_LABELS: Record<PollingMode, { label: string; color: string }> = {
   debug: { label: "Debug", color: "#a855f7" },
 };
 
-// Separate component for time display to avoid re-rendering the progress bar
-function ScanTimeDisplay({ nextScanTime, interval }: { nextScanTime: number; interval: number }) {
-  const [timeLeft, setTimeLeft] = useState(0);
+interface ScanProgress {
+  current: number;
+  total: number;
+  stage: string;
+}
+
+// Stage display names
+const STAGE_LABELS: Record<string, string> = {
+  edges_cached: "Loading cache...",
+  worktrees: "Checking worktrees...",
+  tree: "Building tree...",
+  aheadBehind: "Calculating commits...",
+  remoteAheadBehind: "Checking remote...",
+  final: "Finalizing...",
+  pr_refreshed: "Refreshing PRs...",
+  complete: "Complete!",
+};
+
+// Display state: "scanning" when we have progress, "countdown" when we have nextScanTime
+type DisplayState = "scanning" | "countdown" | "idle";
+
+function ScanProgressBar({ nextScanTime, interval, mode, scanProgress, isPollingScanning, isInitialLoad }: {
+  nextScanTime: number;
+  interval: number;
+  mode: PollingMode;
+  scanProgress: ScanProgress | null;
+  isPollingScanning: boolean; // true when scan triggered but no progress yet
+  isInitialLoad: boolean; // true until first scan completes
+}) {
+  const modeInfo = MODE_LABELS[mode];
+
+  // Single source of truth: calculate progress and time from current time
+  const [now, setNow] = useState(Date.now());
+
+  // Update time every 100ms for smooth progress bar
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 100);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Determine display state:
+  // - "scanning" if we have progress data OR if scan is triggered (show 0%) OR on initial load
+  // - "countdown" if we have nextScanTime and not scanning
+  // - "idle" otherwise
+  const isScanning = scanProgress !== null || isPollingScanning || isInitialLoad;
+  const displayState: DisplayState = isScanning ? "scanning" : nextScanTime ? "countdown" : "idle";
+
+  // Track visual countdown start time (when UI actually starts showing countdown)
+  const [countdownVisualStartTime, setCountdownVisualStartTime] = useState<number | null>(null);
 
   useEffect(() => {
-    const update = () => {
-      const remaining = Math.max(0, nextScanTime - Date.now());
-      setTimeLeft(Math.ceil(remaining / 1000));
-    };
-    update();
-    const timer = setInterval(update, 1000);
-    return () => clearInterval(timer);
-  }, [nextScanTime]);
+    if (displayState === "countdown") {
+      // Record when we actually started showing the countdown
+      setCountdownVisualStartTime(Date.now());
+    } else {
+      setCountdownVisualStartTime(null);
+    }
+  }, [displayState]);
+
+  // Visual countdown based on when UI started showing it
+  // This ensures bar starts at exactly 0% and progresses smoothly
+  // The 500ms delay in polling hook provides buffer for any timing differences
+  const visualTimeElapsed = countdownVisualStartTime ? Math.max(0, now - countdownVisualStartTime) : 0;
+  const countdownPercent = interval > 0 ? Math.min(100, (visualTimeElapsed / interval) * 100) : 0;
+  const visualTimeRemaining = Math.max(0, interval - visualTimeElapsed);
+  const secondsLeft = Math.ceil(visualTimeRemaining / 1000);
+
+  // Calculate scan progress percentage (0% if no progress yet)
+  const scanPercent = scanProgress ? Math.round((scanProgress.current / scanProgress.total) * 100) : 0;
+  const scanTotal = scanProgress?.total ?? 7; // Default to 7 steps
+  const stageLabel = scanProgress?.stage ? (STAGE_LABELS[scanProgress.stage] ?? scanProgress.stage) : "Starting...";
 
   const formatInterval = (ms: number) => {
     if (ms >= 60000) return `${Math.round(ms / 60000)}m`;
     return `${Math.round(ms / 1000)}s`;
   };
-
-  return <span>{timeLeft}s ({formatInterval(interval)})</span>;
-}
-
-function ScanProgressBar({ nextScanTime, interval, isScanning, mode }: {
-  nextScanTime: number;
-  interval: number;
-  isScanning: boolean;
-  mode: PollingMode;
-}) {
-  const modeInfo = MODE_LABELS[mode];
-  const durationSec = interval / 1000;
-
-  // Calculate elapsed time only once per nextScanTime change
-  const elapsedSec = useMemo(() => {
-    const now = Date.now();
-    const elapsed = Math.max(0, interval - (nextScanTime - now));
-    return elapsed / 1000;
-  }, [nextScanTime, interval]);
 
   return (
     <div style={{ padding: "4px 8px", marginTop: 8 }}>
@@ -102,8 +141,8 @@ function ScanProgressBar({ nextScanTime, interval, isScanning, mode }: {
         marginBottom: 2,
       }}>
         <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          {isScanning ? "Scanning..." : "Next scan"}
-          {!isScanning && (
+          {displayState === "scanning" ? stageLabel : "Next scan"}
+          {displayState === "countdown" && (
             <span style={{
               background: modeInfo.color,
               color: "#fff",
@@ -115,7 +154,11 @@ function ScanProgressBar({ nextScanTime, interval, isScanning, mode }: {
             </span>
           )}
         </span>
-        {!isScanning && <ScanTimeDisplay nextScanTime={nextScanTime} interval={interval} />}
+        {displayState === "scanning" ? (
+          <span>{scanPercent}% ({scanProgress?.current ?? 0}/{scanTotal})</span>
+        ) : displayState === "countdown" ? (
+          <span>{secondsLeft}s ({formatInterval(interval)})</span>
+        ) : null}
       </div>
       <div style={{
         height: 3,
@@ -123,33 +166,22 @@ function ScanProgressBar({ nextScanTime, interval, isScanning, mode }: {
         borderRadius: 2,
         overflow: "hidden",
       }}>
-        {isScanning ? (
+        {displayState === "scanning" ? (
           <div style={{
             height: "100%",
-            width: "100%",
+            width: `${scanPercent}%`,
             background: "#60a5fa",
-            animation: "pulse 1s infinite",
+            transition: "width 0.3s ease-out",
           }} />
-        ) : (
-          <div
-            key={nextScanTime}
-            style={{
-              height: "100%",
-              width: "100%",
-              background: modeInfo.color,
-              transformOrigin: "left",
-              animation: `progressBar ${durationSec}s linear forwards`,
-              animationDelay: `-${elapsedSec}s`,
-            }}
-          />
-        )}
+        ) : displayState === "countdown" ? (
+          <div style={{
+            height: "100%",
+            width: `${countdownPercent}%`,
+            background: modeInfo.color,
+            transition: "width 0.1s linear",
+          }} />
+        ) : null}
       </div>
-      <style>{`
-        @keyframes progressBar {
-          from { transform: scaleX(0); }
-          to { transform: scaleX(1); }
-        }
-      `}</style>
     </div>
   );
 }
@@ -356,7 +388,44 @@ export default function TreeDashboard() {
 
   // Next scan countdown
   const [nextScanIn, setNextScanIn] = useState<number | null>(null);
-  const [scanStage, setScanStage] = useState<string | null>(null);
+  // Scan progress state (null when not scanning)
+  // We use a queue to display progress with minimum delays between steps
+  const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
+  const progressQueueRef = useRef<ScanProgress[]>([]);
+  const processingQueueRef = useRef(false);
+  // Track if first scan has completed (for initial load state)
+  const [hasCompletedFirstScan, setHasCompletedFirstScan] = useState(false);
+
+  // Process progress queue with minimum delay between steps
+  const processProgressQueue = useCallback(() => {
+    if (processingQueueRef.current || progressQueueRef.current.length === 0) return;
+
+    processingQueueRef.current = true;
+    const next = progressQueueRef.current.shift()!;
+    setScanProgress(next);
+
+    // Determine delay: longer for 100%, moderate for others
+    const isComplete = next.current === next.total;
+    const delay = isComplete ? 1500 : 600; // 1.5s for 100%, 0.6s for others
+
+    setTimeout(() => {
+      processingQueueRef.current = false;
+      processProgressQueue();
+    }, delay);
+  }, []);
+
+  // Queue a progress update
+  const queueProgressUpdate = useCallback((progress: ScanProgress | null) => {
+    if (progress === null) {
+      // Clear queue and progress
+      progressQueueRef.current = [];
+      processingQueueRef.current = false;
+      setScanProgress(null);
+    } else {
+      progressQueueRef.current.push(progress);
+      processProgressQueue();
+    }
+  }, [processProgressQueue]);
 
   // Bottom panel resize state (persisted in localStorage)
   const DEFAULT_BOTTOM_HEIGHT = 500;
@@ -402,15 +471,8 @@ export default function TreeDashboard() {
       currentSnapshotVersion.current = version; // Set version from DB
       setLoading(false);
 
-      // Start background scan (don't await - updates come via WebSocket)
-      if (!isScanningRef.current) {
-        isScanningRef.current = true;
-        api.startScan(localPath).catch((err) => {
-          console.warn("[TreeDashboard] Background scan failed:", err);
-        }).finally(() => {
-          isScanningRef.current = false;
-        });
-      }
+      // Note: Background scan is triggered by the caller after loadSnapshot completes
+      // This ensures proper coordination with the polling hook
     } catch (err) {
       setError((err as Error).message);
       setLoading(false);
@@ -451,24 +513,32 @@ export default function TreeDashboard() {
   }, []);
 
   // Trigger background scan without loading state (with debounce protection)
+  // Note: isScanningRef is only cleared when WebSocket sends isComplete: true
   const triggerScan = useCallback((localPath: string) => {
-    if (isScanningRef.current) return; // Prevent multiple concurrent scans
+    if (isScanningRef.current) return;
     isScanningRef.current = true;
     api.startScan(localPath).catch((err) => {
       console.warn("[TreeDashboard] Background scan failed:", err);
-    }).finally(() => {
-      isScanningRef.current = false;
+      isScanningRef.current = false; // Only reset on error
     });
+    // Note: isScanningRef is cleared in WebSocket handler when isComplete is received
   }, []);
 
   const handleFetch = useCallback(async (localPath: string) => {
     if (!localPath) return;
+    // Still do the fetch even if scan is in progress, just skip the scan
     setFetching(true);
     setError(null);
     try {
       await api.fetch(localPath);
-      // Trigger background scan after fetch (don't await)
-      api.startScan(localPath).catch(console.warn);
+      // Trigger background scan after fetch (with guard)
+      if (!isScanningRef.current) {
+        isScanningRef.current = true;
+        api.startScan(localPath).catch((err) => {
+          console.warn("[Fetch] Scan failed:", err);
+          isScanningRef.current = false;
+        });
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -479,7 +549,7 @@ export default function TreeDashboard() {
   // Smart polling: auto-refresh based on activity and visibility
   const hasDirtyWorktree = snapshot?.worktrees.some((w) => w.dirty) ?? false;
   const hasPendingCI = snapshot?.nodes.some((n) => n.pr?.checks === "PENDING") ?? false;
-  const { triggerBurst, markChange, notifyScanComplete, ...pollingState } = useSmartPolling({
+  const { triggerBurst, markChange, notifyScanComplete, triggerImmediateScan, ...pollingState } = useSmartPolling({
     localPath: selectedPin?.localPath ?? null,
     isEditingEdge: branchGraphEditMode,
     hasDirtyWorktree,
@@ -498,9 +568,27 @@ export default function TreeDashboard() {
   useEffect(() => {
     if (selectedPin && !snapshot) {
       setLoading(true);
+      setHasCompletedFirstScan(false); // Reset on project change
       loadSnapshot(selectedPin.id, selectedPin.localPath);
     }
   }, [selectedPin?.id, loadSnapshot]);
+
+  // Trigger immediate scan when snapshot is first loaded (to refresh from cache)
+  const hasTriggeredInitialScan = useRef(false);
+  useEffect(() => {
+    if (snapshot && !hasTriggeredInitialScan.current) {
+      hasTriggeredInitialScan.current = true;
+      // Small delay to ensure polling hook is ready
+      setTimeout(() => {
+        triggerImmediateScan();
+      }, 100);
+    }
+  }, [snapshot, triggerImmediateScan]);
+
+  // Reset initial scan flag when project changes
+  useEffect(() => {
+    hasTriggeredInitialScan.current = false;
+  }, [selectedPin?.id]);
 
   // Sync selectedNode with latest snapshot data
   useEffect(() => {
@@ -570,11 +658,30 @@ export default function TreeDashboard() {
       // Smart update: auto-merge safe changes, queue unsafe changes for user confirmation
       if (!msg.data || typeof msg.data !== "object") return;
 
-      const data = msg.data as { version?: number; stage?: string; isFinal?: boolean; snapshot?: ScanSnapshot; repoId?: string };
+      const data = msg.data as {
+        version?: number;
+        stage?: string;
+        isFinal?: boolean;
+        isComplete?: boolean;
+        progress?: { current: number; total: number };
+        snapshot?: ScanSnapshot;
+        repoId?: string;
+      };
 
-      // Track scan stage (no logging)
-      if (data.stage) {
-        setScanStage(data.isFinal ? null : data.stage);
+      // Track scan progress with queuing for smooth display
+      if (data.progress && data.stage) {
+        // Queue progress update (will be displayed with minimum delays)
+        queueProgressUpdate({ current: data.progress.current, total: data.progress.total, stage: data.stage });
+
+        if (data.isComplete) {
+          // Mark first scan as completed (for initial load state)
+          setHasCompletedFirstScan(true);
+          // Scan fully complete - clear after queue is processed (with extra delay for 100%)
+          // The queue processing adds 1.5s delay for 100%, so we wait for that + buffer
+          setTimeout(() => {
+            queueProgressUpdate(null);
+          }, 2000); // Wait for 100% display + buffer
+        }
       }
 
       // Verify repoId matches to prevent cross-project updates
@@ -679,8 +786,17 @@ export default function TreeDashboard() {
           });
         }
 
-        // Notify polling that scan is complete - start next countdown
-        notifyScanCompleteRef.current();
+        // Only notify polling when scan is FULLY complete (isComplete flag)
+        // When scan is fully complete, clear scanning state and start countdown
+        if (data.isComplete) {
+          // Clear the scanning lock immediately so new scans can be triggered
+          isScanningRef.current = false;
+          // Delay countdown start until after 100% display finishes
+          // Must match queueProgressUpdate(null) delay so countdown starts fresh
+          setTimeout(() => {
+            notifyScanCompleteRef.current();
+          }, 1500); // Same delay as progress clear
+        }
       }
     });
 
@@ -1746,12 +1862,14 @@ export default function TreeDashboard() {
         )}
 
         {/* Next scan progress bar */}
-        {(pollingState.nextScanTime || pollingState.isScanning || scanStage !== null) && (
+        {(pollingState.nextScanTime || pollingState.isScanning || scanProgress !== null || !hasCompletedFirstScan) && (
           <ScanProgressBar
             nextScanTime={pollingState.nextScanTime ?? Date.now()}
             interval={pollingState.interval}
-            isScanning={pollingState.isScanning || scanStage !== null}
             mode={pollingState.mode}
+            scanProgress={scanProgress}
+            isPollingScanning={pollingState.isScanning}
+            isInitialLoad={!hasCompletedFirstScan}
           />
         )}
 
@@ -1805,6 +1923,12 @@ export default function TreeDashboard() {
                   }}
                   onMouseEnter={() => hasBranch && setHoveredLogBranch(log.branch!)}
                   onMouseLeave={() => hasBranch && setHoveredLogBranch(null)}
+                  onClick={() => {
+                    if (hasBranch && snapshot) {
+                      const node = snapshot.nodes.find(n => n.branchName === log.branch);
+                      if (node) setSelectedNode(node);
+                    }
+                  }}
                 >
                   <span style={{ color: "#4b5563", flexShrink: 0 }}>{timeStr}</span>
                   {log.html ? (

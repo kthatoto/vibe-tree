@@ -42,6 +42,8 @@ interface SmartPollingControls {
   markChange: () => void;
   /** Notify that scan has completed - starts countdown for next scan */
   notifyScanComplete: () => void;
+  /** Trigger an immediate scan (for initial load) */
+  triggerImmediateScan: () => void;
 }
 
 /**
@@ -199,18 +201,21 @@ export function useSmartPolling({
         return;
       }
 
-      // Trigger scan - don't schedule next until scan completes
-      const now = Date.now();
-      waitingForScanRef.current = true;
-      setState(prev => ({ ...prev, lastScanTime: now, isScanning: true, nextScanTime: null }));
-      onTriggerScan(localPath);
+      // Brief delay at 100% before starting scan (let user see full progress bar)
+      setTimeout(() => {
+        // Trigger scan - don't schedule next until scan completes
+        const now = Date.now();
+        waitingForScanRef.current = true;
+        setState(prev => ({ ...prev, lastScanTime: now, isScanning: true, nextScanTime: null }));
+        onTriggerScan(localPath);
 
-      // Decrement burst count if in burst mode
-      if (burstCount > 0) {
-        setBurstCount(prev => prev - 1);
-      }
+        // Decrement burst count if in burst mode
+        if (burstCount > 0) {
+          setBurstCount(prev => prev - 1);
+        }
 
-      // Note: next poll will be scheduled when notifyScanComplete is called
+        // Note: next poll will be scheduled when notifyScanComplete is called
+      }, 500); // 0.5s delay at 100%
     }, interval);
   }, [enabled, localPath, isEditingEdge, getIntervalAndMode, onTriggerScan, burstCount]);
 
@@ -223,6 +228,26 @@ export function useSmartPolling({
     setState(prev => ({ ...prev, isScanning: false }));
     scheduleNextPoll();
   }, [scheduleNextPoll]);
+
+  /**
+   * Trigger an immediate scan (for initial load)
+   * This properly sets up the polling state so notifyScanComplete works correctly
+   */
+  const triggerImmediateScan = useCallback(() => {
+    if (!localPath || waitingForScanRef.current) return;
+
+    // Clear any existing timer
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    // Set state to scanning
+    const now = Date.now();
+    waitingForScanRef.current = true;
+    setState(prev => ({ ...prev, lastScanTime: now, isScanning: true, nextScanTime: null }));
+    onTriggerScan(localPath);
+  }, [localPath, onTriggerScan]);
 
   /**
    * Handle visibility change - reschedule with appropriate interval
@@ -280,5 +305,5 @@ export function useSmartPolling({
     scheduleNextPoll();
   }, [hasDirtyWorktree, hasPendingCI, burstCount, scheduleNextPoll]);
 
-  return { ...state, triggerBurst, markChange, notifyScanComplete };
+  return { ...state, triggerBurst, markChange, notifyScanComplete, triggerImmediateScan };
 }

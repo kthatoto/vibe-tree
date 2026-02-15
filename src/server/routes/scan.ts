@@ -541,6 +541,8 @@ scanRouter.post("/", async (c) => {
 
       console.log(`[Scan] Step 1 complete: ${currentEdges.length} edges from DB cache`);
       // Note: Intermediate broadcasts are for progress indication only, UI should NOT auto-update from these
+      // Progress: 7 total steps (edges_cached, worktrees, tree, aheadBehind, remoteAheadBehind, final, pr_refresh)
+      const TOTAL_STEPS = 7;
       broadcast({
         type: "scan.updated",
         repoId,
@@ -548,6 +550,8 @@ scanRouter.post("/", async (c) => {
           version: (repoPin?.cachedSnapshotVersion ?? 0),
           stage: "edges_cached",
           isFinal: false,
+          isComplete: false,
+          progress: { current: 1, total: TOTAL_STEPS },
           snapshot: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings),
         },
       });
@@ -568,6 +572,8 @@ scanRouter.post("/", async (c) => {
           version: (repoPin?.cachedSnapshotVersion ?? 0),
           stage: "worktrees",
           isFinal: false,
+          isComplete: false,
+          progress: { current: 2, total: TOTAL_STEPS },
           snapshot: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings),
         },
       });
@@ -641,6 +647,8 @@ scanRouter.post("/", async (c) => {
           version: (repoPin?.cachedSnapshotVersion ?? 0),
           stage: "tree",
           isFinal: false,
+          isComplete: false,
+          progress: { current: 3, total: TOTAL_STEPS },
           snapshot: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings),
         },
       });
@@ -654,6 +662,8 @@ scanRouter.post("/", async (c) => {
           version: (repoPin?.cachedSnapshotVersion ?? 0),
           stage: "aheadBehind",
           isFinal: false,
+          isComplete: false,
+          progress: { current: 4, total: TOTAL_STEPS },
           snapshot: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings),
         },
       });
@@ -667,6 +677,8 @@ scanRouter.post("/", async (c) => {
           version: (repoPin?.cachedSnapshotVersion ?? 0),
           stage: "remoteAheadBehind",
           isFinal: false,
+          isComplete: false,
+          progress: { current: 5, total: TOTAL_STEPS },
           snapshot: buildSnapshot(branchNames, currentDefaultBranch, currentNodes, currentEdges, currentWorktrees, currentWarnings),
         },
       });
@@ -700,6 +712,7 @@ scanRouter.post("/", async (c) => {
       }
 
       // Broadcast final result with metadata (UI uses this for notification, not auto-update)
+      // Note: isFinal=true but isComplete=false because PR refresh is still pending
       broadcast({
         type: "scan.updated",
         repoId,
@@ -707,6 +720,8 @@ scanRouter.post("/", async (c) => {
           version: newVersion,
           stage: "final",
           isFinal: true,
+          isComplete: false,
+          progress: { current: 6, total: TOTAL_STEPS },
           snapshot: finalSnapshot,
         },
       });
@@ -728,7 +743,20 @@ scanRouter.post("/", async (c) => {
 
         const freshPrs = await getPRs(localPath);
         if (freshPrs.length === 0) {
-          // No PRs found, skip
+          // No PRs found, send complete signal
+          broadcast({
+            type: "scan.updated",
+            repoId,
+            data: {
+              version: newVersion,
+              stage: "complete",
+              isFinal: true,
+              isComplete: true,
+              progress: { current: TOTAL_STEPS, total: TOTAL_STEPS },
+              snapshot: finalSnapshot,
+            },
+          });
+          console.log(`[Scan] No PRs found, scan complete for ${repoId}`);
         } else {
         // Get cached PR data for scoring
         const cachedPRs = await db.select().from(schema.branchLinks)
@@ -917,7 +945,7 @@ scanRouter.post("/", async (c) => {
           }).where(eq(schema.repoPins.id, repoPin.id));
         }
 
-        // Re-broadcast snapshot with fresh PR info
+        // Re-broadcast snapshot with fresh PR info - this is the truly complete scan
         broadcast({
           type: "scan.updated",
           repoId,
@@ -925,6 +953,8 @@ scanRouter.post("/", async (c) => {
             version: prRefreshVersion,
             stage: "pr_refreshed",
             isFinal: true,
+            isComplete: true,
+            progress: { current: TOTAL_STEPS, total: TOTAL_STEPS },
             snapshot: prRefreshedSnapshot,
           },
         });

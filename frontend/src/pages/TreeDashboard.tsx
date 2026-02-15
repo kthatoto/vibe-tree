@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   PointerSensor,
@@ -54,39 +54,43 @@ const MODE_LABELS: Record<PollingMode, { label: string; color: string }> = {
   debug: { label: "Debug", color: "#a855f7" },
 };
 
-function ScanProgressBar({ nextScanTime, interval, isScanning, mode }: {
-  nextScanTime: number;
-  interval: number;
-  isScanning: boolean;
-  mode: PollingMode;
-}) {
-  const [progress, setProgress] = useState(0);
+// Separate component for time display to avoid re-rendering the progress bar
+function ScanTimeDisplay({ nextScanTime, interval }: { nextScanTime: number; interval: number }) {
   const [timeLeft, setTimeLeft] = useState(0);
-  const rafRef = useRef<number | null>(null);
 
-  // Smooth animation using requestAnimationFrame
   useEffect(() => {
-    const animate = () => {
-      const now = Date.now();
-      const remaining = Math.max(0, nextScanTime - now);
-      const elapsed = interval - remaining;
-      setProgress(Math.min(100, (elapsed / interval) * 100));
+    const update = () => {
+      const remaining = Math.max(0, nextScanTime - Date.now());
       setTimeLeft(Math.ceil(remaining / 1000));
-      rafRef.current = requestAnimationFrame(animate);
     };
-
-    animate();
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [nextScanTime, interval]);
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [nextScanTime]);
 
   const formatInterval = (ms: number) => {
     if (ms >= 60000) return `${Math.round(ms / 60000)}m`;
     return `${Math.round(ms / 1000)}s`;
   };
 
+  return <span>{timeLeft}s ({formatInterval(interval)})</span>;
+}
+
+function ScanProgressBar({ nextScanTime, interval, isScanning, mode }: {
+  nextScanTime: number;
+  interval: number;
+  isScanning: boolean;
+  mode: PollingMode;
+}) {
   const modeInfo = MODE_LABELS[mode];
+  const durationSec = interval / 1000;
+
+  // Calculate elapsed time only once per nextScanTime change
+  const elapsedSec = useMemo(() => {
+    const now = Date.now();
+    const elapsed = Math.max(0, interval - (nextScanTime - now));
+    return elapsed / 1000;
+  }, [nextScanTime, interval]);
 
   return (
     <div style={{ padding: "4px 8px", marginTop: 8 }}>
@@ -111,7 +115,7 @@ function ScanProgressBar({ nextScanTime, interval, isScanning, mode }: {
             </span>
           )}
         </span>
-        <span>{isScanning ? "" : `${timeLeft}s (${formatInterval(interval)})`}</span>
+        {!isScanning && <ScanTimeDisplay nextScanTime={nextScanTime} interval={interval} />}
       </div>
       <div style={{
         height: 3,
@@ -119,14 +123,31 @@ function ScanProgressBar({ nextScanTime, interval, isScanning, mode }: {
         borderRadius: 2,
         overflow: "hidden",
       }}>
-        <div style={{
-          height: "100%",
-          width: isScanning ? "100%" : `${progress}%`,
-          background: isScanning ? "#60a5fa" : modeInfo.color,
-          animation: isScanning ? "pulse 1s infinite" : "none",
-          transition: isScanning ? "none" : "width 0.2s linear",
-        }} />
+        {isScanning ? (
+          <div style={{
+            height: "100%",
+            width: "100%",
+            background: "#60a5fa",
+            animation: "pulse 1s infinite",
+          }} />
+        ) : (
+          <div
+            key={nextScanTime}
+            style={{
+              height: "100%",
+              background: modeInfo.color,
+              animation: `progressBar ${durationSec}s linear forwards`,
+              animationDelay: `-${elapsedSec}s`,
+            }}
+          />
+        )}
       </div>
+      <style>{`
+        @keyframes progressBar {
+          from { width: 0%; }
+          to { width: 100%; }
+        }
+      `}</style>
     </div>
   );
 }

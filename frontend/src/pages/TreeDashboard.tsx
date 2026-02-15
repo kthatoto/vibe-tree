@@ -62,19 +62,23 @@ function ScanProgressBar({ nextScanTime, interval, isScanning, mode }: {
 }) {
   const [progress, setProgress] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
+  const rafRef = useRef<number | null>(null);
 
+  // Smooth animation using requestAnimationFrame
   useEffect(() => {
-    const updateProgress = () => {
+    const animate = () => {
       const now = Date.now();
       const remaining = Math.max(0, nextScanTime - now);
       const elapsed = interval - remaining;
       setProgress(Math.min(100, (elapsed / interval) * 100));
       setTimeLeft(Math.ceil(remaining / 1000));
+      rafRef.current = requestAnimationFrame(animate);
     };
 
-    updateProgress();
-    const timer = setInterval(updateProgress, 100); // Smooth progress update
-    return () => clearInterval(timer);
+    animate();
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, [nextScanTime, interval]);
 
   const formatInterval = (ms: number) => {
@@ -120,6 +124,7 @@ function ScanProgressBar({ nextScanTime, interval, isScanning, mode }: {
           width: isScanning ? "100%" : `${progress}%`,
           background: isScanning ? "#60a5fa" : modeInfo.color,
           animation: isScanning ? "pulse 1s infinite" : "none",
+          transition: isScanning ? "none" : "width 0.2s linear",
         }} />
       </div>
     </div>
@@ -451,7 +456,7 @@ export default function TreeDashboard() {
   // Smart polling: auto-refresh based on activity and visibility
   const hasDirtyWorktree = snapshot?.worktrees.some((w) => w.dirty) ?? false;
   const hasPendingCI = snapshot?.nodes.some((n) => n.pr?.checks === "PENDING") ?? false;
-  const { triggerBurst, markChange, ...pollingState } = useSmartPolling({
+  const { triggerBurst, markChange, notifyScanComplete, ...pollingState } = useSmartPolling({
     localPath: selectedPin?.localPath ?? null,
     isEditingEdge: branchGraphEditMode,
     hasDirtyWorktree,
@@ -459,6 +464,12 @@ export default function TreeDashboard() {
     onTriggerScan: triggerScan,
     enabled: !!snapshot, // Only poll when we have a snapshot
   });
+
+  // Ref for notifyScanComplete to avoid dependency issues in useEffect
+  const notifyScanCompleteRef = useRef(notifyScanComplete);
+  useEffect(() => {
+    notifyScanCompleteRef.current = notifyScanComplete;
+  }, [notifyScanComplete]);
 
   // Auto-load when pin is selected
   useEffect(() => {
@@ -644,6 +655,9 @@ export default function TreeDashboard() {
             return newMap;
           });
         }
+
+        // Notify polling that scan is complete - start next countdown
+        notifyScanCompleteRef.current();
       }
     });
 
@@ -1709,11 +1723,11 @@ export default function TreeDashboard() {
         )}
 
         {/* Next scan progress bar */}
-        {pollingState.nextScanTime && (
+        {(pollingState.nextScanTime || pollingState.isScanning || scanStage !== null) && (
           <ScanProgressBar
-            nextScanTime={pollingState.nextScanTime}
+            nextScanTime={pollingState.nextScanTime ?? Date.now()}
             interval={pollingState.interval}
-            isScanning={scanStage !== null}
+            isScanning={pollingState.isScanning || scanStage !== null}
             mode={pollingState.mode}
           />
         )}

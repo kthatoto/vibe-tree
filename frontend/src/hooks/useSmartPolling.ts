@@ -40,6 +40,8 @@ interface SmartPollingControls {
   triggerBurst: () => void;
   /** Mark that a change was detected */
   markChange: () => void;
+  /** Notify that scan has completed - starts countdown for next scan */
+  notifyScanComplete: () => void;
 }
 
 /**
@@ -121,6 +123,11 @@ export function useSmartPolling({
   }, []);
 
   /**
+   * Track if we're waiting for scan to complete
+   */
+  const waitingForScanRef = useRef(false);
+
+  /**
    * Calculate the appropriate polling interval and mode based on current state
    */
   const getIntervalAndMode = useCallback((): { interval: number; mode: PollingMode } => {
@@ -192,9 +199,10 @@ export function useSmartPolling({
         return;
       }
 
-      // Trigger scan
+      // Trigger scan - don't schedule next until scan completes
       const now = Date.now();
-      setState(prev => ({ ...prev, lastScanTime: now, isScanning: true }));
+      waitingForScanRef.current = true;
+      setState(prev => ({ ...prev, lastScanTime: now, isScanning: true, nextScanTime: null }));
       onTriggerScan(localPath);
 
       // Decrement burst count if in burst mode
@@ -202,10 +210,19 @@ export function useSmartPolling({
         setBurstCount(prev => prev - 1);
       }
 
-      // Schedule next
-      scheduleNextPoll();
+      // Note: next poll will be scheduled when notifyScanComplete is called
     }, interval);
   }, [enabled, localPath, isEditingEdge, getIntervalAndMode, onTriggerScan, burstCount]);
+
+  /**
+   * Notify that scan has completed - schedule next poll
+   */
+  const notifyScanComplete = useCallback(() => {
+    if (!waitingForScanRef.current) return;
+    waitingForScanRef.current = false;
+    setState(prev => ({ ...prev, isScanning: false }));
+    scheduleNextPoll();
+  }, [scheduleNextPoll]);
 
   /**
    * Handle visibility change - reschedule with appropriate interval
@@ -263,5 +280,5 @@ export function useSmartPolling({
     scheduleNextPoll();
   }, [hasDirtyWorktree, hasPendingCI, burstCount, scheduleNextPoll]);
 
-  return { ...state, triggerBurst, markChange };
+  return { ...state, triggerBurst, markChange, notifyScanComplete };
 }

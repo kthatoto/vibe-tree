@@ -574,6 +574,27 @@ export default function TreeDashboard() {
     setPendingChanges(null);
   }, []);
 
+  // Auto-apply pending changes when exiting edit mode
+  const prevEditModeRef = useRef(branchGraphEditMode);
+  useEffect(() => {
+    const wasEditing = prevEditModeRef.current;
+    prevEditModeRef.current = branchGraphEditMode;
+
+    // If we just exited edit mode and have pending changes, auto-apply
+    if (wasEditing && !branchGraphEditMode && pendingChanges && selectedPinId) {
+      (async () => {
+        try {
+          const { snapshot: freshSnapshot, version } = await api.getSnapshot(selectedPinId);
+          setSnapshot(freshSnapshot);
+          currentSnapshotVersion.current = version;
+          setPendingChanges(null);
+        } catch (err) {
+          console.error("[TreeDashboard] Failed to auto-apply pending changes:", err);
+        }
+      })();
+    }
+  }, [branchGraphEditMode, pendingChanges, selectedPinId]);
+
   // Trigger background scan without loading state (with debounce protection)
   // Note: isScanningRef is only cleared when WebSocket sends isComplete: true
   const triggerScan = useCallback((localPath: string) => {
@@ -802,8 +823,15 @@ export default function TreeDashboard() {
         }
 
         if (analysis.hasUnsafeChanges && analysis.pendingChanges) {
-          // Queue unsafe changes for user confirmation
-          setPendingChanges(analysis.pendingChanges);
+          if (branchGraphEditMode) {
+            // Edit mode中は保留（終了時に自動適用される）
+            setPendingChanges(analysis.pendingChanges);
+          } else {
+            // Edit mode中でなければ自動適用
+            setSnapshot(data.snapshot!);
+            currentSnapshotVersion.current = newVersion;
+            setPendingChanges(null);
+          }
         } else {
           // No unsafe changes, clear any pending and update version
           setPendingChanges(null);
@@ -1868,10 +1896,10 @@ export default function TreeDashboard() {
 
   return (
     <div className="dashboard dashboard--with-sidebar">
-      {/* Pending unsafe changes notification (requires user confirmation) */}
-      {pendingChanges && (
+      {/* Pending unsafe changes notification (only shown during edit mode) */}
+      {pendingChanges && branchGraphEditMode && (
         <ScanUpdateToast
-          message="Structure changes detected"
+          message="Changes pending (will apply after edit)"
           diffSummary={formatPendingChangesSummary(pendingChanges)}
           onApply={applyPendingChanges}
           onDismiss={dismissPendingChanges}

@@ -71,11 +71,11 @@ export const INTERVALS = {
 /** CI Pending timeout: after 10min, fall back to idle */
 const CI_PENDING_TIMEOUT = 10 * 60 * 1000;
 
-/** Initial pause at 0% before countdown bar starts moving (for testing: 5s, production: 500ms) */
-export const COUNTDOWN_INITIAL_PAUSE = 5000; // 5s for testing
+/** Initial pause at 0% before countdown bar starts moving */
+export const COUNTDOWN_INITIAL_PAUSE = 1000; // 1s
 
 /** Delay at 100% before scan actually starts */
-export const SCAN_START_DELAY = 500;
+export const SCAN_START_DELAY = 1000; // 1s pause at 100%
 
 /**
  * Smart polling hook that adjusts polling frequency based on:

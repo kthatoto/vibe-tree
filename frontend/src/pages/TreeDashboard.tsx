@@ -41,10 +41,24 @@ import { useSmartPolling, INTERVALS } from "../hooks/useSmartPolling";
 import type { PlanningSession, TaskNode, TaskEdge } from "../lib/api";
 
 // Scan progress bar component
-function ScanProgressBar({ nextScanTime, interval, isScanning }: {
+type PollingMode = "burst" | "dirty" | "ci_pending" | "active" | "idle" | "super_idle" | "hidden" | "debug";
+
+const MODE_LABELS: Record<PollingMode, { label: string; color: string }> = {
+  burst: { label: "Burst", color: "#f59e0b" },
+  dirty: { label: "Dirty", color: "#ef4444" },
+  ci_pending: { label: "CI Pending", color: "#eab308" },
+  active: { label: "Active", color: "#22c55e" },
+  idle: { label: "Idle", color: "#6b7280" },
+  super_idle: { label: "Super Idle", color: "#4b5563" },
+  hidden: { label: "Hidden", color: "#374151" },
+  debug: { label: "Debug", color: "#a855f7" },
+};
+
+function ScanProgressBar({ nextScanTime, interval, isScanning, mode }: {
   nextScanTime: number;
   interval: number;
   isScanning: boolean;
+  mode: PollingMode;
 }) {
   const [progress, setProgress] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -59,13 +73,16 @@ function ScanProgressBar({ nextScanTime, interval, isScanning }: {
     };
 
     updateProgress();
-    const timer = setInterval(updateProgress, 1000);
+    const timer = setInterval(updateProgress, 100); // Smooth progress update
     return () => clearInterval(timer);
   }, [nextScanTime, interval]);
 
-  const intervalLabel = interval === INTERVALS.ACTIVE_DIRTY ? "30s"
-    : interval === INTERVALS.ACTIVE_CLEAN ? "60s"
-    : "5m";
+  const formatInterval = (ms: number) => {
+    if (ms >= 60000) return `${Math.round(ms / 60000)}m`;
+    return `${Math.round(ms / 1000)}s`;
+  };
+
+  const modeInfo = MODE_LABELS[mode];
 
   return (
     <div style={{ padding: "4px 8px", marginTop: 8 }}>
@@ -76,8 +93,21 @@ function ScanProgressBar({ nextScanTime, interval, isScanning }: {
         color: "#6b7280",
         marginBottom: 2,
       }}>
-        <span>{isScanning ? "Scanning..." : `Next scan`}</span>
-        <span>{isScanning ? "" : `${timeLeft}s (${intervalLabel})`}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          {isScanning ? "Scanning..." : "Next scan"}
+          {!isScanning && (
+            <span style={{
+              background: modeInfo.color,
+              color: "#fff",
+              padding: "1px 4px",
+              borderRadius: 3,
+              fontSize: 9,
+            }}>
+              {modeInfo.label}
+            </span>
+          )}
+        </span>
+        <span>{isScanning ? "" : `${timeLeft}s (${formatInterval(interval)})`}</span>
       </div>
       <div style={{
         height: 3,
@@ -88,8 +118,7 @@ function ScanProgressBar({ nextScanTime, interval, isScanning }: {
         <div style={{
           height: "100%",
           width: isScanning ? "100%" : `${progress}%`,
-          background: isScanning ? "#60a5fa" : "#4b5563",
-          transition: isScanning ? "none" : "width 1s linear",
+          background: isScanning ? "#60a5fa" : modeInfo.color,
           animation: isScanning ? "pulse 1s infinite" : "none",
         }} />
       </div>
@@ -286,13 +315,16 @@ export default function TreeDashboard() {
   const [warningFilter, setWarningFilter] = useState<string | null>(null);
 
   // Logs state
-  type LogEntry = { id: number; timestamp: Date; type: string; message: string; html?: string };
+  type LogEntry = { id: number; timestamp: Date; type: string; message: string; html?: string; branch?: string };
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const logIdRef = useRef(0);
-  const addLog = useCallback((type: string, message: string, html?: string) => {
+  const addLog = useCallback((type: string, message: string, html?: string, branch?: string) => {
     const id = ++logIdRef.current;
-    setLogs((prev) => [...prev.slice(-99), { id, timestamp: new Date(), type, message, html }]); // Keep last 100
+    setLogs((prev) => [...prev.slice(-99), { id, timestamp: new Date(), type, message, html, branch }]); // Keep last 100
   }, []);
+
+  // Hovered log branch (for graph highlight)
+  const [hoveredLogBranch, setHoveredLogBranch] = useState<string | null>(null);
 
   // Next scan countdown
   const [nextScanIn, setNextScanIn] = useState<number | null>(null);
@@ -418,10 +450,12 @@ export default function TreeDashboard() {
 
   // Smart polling: auto-refresh based on activity and visibility
   const hasDirtyWorktree = snapshot?.worktrees.some((w) => w.dirty) ?? false;
-  const pollingState = useSmartPolling({
+  const hasPendingCI = snapshot?.nodes.some((n) => n.pr?.checks === "PENDING") ?? false;
+  const { triggerBurst, markChange, ...pollingState } = useSmartPolling({
     localPath: selectedPin?.localPath ?? null,
     isEditingEdge: branchGraphEditMode,
     hasDirtyWorktree,
+    hasPendingCI,
     onTriggerScan: triggerScan,
     enabled: !!snapshot, // Only poll when we have a snapshot
   });
@@ -729,8 +763,16 @@ export default function TreeDashboard() {
             }
             return `Labels: ${parts.join(" ")}`;
           }
-          case "review":
+          case "review": {
+            const newStatus = change.new?.toLowerCase();
+            if (newStatus === "approved") {
+              return '<span style="display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:2px 8px;border-radius:12px;font-weight:600;font-size:11px">✓ APPROVED</span>';
+            }
+            if (newStatus === "changes_requested") {
+              return '<span style="display:inline-flex;align-items:center;gap:4px;background:#ef4444;color:#fff;padding:2px 8px;border-radius:12px;font-weight:500;font-size:11px">⚠ Changes Requested</span>';
+            }
             return `Review: <span style="color:#9ca3af">${change.old || "none"}</span> → <span style="color:#a78bfa">${change.new || "none"}</span>`;
+          }
           case "reviewers": {
             const parts: string[] = [];
             if (change.new) {
@@ -755,7 +797,13 @@ export default function TreeDashboard() {
         const lines = pr.changes.map(formatChangeHtml);
         const html = `<div style="font-weight:500;margin-bottom:2px">${pr.branch}</div>${lines.map(l => `<div style="padding-left:8px;font-size:12px">${l}</div>`).join("")}`;
         const plainText = `${pr.branch}: ${pr.changes.map(c => c.type).join(", ")}`;
-        addLog("pr", plainText, html);
+        addLog("pr", plainText, html, pr.branch);
+      }
+
+      // Trigger burst mode and mark change for adaptive polling
+      if (data.prs.length > 0) {
+        triggerBurst();
+        markChange();
       }
 
       // Update snapshot nodes with new CI status
@@ -1666,6 +1714,7 @@ export default function TreeDashboard() {
             nextScanTime={pollingState.nextScanTime}
             interval={pollingState.interval}
             isScanning={scanStage !== null}
+            mode={pollingState.mode}
           />
         )}
 
@@ -1701,13 +1750,25 @@ export default function TreeDashboard() {
                 : log.type === "scan" ? "#60a5fa"
                 : log.type === "branch" ? "#a78bfa"
                 : log.type === "fetch" ? "#34d399"
+                : log.type === "pr" ? "#22c55e"
                 : "#9ca3af";
+              const hasBranch = !!log.branch;
               return (
-                <div key={log.id} style={{
-                  display: "flex",
-                  gap: 6,
-                  marginBottom: 4,
-                }}>
+                <div
+                  key={log.id}
+                  style={{
+                    display: "flex",
+                    gap: 6,
+                    marginBottom: 4,
+                    cursor: hasBranch ? "pointer" : "default",
+                    padding: "2px 4px",
+                    margin: "-2px -4px",
+                    borderRadius: 4,
+                    background: hasBranch && hoveredLogBranch === log.branch ? "rgba(59, 130, 246, 0.1)" : "transparent",
+                  }}
+                  onMouseEnter={() => hasBranch && setHoveredLogBranch(log.branch!)}
+                  onMouseLeave={() => hasBranch && setHoveredLogBranch(null)}
+                >
                   <span style={{ color: "#4b5563", flexShrink: 0 }}>{timeStr}</span>
                   {log.html ? (
                     <div
@@ -2124,6 +2185,7 @@ export default function TreeDashboard() {
                       }}
                       focusSeparatorIndex={focusSeparatorIndex}
                       onFocusSeparatorIndexChange={setFocusSeparatorIndex}
+                      highlightedBranch={hoveredLogBranch}
                     />
                   </div>
                 </div>

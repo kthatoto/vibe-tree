@@ -20,9 +20,13 @@ interface SmartPollingOptions {
   enabled?: boolean;
 }
 
+type PollingMode = "burst" | "dirty" | "ci_pending" | "active" | "idle" | "super_idle" | "hidden" | "debug";
+
 interface SmartPollingState {
   /** Current polling interval in ms */
   interval: number;
+  /** Current polling mode */
+  mode: PollingMode;
   /** Time of last scan */
   lastScanTime: number;
   /** Time of next scheduled scan */
@@ -31,63 +35,138 @@ interface SmartPollingState {
   isScanning: boolean;
 }
 
+interface SmartPollingControls {
+  /** Trigger burst mode (faster polling for next few scans) */
+  triggerBurst: () => void;
+  /** Mark that a change was detected */
+  markChange: () => void;
+}
+
 /**
  * Polling intervals in milliseconds
  */
 export const INTERVALS = {
-  /** Active window + dirty worktree: more frequent updates */
+  /** Burst mode: after PR update detected */
+  BURST: 15 * 1000, // 15s
+  /** Active window + dirty worktree */
   ACTIVE_DIRTY: 30 * 1000, // 30s
+  /** Active window + pending CI */
+  CI_PENDING: 60 * 1000, // 1min
   /** Active window + clean: moderate updates */
   ACTIVE_CLEAN: 60 * 1000, // 60s
+  /** Idle tier 1: 5min without changes */
+  IDLE_1: 3 * 60 * 1000, // 3min
+  /** Idle tier 2: 10min without changes */
+  IDLE_2: 5 * 60 * 1000, // 5min
   /** Hidden/inactive window: infrequent updates */
-  HIDDEN: 300 * 1000, // 5min
+  HIDDEN: 5 * 60 * 1000, // 5min
   /** Debug mode: fast polling */
   DEBUG: 10 * 1000, // 10s
 } as const;
+
+/** CI Pending timeout: after 10min, fall back to idle */
+const CI_PENDING_TIMEOUT = 10 * 60 * 1000;
 
 /**
  * Smart polling hook that adjusts polling frequency based on:
  * - Window visibility (active vs hidden)
  * - Edit mode (pause during edge editing)
  * - Dirty worktree status (more frequent when changes detected)
+ * - Burst mode (faster polling after PR updates)
+ * - Idle time (slower polling when no changes detected)
  */
 export function useSmartPolling({
   localPath,
   isEditingEdge,
   hasDirtyWorktree,
+  hasPendingCI = false,
   onTriggerScan,
   enabled = true,
-}: SmartPollingOptions): SmartPollingState {
+}: SmartPollingOptions): SmartPollingState & SmartPollingControls {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [state, setState] = useState<SmartPollingState>({
     interval: INTERVALS.ACTIVE_CLEAN,
+    mode: "active",
     lastScanTime: 0,
     nextScanTime: null,
     isScanning: false,
   });
 
+  // Dynamic polling state
+  const [burstCount, setBurstCount] = useState(0); // Remaining burst polls
+  const [lastChangeTime, setLastChangeTime] = useState(Date.now());
+  const [ciPendingStartTime, setCiPendingStartTime] = useState<number | null>(null);
+
+  // Track CI Pending start time
+  useEffect(() => {
+    if (hasPendingCI && ciPendingStartTime === null) {
+      setCiPendingStartTime(Date.now());
+    } else if (!hasPendingCI && ciPendingStartTime !== null) {
+      setCiPendingStartTime(null);
+    }
+  }, [hasPendingCI, ciPendingStartTime]);
+
   /**
-   * Calculate the appropriate polling interval based on current state
+   * Trigger burst mode (faster polling for next 3 scans)
    */
-  const getInterval = useCallback(() => {
+  const triggerBurst = useCallback(() => {
+    setBurstCount(3);
+  }, []);
+
+  /**
+   * Mark that a change was detected (reset idle timer)
+   */
+  const markChange = useCallback(() => {
+    setLastChangeTime(Date.now());
+  }, []);
+
+  /**
+   * Calculate the appropriate polling interval and mode based on current state
+   */
+  const getIntervalAndMode = useCallback((): { interval: number; mode: PollingMode } => {
     // Debug mode = always 10s
     if (isDebugMode()) {
-      return INTERVALS.DEBUG;
+      return { interval: INTERVALS.DEBUG, mode: "debug" };
     }
 
     // Document hidden = long interval
     if (document.visibilityState === "hidden") {
-      return INTERVALS.HIDDEN;
+      return { interval: INTERVALS.HIDDEN, mode: "hidden" };
+    }
+
+    // Burst mode = fast polling
+    if (burstCount > 0) {
+      return { interval: INTERVALS.BURST, mode: "burst" };
     }
 
     // Active + dirty worktree = short interval
     if (hasDirtyWorktree) {
-      return INTERVALS.ACTIVE_DIRTY;
+      return { interval: INTERVALS.ACTIVE_DIRTY, mode: "dirty" };
+    }
+
+    // Active + pending CI = 1min interval (but timeout after 10min)
+    if (hasPendingCI) {
+      const ciPendingDuration = ciPendingStartTime ? Date.now() - ciPendingStartTime : 0;
+      if (ciPendingDuration < CI_PENDING_TIMEOUT) {
+        return { interval: INTERVALS.CI_PENDING, mode: "ci_pending" };
+      }
+      // CI Pending for too long, fall through to idle check
+    }
+
+    // Check idle time
+    const idleTime = Date.now() - lastChangeTime;
+    if (idleTime > 10 * 60 * 1000) {
+      // 10min without changes
+      return { interval: INTERVALS.IDLE_2, mode: "super_idle" };
+    }
+    if (idleTime > 5 * 60 * 1000) {
+      // 5min without changes
+      return { interval: INTERVALS.IDLE_1, mode: "idle" };
     }
 
     // Active + clean = moderate interval
-    return INTERVALS.ACTIVE_CLEAN;
-  }, [hasDirtyWorktree]);
+    return { interval: INTERVALS.ACTIVE_CLEAN, mode: "active" };
+  }, [burstCount, hasDirtyWorktree, hasPendingCI, lastChangeTime, ciPendingStartTime]);
 
   /**
    * Schedule the next poll
@@ -102,9 +181,9 @@ export function useSmartPolling({
       return;
     }
 
-    const interval = getInterval();
+    const { interval, mode } = getIntervalAndMode();
     const nextScanTime = Date.now() + interval;
-    setState(prev => ({ ...prev, interval, nextScanTime }));
+    setState(prev => ({ ...prev, interval, mode, nextScanTime }));
 
     timerRef.current = setTimeout(() => {
       // Don't scan if we're editing
@@ -118,17 +197,15 @@ export function useSmartPolling({
       setState(prev => ({ ...prev, lastScanTime: now, isScanning: true }));
       onTriggerScan(localPath);
 
+      // Decrement burst count if in burst mode
+      if (burstCount > 0) {
+        setBurstCount(prev => prev - 1);
+      }
+
       // Schedule next
       scheduleNextPoll();
     }, interval);
-  }, [enabled, localPath, isEditingEdge, getInterval, onTriggerScan]);
-
-  /**
-   * Mark scan as complete (call this from parent when scan finishes)
-   */
-  useEffect(() => {
-    // This will be handled by the parent component listening to scan.updated
-  }, []);
+  }, [enabled, localPath, isEditingEdge, getIntervalAndMode, onTriggerScan, burstCount]);
 
   /**
    * Handle visibility change - reschedule with appropriate interval
@@ -138,7 +215,7 @@ export function useSmartPolling({
       if (document.visibilityState === "visible") {
         // Window became visible - check if we should scan immediately
         const timeSinceLastScan = Date.now() - state.lastScanTime;
-        const interval = getInterval();
+        const { interval } = getIntervalAndMode();
 
         if (timeSinceLastScan >= interval && localPath && !isEditingEdge) {
           // It's been long enough, scan now
@@ -155,7 +232,7 @@ export function useSmartPolling({
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [getInterval, localPath, isEditingEdge, onTriggerScan, scheduleNextPoll, state.lastScanTime]);
+  }, [getIntervalAndMode, localPath, isEditingEdge, onTriggerScan, scheduleNextPoll, state.lastScanTime]);
 
   /**
    * Start/stop polling when dependencies change
@@ -180,11 +257,11 @@ export function useSmartPolling({
   }, [enabled, localPath, isEditingEdge, scheduleNextPoll]);
 
   /**
-   * Reschedule when dirty status changes (to adjust interval)
+   * Reschedule when dirty status or burst count changes
    */
   useEffect(() => {
     scheduleNextPoll();
-  }, [hasDirtyWorktree, scheduleNextPoll]);
+  }, [hasDirtyWorktree, hasPendingCI, burstCount, scheduleNextPoll]);
 
-  return state;
+  return { ...state, triggerBurst, markChange };
 }

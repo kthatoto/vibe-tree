@@ -37,6 +37,8 @@ interface BranchGraphProps {
   // Index indicates separator position in root siblings (0 = before first, 1 = after first, etc.)
   focusSeparatorIndex?: number | null; // null means no separator
   onFocusSeparatorIndexChange?: (index: number | null) => void;
+  // Highlighted branch (for log hover effect with rotating dashed border)
+  highlightedBranch?: string | null;
 }
 
 interface DragState {
@@ -112,6 +114,7 @@ export default function BranchGraph({
   onSiblingOrderChange,
   focusSeparatorIndex = null,
   onFocusSeparatorIndexChange,
+  highlightedBranch = null,
 }: BranchGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -1405,6 +1408,30 @@ export default function BranchGraph({
             }
           }}
         />
+        {/* Highlighted overlay with rotating dashed border */}
+        {highlightedBranch === id && (
+          <rect
+            x={x - 3}
+            y={y - 3}
+            width={nodeWidth + 6}
+            height={nodeHeight + 6}
+            rx={9}
+            ry={9}
+            fill="none"
+            stroke="#3b82f6"
+            strokeWidth={2}
+            strokeDasharray="8,4"
+            style={{ pointerEvents: "none" }}
+          >
+            <animate
+              attributeName="stroke-dashoffset"
+              from="0"
+              to="24"
+              dur="0.8s"
+              repeatCount="indefinite"
+            />
+          </rect>
+        )}
 
         {/* Checkbox for filtering - only for non-tentative, non-default nodes (including minimized) */}
         {!isTentative && !isDefault && (

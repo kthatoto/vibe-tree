@@ -799,40 +799,44 @@ export default function TreeDashboard() {
       if (data.isFinal) {
         const analysis = analyzeChanges(snapshot, data.snapshot, newVersion);
 
-        // Always merge safe fields (including warnings) unless in edit mode
-        if (!branchGraphEditMode) {
-          setSnapshot((prev) => {
-            if (!prev) return data.snapshot!;
-
-            // Merge node attributes (also merges warnings, worktrees, etc.)
-            let merged = mergeNodeAttributes(prev, data.snapshot!);
-
-            // Add inferred edges for new branches
-            if (analysis.pendingChanges?.newBranches.length) {
-              const newEdges = createInferredEdgesForNewBranches(
-                merged.edges,
-                analysis.pendingChanges.newBranches,
-                data.snapshot!.edges,
-                merged.defaultBranch
-              );
-              merged = { ...merged, edges: newEdges };
-            }
-
-            return merged;
-          });
-        }
-
         if (analysis.hasUnsafeChanges && analysis.pendingChanges) {
           if (branchGraphEditMode) {
             // Edit mode中は保留（終了時に自動適用される）
+            // Safe fieldsはmergeしておく
+            setSnapshot((prev) => {
+              if (!prev) return prev;
+              return mergeNodeAttributes(prev, data.snapshot!);
+            });
             setPendingChanges(analysis.pendingChanges);
           } else {
-            // Edit mode中でなければ自動適用
+            // Edit mode中でなければ自動適用（incoming snapshotをそのまま使用）
             setSnapshot(data.snapshot!);
             currentSnapshotVersion.current = newVersion;
             setPendingChanges(null);
           }
         } else {
+          // Only safe changes - merge them
+          if (!branchGraphEditMode) {
+            setSnapshot((prev) => {
+              if (!prev) return data.snapshot!;
+
+              // Merge node attributes (also merges warnings, worktrees, etc.)
+              let merged = mergeNodeAttributes(prev, data.snapshot!);
+
+              // Add inferred edges for new branches
+              if (analysis.pendingChanges?.newBranches.length) {
+                const newEdges = createInferredEdgesForNewBranches(
+                  merged.edges,
+                  analysis.pendingChanges.newBranches,
+                  data.snapshot!.edges,
+                  merged.defaultBranch
+                );
+                merged = { ...merged, edges: newEdges };
+              }
+
+              return merged;
+            });
+          }
           // No unsafe changes, clear any pending and update version
           setPendingChanges(null);
           currentSnapshotVersion.current = newVersion;

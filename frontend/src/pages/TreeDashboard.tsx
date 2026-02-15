@@ -135,7 +135,9 @@ function ScanProgressBar({ nextScanTime, interval, isScanning, mode }: {
             key={nextScanTime}
             style={{
               height: "100%",
+              width: "100%",
               background: modeInfo.color,
+              transformOrigin: "left",
               animation: `progressBar ${durationSec}s linear forwards`,
               animationDelay: `-${elapsedSec}s`,
             }}
@@ -144,8 +146,8 @@ function ScanProgressBar({ nextScanTime, interval, isScanning, mode }: {
       </div>
       <style>{`
         @keyframes progressBar {
-          from { width: 0%; }
-          to { width: 100%; }
+          from { transform: scaleX(0); }
+          to { transform: scaleX(1); }
         }
       `}</style>
     </div>

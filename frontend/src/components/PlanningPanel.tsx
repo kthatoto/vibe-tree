@@ -1283,18 +1283,29 @@ export function PlanningPanel({
 
   const handleWorktreeSelected = async (worktreePath: string | null) => {
     setShowWorktreeSelector(false);
-    // Use pending branches if available, otherwise fall back to executeSelectedBranches
-    const branchesToUse = pendingExecuteBranches.length > 0 ? pendingExecuteBranches : executeSelectedBranches;
-    if (!selectedSession || branchesToUse.length === 0) return;
+    if (!selectedSession) return;
+
     setExecuteLoading(true);
     try {
-      // First update execute branches
-      const updated = await api.updateExecuteBranches(selectedSession.id, branchesToUse);
-      // Then set worktree path if selected
-      if (worktreePath !== null) {
-        await api.selectWorktree(selectedSession.id, worktreePath);
-        updated.selectedWorktreePath = worktreePath;
+      let updated = selectedSession;
+
+      // Check if this is a new execution start or just worktree change
+      const isNewExecution = pendingExecuteBranches.length > 0;
+      const sessionAlreadyHasBranches = selectedSession.executeBranches && selectedSession.executeBranches.length > 0;
+
+      if (isNewExecution) {
+        // New execution start - update branches first
+        updated = await api.updateExecuteBranches(selectedSession.id, pendingExecuteBranches);
+      } else if (!sessionAlreadyHasBranches && executeSelectedBranches.length > 0) {
+        // Fallback: old state path for backwards compatibility
+        updated = await api.updateExecuteBranches(selectedSession.id, executeSelectedBranches);
       }
+      // If session already has branches and no pending branches, this is just a worktree change
+
+      // Update worktree path (including clearing to null for default)
+      await api.selectWorktree(selectedSession.id, worktreePath);
+      updated = { ...updated, selectedWorktreePath: worktreePath };
+
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       onSessionSelect?.(updated);
     } catch (err) {

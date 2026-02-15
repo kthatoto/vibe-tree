@@ -2367,3 +2367,21 @@
   color: #6b7280;
   margin-left: auto;
 }
+
+.planning-panel__worktree-btn {
+  font-size: 11px;
+  color: #93c5fd;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-left: 8px;
+}
+
+.planning-panel__worktree-btn:hover {
+  background: #1e293b;
+  border-color: #60a5fa;
+  color: #60a5fa;
+}

@@ -293,6 +293,15 @@ export function ExecuteSessionView({
                   <span className="planning-panel__branch-indicator-hint">
                     Task {(session.currentExecuteIndex ?? 0) + 1} of {session.executeBranches.length}
                   </span>
+                  {session.selectedWorktreePath && (
+                    <button
+                      className="planning-panel__worktree-btn"
+                      onClick={() => onWorktreeSelect()}
+                      title={`Worktree: ${session.selectedWorktreePath}`}
+                    >
+                      📁 {session.selectedWorktreePath.split("/").pop()}
+                    </button>
+                  )}
                 </div>
               )}
               {session.chatSessionId && (

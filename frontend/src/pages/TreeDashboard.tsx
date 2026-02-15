@@ -1086,63 +1086,17 @@ export default function TreeDashboard() {
   // No need to update checkedBranches when nodes change - start with all unchecked
 
   // Load branchLinks when snapshot is available
-  // Merge with existing data to preserve fresh PR info from scan.updated
+  // DB is the single source of truth for PR info
   useEffect(() => {
     if (!snapshot?.repoId || snapshot.nodes.length === 0) return;
     const branchNames = snapshot.nodes.map((n) => n.branchName);
     api.getBranchLinksBatch(snapshot.repoId, branchNames)
       .then((result) => {
-        setBranchLinks((prev) => {
-          const newMap = new Map<string, BranchLink[]>();
-          for (const branchName of branchNames) {
-            const apiLinks = result[branchName] || [];
-            const existingLinks = prev.get(branchName) || [];
-
-            // For each link type, prefer fresher data (from scan.updated if available)
-            const mergedLinks: BranchLink[] = [];
-            const seenTypes = new Set<string>();
-
-            // First, add existing PR links from scan.updated (they have latest reviewDecision)
-            for (const link of existingLinks) {
-              if (link.linkType === "pr" && !seenTypes.has("pr")) {
-                // Check if API has same PR with more complete data
-                const apiPrLink = apiLinks.find(l => l.linkType === "pr" && l.number === link.number);
-                if (apiPrLink) {
-                  // Merge: use API data but preserve scan.updated's reviewDecision/checksStatus if fresher
-                  mergedLinks.push({
-                    ...apiPrLink,
-                    // Prefer non-null values from scan.updated
-                    reviewDecision: link.reviewDecision ?? apiPrLink.reviewDecision,
-                    checksStatus: link.checksStatus ?? apiPrLink.checksStatus,
-                    labels: link.labels ?? apiPrLink.labels,
-                    reviewers: link.reviewers ?? apiPrLink.reviewers,
-                  });
-                } else {
-                  mergedLinks.push(link);
-                }
-                seenTypes.add("pr");
-              }
-            }
-
-            // Add remaining API links (issues, etc.)
-            for (const link of apiLinks) {
-              if (!seenTypes.has(link.linkType)) {
-                if (link.linkType !== "pr") {
-                  mergedLinks.push(link);
-                } else if (!seenTypes.has("pr")) {
-                  mergedLinks.push(link);
-                }
-                seenTypes.add(link.linkType);
-              } else if (link.linkType !== "pr") {
-                // Allow multiple non-PR links of same type (e.g., multiple issues)
-                mergedLinks.push(link);
-              }
-            }
-
-            newMap.set(branchName, mergedLinks);
-          }
-          return newMap;
-        });
+        const linksMap = new Map<string, BranchLink[]>();
+        for (const branchName of branchNames) {
+          linksMap.set(branchName, result[branchName] || []);
+        }
+        setBranchLinks(linksMap);
       })
       .catch(console.error);
   }, [snapshot?.repoId, snapshot?.nodes.length]);

@@ -58,6 +58,7 @@ interface ScanProgress {
   current: number;
   total: number;
   stage: string;
+  prProgress?: { current: number; total: number };
 }
 
 // Stage display names
@@ -135,7 +136,12 @@ function ScanProgressBar({ nextScanTime, interval, mode, scanProgress, isPolling
   }
 
   // Calculate scan progress percentage (0% if no progress yet)
-  const scanPercent = scanProgress ? Math.round((scanProgress.current / scanProgress.total) * 100) : 0;
+  // If we have prProgress, interpolate within the PR refresh step (7/8 to 8/8)
+  const basePercent = scanProgress ? (scanProgress.current / scanProgress.total) * 100 : 0;
+  const prProgress = scanProgress?.prProgress;
+  const scanPercent = prProgress
+    ? Math.round(basePercent + (prProgress.current / prProgress.total) * (100 / (scanProgress?.total ?? 8)))
+    : Math.round(basePercent);
   const scanTotal = scanProgress?.total ?? 8; // Default to 8 steps
   const stageLabel = scanProgress?.stage ? (STAGE_LABELS[scanProgress.stage] ?? scanProgress.stage) : "Starting...";
 
@@ -186,7 +192,10 @@ function ScanProgressBar({ nextScanTime, interval, mode, scanProgress, isPolling
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
           {displayState === "scanning" ? (
-            <span>{scanPercent}% ({scanProgress?.current ?? 0}/{scanTotal})</span>
+            <span>
+              {scanPercent}% ({scanProgress?.current ?? 0}/{scanTotal})
+              {prProgress && ` PR ${prProgress.current}/${prProgress.total}`}
+            </span>
           ) : displayState === "countdown" ? (
             <span>{secondsLeft}s ({formatInterval(interval)})</span>
           ) : null}

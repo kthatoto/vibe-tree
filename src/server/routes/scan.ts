@@ -829,6 +829,8 @@ scanRouter.post("/", async (c) => {
           });
           const now = new Date().toISOString();
           const updatedPrs: { branch: string; checks: string | null; state: string; changes: { type: string; old?: string | null; new?: string | null }[] }[] = [];
+          const totalPrs = relevantPrs.length;
+          let processedPrs = 0;
           for (const pr of relevantPrs) {
             const existing = await db.select().from(schema.branchLinks)
               .where(and(
@@ -910,6 +912,21 @@ scanRouter.post("/", async (c) => {
               await db.insert(schema.branchLinks).values({ repoId, branchName: pr.branch, linkType: "pr", url: pr.url, number: pr.number, ...prData, createdAt: now });
               updatedPrs.push({ branch: pr.branch, checks: prData.checksStatus, state: prData.status, changes: [{ type: "new" }] });
             }
+
+            // Broadcast progress after each PR
+            processedPrs++;
+            broadcast({
+              type: "scan.updated",
+              repoId,
+              data: {
+                version: newVersion,
+                stage: "pr_refreshing",
+                isFinal: false,
+                isComplete: false,
+                progress: { current: 7, total: 8, prProgress: { current: processedPrs, total: totalPrs } },
+                snapshot: finalSnapshot,
+              },
+            });
           }
 
           // Broadcast PR updates if any changed

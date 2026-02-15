@@ -18,7 +18,7 @@ export interface SessionDetailProps {
   onSessionDelete: () => void;
   onTaskSuggested: (suggestion: TaskSuggestion) => void;
   onClaudeWorkingChange?: (sessionId: string, working: boolean) => void;
-  onWorktreeSelect: () => void;
+  onWorktreeSelect: (branches?: string[]) => void;
   generatingTitle: boolean;
   onGenerateTitle: () => void;
   // Graph data for branch selector

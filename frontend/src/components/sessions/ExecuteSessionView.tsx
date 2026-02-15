@@ -25,7 +25,7 @@ interface ExecuteSessionViewProps {
   onSessionDelete: () => void;
   onTaskSuggested: (suggestion: TaskSuggestion) => void;
   onClaudeWorkingChange?: (sessionId: string, working: boolean) => void;
-  onWorktreeSelect: () => void;
+  onWorktreeSelect: (branches?: string[]) => void;
   generatingTitle: boolean;
   onGenerateTitle: () => void;
   // Graph data for branch selector (passed from parent)
@@ -46,7 +46,7 @@ export function ExecuteSessionView({
   onSessionDelete,
   onTaskSuggested,
   onClaudeWorkingChange,
-  onWorktreeSelect: _onWorktreeSelect,
+  onWorktreeSelect,
   generatingTitle,
   onGenerateTitle,
   graphNodes,
@@ -162,16 +162,10 @@ export function ExecuteSessionView({
     setExecuteSelectedBranches(branches);
   };
 
-  const handleStartExecution = async () => {
+  const handleStartExecution = () => {
     if (executeSelectedBranches.length === 0) return;
-    setExecuteLoading(true);
-    try {
-      await api.updateExecuteBranches(session.id, executeSelectedBranches);
-    } catch (err) {
-      console.error("Failed to start execution:", err);
-    } finally {
-      setExecuteLoading(false);
-    }
+    // Trigger worktree selection dialog, passing selected branches
+    onWorktreeSelect(executeSelectedBranches);
   };
 
   const handleManualBranchSwitch = (_index: number) => {

@@ -186,6 +186,7 @@ export function PlanningPanel({
   const [executeEditTitle, setExecuteEditTitle] = useState("");
   const [executeEditBranches, setExecuteEditBranches] = useState<string[]>([]);
   const [showWorktreeSelector, setShowWorktreeSelector] = useState(false);
+  const [pendingExecuteBranches, setPendingExecuteBranches] = useState<string[]>([]);
 
   // Planning Session state (similar to Execute but for planning multiple branches)
   const [planningSelectedBranches, setPlanningSelectedBranches] = useState<string[]>([]);
@@ -1282,11 +1283,13 @@ export function PlanningPanel({
 
   const handleWorktreeSelected = async (worktreePath: string | null) => {
     setShowWorktreeSelector(false);
-    if (!selectedSession || executeSelectedBranches.length === 0) return;
+    // Use pending branches if available, otherwise fall back to executeSelectedBranches
+    const branchesToUse = pendingExecuteBranches.length > 0 ? pendingExecuteBranches : executeSelectedBranches;
+    if (!selectedSession || branchesToUse.length === 0) return;
     setExecuteLoading(true);
     try {
       // First update execute branches
-      const updated = await api.updateExecuteBranches(selectedSession.id, executeSelectedBranches);
+      const updated = await api.updateExecuteBranches(selectedSession.id, branchesToUse);
       // Then set worktree path if selected
       if (worktreePath !== null) {
         await api.selectWorktree(selectedSession.id, worktreePath);
@@ -1298,6 +1301,7 @@ export function PlanningPanel({
       setError((err as Error).message);
     } finally {
       setExecuteLoading(false);
+      setPendingExecuteBranches([]); // Clear pending branches
     }
   };
 
@@ -1873,7 +1877,10 @@ export function PlanningPanel({
                 onSessionDelete={() => handleDeleteFromList(session.id)}
                 onTaskSuggested={handleTaskSuggested}
                 onClaudeWorkingChange={handleClaudeWorkingChange}
-                onWorktreeSelect={() => setShowWorktreeSelector(true)}
+                onWorktreeSelect={(branches) => {
+                  if (branches) setPendingExecuteBranches(branches);
+                  setShowWorktreeSelector(true);
+                }}
                 generatingTitle={generatingTitle}
                 onGenerateTitle={handleGenerateTitle}
                 graphNodes={graphNodes}
@@ -1891,7 +1898,10 @@ export function PlanningPanel({
         <WorktreeSelector
           repoId={repoId}
           onSelect={handleWorktreeSelected}
-          onCancel={() => setShowWorktreeSelector(false)}
+          onCancel={() => {
+            setShowWorktreeSelector(false);
+            setPendingExecuteBranches([]);
+          }}
           selectedWorktreePath={selectedSession?.selectedWorktreePath}
         />
       )}

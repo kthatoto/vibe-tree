@@ -23,6 +23,18 @@ export const worktreeSettingsSchema = z.object({
   checkoutPreference: z.enum(["main", "first", "ask"]).optional(),
 });
 
+// Polling settings schemas
+export const pollingSettingsSchema = z.object({
+  prFetchCount: z.number().int().min(1).max(20).default(5),
+});
+
+export const updatePollingSettingsSchema = z.object({
+  repoId: repoIdSchema,
+  prFetchCount: z.number().int().min(1).max(20),
+});
+
+export type UpdatePollingSettingsInput = z.infer<typeof updatePollingSettingsSchema>;
+
 export const updateWorktreeSettingsSchema = z.object({
   repoId: repoIdSchema,
   createScript: z.string().optional(),

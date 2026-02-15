@@ -22,6 +22,10 @@ export interface WorktreeSettings {
   checkoutPreference?: "main" | "first" | "ask";
 }
 
+export interface PollingSettings {
+  prFetchCount: number;
+}
+
 export interface Plan {
   id: number;
   repoId: string;
@@ -503,6 +507,17 @@ export const api = {
     worktreeDeleteCommand?: string;
   }) =>
     fetchJson<WorktreeSettings>(`${API_BASE}/project-rules/worktree`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // Polling Settings
+  getPollingSettings: (repoId: string) =>
+    fetchJson<PollingSettings & { id: number | null; repoId: string }>(
+      `${API_BASE}/project-rules/polling?repoId=${encodeURIComponent(repoId)}`
+    ),
+  updatePollingSettings: (data: { repoId: string; prFetchCount: number }) =>
+    fetchJson<PollingSettings>(`${API_BASE}/project-rules/polling`, {
       method: "POST",
       body: JSON.stringify(data),
     }),

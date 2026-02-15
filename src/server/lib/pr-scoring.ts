@@ -87,53 +87,26 @@ export function calculatePRScore(
  * Select PRs to refresh based on scoring
  *
  * Strategy:
- * - ALWAYS include worktree branches (user is actively working)
- * - Fill remaining slots with rotating selection of other PRs
+ * - Simply pick top N PRs by score (no special treatment for worktree)
  */
 export function selectPRsToRefresh(
   allPRs: CachedPR[],
   context: PRRefreshContext,
   options: {
-    maxTotal?: number;      // Max PRs to refresh total (excluding worktree)
-    otherMax?: number;      // Max non-worktree PRs
+    maxTotal?: number;      // Max PRs to refresh
   } = {}
 ): ScoredPR[] {
-  const {
-    maxTotal = 5,
-    otherMax = 3,
-  } = options;
+  const { maxTotal = 5 } = options;
 
-  // Separate worktree branches (always included) from others
-  const worktreePRs: ScoredPR[] = [];
-  const otherPRs: ScoredPR[] = [];
+  // Score all PRs
+  const scoredPRs: ScoredPR[] = allPRs.map(pr => ({
+    branchName: pr.branchName,
+    score: calculatePRScore(pr, context),
+    isLocal: context.localBranches.has(pr.branchName),
+  }));
 
-  for (const pr of allPRs) {
-    const isWorktree = context.worktreeBranches.has(pr.branchName);
-    const scored: ScoredPR = {
-      branchName: pr.branchName,
-      score: calculatePRScore(pr, context),
-      isLocal: context.localBranches.has(pr.branchName),
-    };
+  // Sort by score descending and take top N
+  scoredPRs.sort((a, b) => b.score - a.score);
 
-    if (isWorktree) {
-      worktreePRs.push(scored);
-    } else {
-      otherPRs.push(scored);
-    }
-  }
-
-  // Sort other PRs by score descending
-  otherPRs.sort((a, b) => b.score - a.score);
-
-  // Select: all worktree PRs + top N other PRs
-  const selected: ScoredPR[] = [...worktreePRs];
-
-  // Add other PRs up to limit
-  for (const pr of otherPRs) {
-    if (selected.length >= maxTotal) break;
-    if (selected.length - worktreePRs.length >= otherMax) break;
-    selected.push(pr);
-  }
-
-  return selected;
+  return scoredPRs.slice(0, maxTotal);
 }

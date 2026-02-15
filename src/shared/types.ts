@@ -35,6 +35,11 @@ export interface WorktreeSettings {
   worktreeDeleteCommand?: string;
 }
 
+export interface PollingSettings {
+  // Number of PRs to fetch during scan (1-20, default: 5)
+  prFetchCount: number;
+}
+
 export interface ProjectRule {
   id: number;
   repoId: string; // owner/name format

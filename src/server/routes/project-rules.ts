@@ -6,9 +6,10 @@ import {
   repoIdQuerySchema,
   updateBranchNamingSchema,
   updateWorktreeSettingsSchema,
+  updatePollingSettingsSchema,
   validateOrThrow,
 } from "../../shared/validation";
-import type { BranchNamingRule, WorktreeSettings } from "../../shared/types";
+import type { BranchNamingRule, WorktreeSettings, PollingSettings } from "../../shared/types";
 
 export const projectRulesRouter = new Hono();
 
@@ -223,6 +224,107 @@ projectRulesRouter.post("/worktree", async (c) => {
     postCreateScript: input.postCreateScript || "",
     postDeleteScript: input.postDeleteScript || "",
     checkoutPreference: input.checkoutPreference || "main",
+  };
+
+  // Broadcast update
+  broadcast({
+    type: "projectRules.updated",
+    repoId: input.repoId,
+    data: response,
+  });
+
+  return c.json(response);
+});
+
+// GET /api/project-rules/polling?repoId=...
+projectRulesRouter.get("/polling", async (c) => {
+  const query = validateOrThrow(repoIdQuerySchema, {
+    repoId: c.req.query("repoId"),
+  });
+
+  const rules = await db
+    .select()
+    .from(schema.projectRules)
+    .where(
+      and(
+        eq(schema.projectRules.repoId, query.repoId),
+        eq(schema.projectRules.ruleType, "polling"),
+        eq(schema.projectRules.isActive, true)
+      )
+    );
+
+  const rule = rules[0];
+  if (!rule) {
+    // Return default settings if none exists
+    return c.json({
+      id: null,
+      repoId: query.repoId,
+      prFetchCount: 5,
+    });
+  }
+
+  const ruleData = JSON.parse(rule.ruleJson) as PollingSettings;
+  return c.json({
+    id: rule.id,
+    repoId: rule.repoId,
+    prFetchCount: ruleData.prFetchCount ?? 5,
+  });
+});
+
+// POST /api/project-rules/polling
+projectRulesRouter.post("/polling", async (c) => {
+  const body = await c.req.json();
+  const input = validateOrThrow(updatePollingSettingsSchema, body);
+
+  const now = new Date().toISOString();
+  const ruleJson = JSON.stringify({
+    prFetchCount: input.prFetchCount,
+  });
+
+  // Check if rule exists
+  const existing = await db
+    .select()
+    .from(schema.projectRules)
+    .where(
+      and(
+        eq(schema.projectRules.repoId, input.repoId),
+        eq(schema.projectRules.ruleType, "polling"),
+        eq(schema.projectRules.isActive, true)
+      )
+    );
+
+  let ruleId: number;
+
+  if (existing[0]) {
+    // Update existing rule
+    await db
+      .update(schema.projectRules)
+      .set({
+        ruleJson,
+        updatedAt: now,
+      })
+      .where(eq(schema.projectRules.id, existing[0].id));
+    ruleId = existing[0].id;
+  } else {
+    // Create new rule
+    const result = await db
+      .insert(schema.projectRules)
+      .values({
+        repoId: input.repoId,
+        ruleType: "polling",
+        ruleJson,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    ruleId = result[0]!.id;
+  }
+
+  const response = {
+    id: ruleId,
+    repoId: input.repoId,
+    prFetchCount: input.prFetchCount,
   };
 
   // Broadcast update

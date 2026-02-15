@@ -715,6 +715,17 @@ scanRouter.post("/", async (c) => {
 
       // Step 7: Smart PR refresh - prioritize local branches, gradually update others
       try {
+        // Load polling settings for PR fetch count
+        const pollingRules = await db.select().from(schema.projectRules)
+          .where(and(
+            eq(schema.projectRules.repoId, repoId),
+            eq(schema.projectRules.ruleType, "polling"),
+            eq(schema.projectRules.isActive, true)
+          ));
+        const pollingRule = pollingRules[0];
+        const pollingSettings = pollingRule ? JSON.parse(pollingRule.ruleJson) : null;
+        const prFetchCount = pollingSettings?.prFetchCount ?? 5;
+
         const freshPrs = await getPRs(localPath);
         if (freshPrs.length === 0) {
           // No PRs found, skip
@@ -736,34 +747,30 @@ scanRouter.post("/", async (c) => {
             .map(pr => [pr.branch, pr])
         );
 
-        // Score and select PRs to refresh (only LOCAL branches)
-        const { selectPRsToRefresh } = await import("../lib/pr-scoring");
-        const cachedForScoring = cachedPRs
-          .filter(c => localBranchSet.has(c.branchName))
-          .map(c => ({
-            branchName: c.branchName,
-            checksStatus: c.checksStatus,
-            updatedAt: c.updatedAt,
-          }));
+        // Build cache lookup for updatedAt
+        const cacheMap = new Map(
+          cachedPRs.map(c => [c.branchName, c])
+        );
 
-        // Also include fresh local PRs not yet in cache
-        for (const pr of freshPrs) {
-          if (localBranchSet.has(pr.branch) && !cachedForScoring.some(c => c.branchName === pr.branch)) {
-            cachedForScoring.push({
-              branchName: pr.branch,
-              checksStatus: pr.checks?.toLowerCase() ?? null,
-              updatedAt: null, // Never cached = high priority
-            });
-          }
-        }
+        // Score and select PRs to refresh (only PRs that exist in freshPrMap)
+        const { selectPRsToRefresh, calculatePRScore } = await import("../lib/pr-scoring");
+        const prsForScoring = Array.from(freshPrMap.values()).map(pr => {
+          const cached = cacheMap.get(pr.branch);
+          return {
+            branchName: pr.branch,
+            checksStatus: pr.checks?.toLowerCase() ?? null,
+            updatedAt: cached?.updatedAt ?? null,
+          };
+        });
 
-        const selected = selectPRsToRefresh(cachedForScoring, {
+        const scoringContext = {
           localBranches: localBranchSet,
           worktreeBranches: worktreeBranchSet,
           now: Date.now(),
-        }, {
-          maxTotal: 5,    // Max 5 PRs per scan (worktree + others)
-          otherMax: 3,    // Up to 3 non-worktree PRs
+        };
+
+        const selected = selectPRsToRefresh(prsForScoring, scoringContext, {
+          maxTotal: prFetchCount,
         });
 
         // Filter fresh PRs to only selected ones
@@ -826,6 +833,57 @@ scanRouter.post("/", async (c) => {
             });
           }
         }
+
+        // Always rebuild snapshot with fresh PR data and re-broadcast
+        // This ensures frontend gets complete PR info (reviews, labels, etc.)
+        const updatedNodes = finalSnapshot.nodes.map(node => {
+          const freshPr = freshPrMap.get(node.branchName);
+          if (freshPr) {
+            return {
+              ...node,
+              pr: {
+                branch: freshPr.branch,
+                number: freshPr.number,
+                title: freshPr.title,
+                url: freshPr.url,
+                state: freshPr.state,
+                checks: freshPr.checks,
+                reviewDecision: freshPr.reviewDecision,
+                reviewStatus: freshPr.reviewStatus,
+                labels: freshPr.labels,
+                reviewers: freshPr.reviewers,
+              },
+            };
+          }
+          return node;
+        });
+
+        const prRefreshedSnapshot = { ...finalSnapshot, nodes: updatedNodes };
+
+        // Increment version to ensure frontend accepts update
+        const prRefreshVersion = newVersion + 1;
+
+        // Update cache with fresh PR data and new version
+        if (repoPin) {
+          await db.update(schema.repoPins).set({
+            cachedSnapshotJson: JSON.stringify(prRefreshedSnapshot),
+            cachedSnapshotVersion: prRefreshVersion,
+          }).where(eq(schema.repoPins.id, repoPin.id));
+        }
+
+        // Re-broadcast snapshot with fresh PR info
+        broadcast({
+          type: "scan.updated",
+          repoId,
+          data: {
+            version: prRefreshVersion,
+            stage: "pr_refreshed",
+            isFinal: true,
+            snapshot: prRefreshedSnapshot,
+          },
+        });
+
+        console.log(`[Scan] PR refresh complete for ${repoId}`);
         } // end else (freshPrs.length > 0)
       } catch (err) {
         console.warn("[Scan] Background PR fetch failed:", err);

@@ -12,6 +12,8 @@ interface SmartPollingOptions {
   isEditingEdge: boolean;
   /** Whether any worktree is dirty */
   hasDirtyWorktree: boolean;
+  /** Whether any PR has pending CI */
+  hasPendingCI?: boolean;
   /** Callback to trigger a scan */
   onTriggerScan: (localPath: string) => void;
   /** Whether polling is enabled */

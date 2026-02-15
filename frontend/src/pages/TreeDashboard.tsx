@@ -273,8 +273,10 @@ export default function TreeDashboard() {
   const [worktreeCreateScript, setWorktreeCreateScript] = useState("");
   const [worktreePostCreateScript, setWorktreePostCreateScript] = useState("");
   const [worktreePostDeleteScript, setWorktreePostDeleteScript] = useState("");
+  // Polling settings
+  const [pollingPrFetchCount, setPollingPrFetchCount] = useState(5);
   // Settings modal category
-  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "cleanup" | "debug">("branch");
+  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "polling" | "cleanup" | "debug">("branch");
   const [debugModeEnabled, setDebugModeEnabled] = useState(() => localStorage.getItem("vibe-tree-debug-mode") === "true");
   const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<{ chatSessions: number; taskInstructions: number; branchLinks: number } | null>(null);
@@ -289,7 +291,7 @@ export default function TreeDashboard() {
   const logIdRef = useRef(0);
   const addLog = useCallback((type: string, message: string) => {
     const id = ++logIdRef.current;
-    setLogs((prev) => [...prev.slice(-49), { id, timestamp: new Date(), type, message }]); // Keep last 50
+    setLogs((prev) => [...prev.slice(-99), { id, timestamp: new Date(), type, message }]); // Keep last 100
   }, []);
 
   // Next scan countdown
@@ -520,7 +522,6 @@ export default function TreeDashboard() {
       // Verify repoId matches to prevent cross-project updates
       const msgRepoId = data.snapshot?.repoId ?? data.repoId;
       if (msgRepoId && msgRepoId !== snapshot.repoId) {
-        console.log("[TreeDashboard] Ignoring scan.updated for different repo:", msgRepoId);
         return;
       }
 
@@ -529,7 +530,6 @@ export default function TreeDashboard() {
 
       // Skip if version is not newer (prevent out-of-order updates)
       if (newVersion < currentSnapshotVersion.current) {
-        console.log("[TreeDashboard] Ignoring older version:", newVersion, "< current:", currentSnapshotVersion.current);
         return;
       }
 
@@ -579,6 +579,46 @@ export default function TreeDashboard() {
           // No unsafe changes, clear any pending and update version
           setPendingChanges(null);
           currentSnapshotVersion.current = newVersion;
+        }
+
+        // Update branchLinks from snapshot nodes (for PR-related components)
+        // This ensures ExecuteSidebar, BranchGraph etc. get fresh PR data
+        if (data.snapshot?.nodes) {
+          setBranchLinks((prev) => {
+            const newMap = new Map(prev);
+            for (const node of data.snapshot!.nodes) {
+              if (node.pr) {
+                const existing = newMap.get(node.branchName) || [];
+                const prLinkIndex = existing.findIndex((l) => l.linkType === "pr");
+                const prLink: BranchLink = {
+                  id: prLinkIndex >= 0 ? existing[prLinkIndex].id : -1, // -1 for new
+                  repoId: data.snapshot!.repoId,
+                  branchName: node.branchName,
+                  linkType: "pr",
+                  url: node.pr.url,
+                  number: node.pr.number,
+                  title: node.pr.title,
+                  status: node.pr.state?.toLowerCase() ?? null,
+                  checksStatus: node.pr.checks?.toLowerCase() ?? null,
+                  reviewDecision: node.pr.reviewDecision ?? null,
+                  checks: null,
+                  labels: node.pr.labels ? JSON.stringify(node.pr.labels) : null,
+                  reviewers: node.pr.reviewers ? JSON.stringify(node.pr.reviewers) : null,
+                  projectStatus: null,
+                  baseBranch: null,
+                  createdAt: "",
+                  updatedAt: "",
+                };
+                if (prLinkIndex >= 0) {
+                  existing[prLinkIndex] = prLink;
+                  newMap.set(node.branchName, [...existing]);
+                } else {
+                  newMap.set(node.branchName, [prLink, ...existing]);
+                }
+              }
+            }
+            return newMap;
+          });
         }
       }
     });
@@ -675,7 +715,10 @@ export default function TreeDashboard() {
     const unsubPrScanned = wsClient.on("pr.scanned", (msg) => {
       const data = msg.data as { branches: string[] };
       if (data.branches && data.branches.length > 0) {
-        addLog("pr", `Scanned: ${data.branches.join(", ")}`);
+        addLog("pr", `Scanned ${data.branches.length} PRs:`);
+        for (const branch of data.branches) {
+          addLog("pr", `  → ${branch}`);
+        }
       }
     });
 
@@ -1114,15 +1157,17 @@ export default function TreeDashboard() {
     setSettingsDefaultBranch(selectedPin.baseBranch || "");
     setSettingsCategory("branch");
     try {
-      const [rule, wtSettings] = await Promise.all([
+      const [rule, wtSettings, pollSettings] = await Promise.all([
         api.getBranchNaming(snapshot.repoId),
         api.getWorktreeSettings(snapshot.repoId),
+        api.getPollingSettings(snapshot.repoId),
       ]);
       setSettingsRule(rule);
       setSettingsPatterns(rule.patterns || []);
       setWorktreeCreateScript(wtSettings.createScript || "");
       setWorktreePostCreateScript(wtSettings.postCreateScript || "");
       setWorktreePostDeleteScript(wtSettings.postDeleteScript || "");
+      setPollingPrFetchCount(pollSettings.prFetchCount ?? 5);
     } catch {
       // No rule exists yet
       setSettingsRule({ patterns: [] });
@@ -1130,6 +1175,7 @@ export default function TreeDashboard() {
       setWorktreeCreateScript("");
       setWorktreePostCreateScript("");
       setWorktreePostDeleteScript("");
+      setPollingPrFetchCount(5);
     } finally {
       setSettingsLoading(false);
     }
@@ -1155,6 +1201,12 @@ export default function TreeDashboard() {
         createScript: worktreeCreateScript,
         postCreateScript: worktreePostCreateScript,
         postDeleteScript: worktreePostDeleteScript,
+      });
+
+      // Save polling settings
+      await api.updatePollingSettings({
+        repoId: snapshot.repoId,
+        prFetchCount: pollingPrFetchCount,
       });
 
       // Save default branch (empty string clears it)
@@ -2154,6 +2206,12 @@ export default function TreeDashboard() {
                   Worktree
                 </button>
                 <button
+                  className={`settings-modal__nav-item ${settingsCategory === "polling" ? "settings-modal__nav-item--active" : ""}`}
+                  onClick={() => setSettingsCategory("polling")}
+                >
+                  Polling
+                </button>
+                <button
                   className={`settings-modal__nav-item ${settingsCategory === "cleanup" ? "settings-modal__nav-item--active" : ""}`}
                   onClick={() => setSettingsCategory("cleanup")}
                 >
@@ -2271,6 +2329,27 @@ export default function TreeDashboard() {
                             placeholder="echo 'Worktree deleted'"
                             rows={4}
                             style={{ width: "100%", fontFamily: "monospace", fontSize: 12, background: "#1f2937", border: "1px solid #374151", borderRadius: 4, padding: 8, color: "white", resize: "vertical" }}
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {/* Polling Settings */}
+                    {settingsCategory === "polling" && (
+                      <>
+                        <h3>Polling</h3>
+                        <div className="settings-section">
+                          <label>PR Fetch Count</label>
+                          <p style={{ marginBottom: 8, color: "#9ca3af" }}>
+                            Number of PRs to refresh per scan (1-20). Higher values provide more up-to-date PR status but increase API calls.
+                          </p>
+                          <input
+                            type="number"
+                            value={pollingPrFetchCount}
+                            onChange={(e) => setPollingPrFetchCount(Math.min(20, Math.max(1, parseInt(e.target.value) || 5)))}
+                            min={1}
+                            max={20}
+                            style={{ width: 80 }}
                           />
                         </div>
                       </>

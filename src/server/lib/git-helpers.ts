@@ -199,19 +199,28 @@ export async function getPRs(repoPath: string): Promise<PRInfo[]> {
         changedFiles: pr.changedFiles,
       };
       // Compute overall check status from all checks
+      // Filter out CANCELLED checks (they don't affect the overall status)
       if (pr.statusCheckRollup && pr.statusCheckRollup.length > 0) {
-        const hasFailure = pr.statusCheckRollup.some(
-          (c) => c.conclusion === "FAILURE" || c.conclusion === "ERROR"
+        const activeChecks = pr.statusCheckRollup.filter(
+          (c) => c.conclusion !== "CANCELLED"
         );
-        const allSuccess = pr.statusCheckRollup.every(
-          (c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED"
-        );
-        if (hasFailure) {
-          prInfo.checks = "FAILURE";
-        } else if (allSuccess) {
+        if (activeChecks.length === 0) {
+          // All checks were cancelled, treat as success
           prInfo.checks = "SUCCESS";
         } else {
-          prInfo.checks = "PENDING";
+          const hasFailure = activeChecks.some(
+            (c) => c.conclusion === "FAILURE" || c.conclusion === "ERROR"
+          );
+          const allSuccess = activeChecks.every(
+            (c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED"
+          );
+          if (hasFailure) {
+            prInfo.checks = "FAILURE";
+          } else if (allSuccess) {
+            prInfo.checks = "SUCCESS";
+          } else {
+            prInfo.checks = "PENDING";
+          }
         }
       }
       return prInfo;

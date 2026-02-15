@@ -25,7 +25,7 @@ interface GhPR {
   url: string;
   headRefName: string;
   isDraft: boolean;
-  labels: { name: string }[];
+  labels: { name: string; color: string }[];
   assignees: { login: string }[];
   reviewDecision: string;
   reviewRequests: { login?: string; name?: string; slug?: string }[]; // User has login, Team has name/slug
@@ -189,7 +189,7 @@ export async function getPRs(repoPath: string): Promise<PRInfo[]> {
         url: pr.url,
         branch: pr.headRefName,
         isDraft: pr.isDraft,
-        labels: pr.labels?.map((l) => l.name) ?? [],
+        labels: pr.labels?.map((l) => ({ name: l.name, color: l.color })) ?? [],
         assignees: pr.assignees?.map((a) => a.login) ?? [],
         reviewDecision: pr.reviewDecision,
         reviewStatus,

@@ -109,7 +109,7 @@ export interface PRInfo {
   url: string;
   branch: string;
   isDraft?: boolean;
-  labels?: string[];
+  labels?: { name: string; color: string }[];
   assignees?: string[];
   reviewDecision?: string; // APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED
   reviewStatus?: "none" | "requested" | "reviewed" | "approved"; // Computed review status

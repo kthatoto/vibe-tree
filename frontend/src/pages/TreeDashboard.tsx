@@ -669,18 +669,36 @@ export default function TreeDashboard() {
 
     // PR/CI status updates
     const unsubPrUpdated = wsClient.on("pr.updated", (msg) => {
+      type LabelInfo = { name: string; color: string };
+      type Change = {
+        type: string;
+        old?: string | null;
+        new?: string | null;
+        added?: LabelInfo[];
+        removed?: LabelInfo[];
+      };
       const data = msg.data as {
         prs: {
           branch: string;
           checks: string | null;
           state: string;
-          changes: { type: string; old?: string | null; new?: string | null }[];
+          changes: Change[];
         }[];
       };
       if (!data.prs || data.prs.length === 0) return;
 
+      // Helper to get contrasting text color for a background
+      const getTextColor = (bgColor: string) => {
+        const hex = bgColor.replace("#", "");
+        const r = parseInt(hex.substr(0, 2), 16);
+        const g = parseInt(hex.substr(2, 2), 16);
+        const b = parseInt(hex.substr(4, 2), 16);
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        return luminance > 0.5 ? "#000000" : "#ffffff";
+      };
+
       // Format change as HTML line
-      const formatChangeHtml = (change: { type: string; old?: string | null; new?: string | null }) => {
+      const formatChangeHtml = (change: Change) => {
         const ciHtml = (status: string | null | undefined) => {
           if (status === "success") return '<span style="color:#22c55e">Success ✔</span>';
           if (status === "failure") return '<span style="color:#ef4444">Failure ✗</span>';
@@ -695,14 +713,18 @@ export default function TreeDashboard() {
             return `CI: ${ciHtml(change.old)} → ${ciHtml(change.new)}`;
           case "labels": {
             const parts: string[] = [];
-            if (change.new) {
-              change.new.split(",").forEach(label => {
-                parts.push(`<span style="background:#22c55e33;color:#22c55e;padding:1px 4px;border-radius:3px;font-size:11px">${label}</span>`);
+            if (change.added) {
+              change.added.forEach(label => {
+                const bg = `#${label.color}`;
+                const text = getTextColor(label.color);
+                parts.push(`<span style="background:${bg};color:${text};padding:1px 6px;border-radius:10px;font-size:11px">${label.name}</span>`);
               });
             }
-            if (change.old) {
-              change.old.split(",").forEach(label => {
-                parts.push(`<span style="background:#ef444433;color:#ef4444;padding:1px 4px;border-radius:3px;font-size:11px;text-decoration:line-through">${label}</span>`);
+            if (change.removed) {
+              change.removed.forEach(label => {
+                const bg = `#${label.color}`;
+                const text = getTextColor(label.color);
+                parts.push(`<span style="background:${bg};color:${text};padding:1px 6px;border-radius:10px;font-size:11px;text-decoration:line-through;opacity:0.6">${label.name}</span>`);
               });
             }
             return `Labels: ${parts.join(" ")}`;

@@ -816,19 +816,28 @@ scanRouter.post("/", async (c) => {
                 changes.push({ type: "checks", old: old.checksStatus, new: prData.checksStatus });
               }
               {
-                // Handle both string[] and {name: string}[] formats for backwards compatibility
-                const parseLabels = (json: string | null): string[] => {
+                // Handle both string[] and {name: string; color: string}[] formats for backwards compatibility
+                type LabelWithColor = { name: string; color: string };
+                const parseLabels = (json: string | null): LabelWithColor[] => {
                   if (!json) return [];
                   const parsed = JSON.parse(json);
-                  return parsed.map((l: string | { name: string }) => typeof l === "string" ? l : l.name);
+                  return parsed.map((l: string | LabelWithColor) =>
+                    typeof l === "string" ? { name: l, color: "6b7280" } : { name: l.name, color: l.color || "6b7280" }
+                  );
                 };
-                const oldLabels = parseLabels(old.labels).sort();
-                const newLabels = parseLabels(prData.labels).sort();
-                const added = newLabels.filter(l => !oldLabels.includes(l));
-                const removed = oldLabels.filter(l => !newLabels.includes(l));
+                const oldLabels = parseLabels(old.labels);
+                const newLabels = parseLabels(prData.labels);
+                const oldNames = oldLabels.map(l => l.name);
+                const newNames = newLabels.map(l => l.name);
+                const added = newLabels.filter(l => !oldNames.includes(l.name));
+                const removed = oldLabels.filter(l => !newNames.includes(l.name));
                 // Only add change if there are actual additions or removals
                 if (added.length > 0 || removed.length > 0) {
-                  changes.push({ type: "labels", old: removed.join(","), new: added.join(",") });
+                  changes.push({
+                    type: "labels",
+                    added: added.map(l => ({ name: l.name, color: l.color })),
+                    removed: removed.map(l => ({ name: l.name, color: l.color })),
+                  });
                 }
               }
               if ((old.reviewDecision ?? null) !== prData.reviewDecision) {

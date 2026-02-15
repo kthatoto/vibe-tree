@@ -2685,7 +2685,7 @@ export default function TreeDashboard() {
 
                         <div className="settings-section" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                           <div>
-                            <label style={{ fontSize: 13 }}>Burst</label>
+                            <label style={{ fontSize: 13, color: "#f59e0b" }}>Burst</label>
                             <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>After PR update detected</p>
                             <input
                               type="number"
@@ -2701,7 +2701,7 @@ export default function TreeDashboard() {
                             />
                           </div>
                           <div>
-                            <label style={{ fontSize: 13 }}>Dirty</label>
+                            <label style={{ fontSize: 13, color: "#ef4444" }}>Dirty</label>
                             <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>Worktree has uncommitted changes</p>
                             <input
                               type="number"
@@ -2717,7 +2717,7 @@ export default function TreeDashboard() {
                             />
                           </div>
                           <div>
-                            <label style={{ fontSize: 13 }}>CI Pending</label>
+                            <label style={{ fontSize: 13, color: "#eab308" }}>CI Pending</label>
                             <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>PR has pending CI checks</p>
                             <input
                               type="number"
@@ -2733,7 +2733,7 @@ export default function TreeDashboard() {
                             />
                           </div>
                           <div>
-                            <label style={{ fontSize: 13 }}>Active</label>
+                            <label style={{ fontSize: 13, color: "#22c55e" }}>Active</label>
                             <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>Normal active window</p>
                             <input
                               type="number"
@@ -2749,7 +2749,7 @@ export default function TreeDashboard() {
                             />
                           </div>
                           <div>
-                            <label style={{ fontSize: 13 }}>Idle</label>
+                            <label style={{ fontSize: 13, color: "#6b7280" }}>Idle</label>
                             <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>No changes for a while</p>
                             <input
                               type="number"
@@ -2765,7 +2765,7 @@ export default function TreeDashboard() {
                             />
                           </div>
                           <div>
-                            <label style={{ fontSize: 13 }}>Super Idle</label>
+                            <label style={{ fontSize: 13, color: "#4b5563" }}>Super Idle</label>
                             <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>Long time without changes</p>
                             <input
                               type="number"
@@ -2789,7 +2789,7 @@ export default function TreeDashboard() {
 
                         <div className="settings-section" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                           <div>
-                            <label style={{ fontSize: 13 }}>Idle Threshold</label>
+                            <label style={{ fontSize: 13, color: "#6b7280" }}>Idle Threshold</label>
                             <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>Time before entering idle mode</p>
                             <input
                               type="number"
@@ -2805,7 +2805,7 @@ export default function TreeDashboard() {
                             />
                           </div>
                           <div>
-                            <label style={{ fontSize: 13 }}>Super Idle Threshold</label>
+                            <label style={{ fontSize: 13, color: "#4b5563" }}>Super Idle Threshold</label>
                             <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>Time before entering super idle</p>
                             <input
                               type="number"
@@ -2821,7 +2821,7 @@ export default function TreeDashboard() {
                             />
                           </div>
                           <div>
-                            <label style={{ fontSize: 13 }}>CI Pending Timeout</label>
+                            <label style={{ fontSize: 13, color: "#eab308" }}>CI Pending Timeout</label>
                             <p style={{ color: "#9ca3af", fontSize: 12, margin: "2px 0 4px" }}>Max time in CI pending mode</p>
                             <input
                               type="number"
@@ -2840,7 +2840,10 @@ export default function TreeDashboard() {
 
                         <div style={{ marginTop: 24, padding: 12, background: "#1f2937", borderRadius: 6, fontSize: 13 }}>
                           <p style={{ color: "#9ca3af", margin: 0 }}>
-                            <strong style={{ color: "#e5e7eb" }}>Current mode:</strong> {pollingState.mode}
+                            <strong style={{ color: "#e5e7eb" }}>Current mode:</strong>{" "}
+                            <span style={{ color: MODE_LABELS[pollingState.mode]?.color || "#e5e7eb" }}>
+                              {MODE_LABELS[pollingState.mode]?.label || pollingState.mode}
+                            </span>
                             {" • "}
                             <strong style={{ color: "#e5e7eb" }}>Interval:</strong> {pollingState.interval / 1000}s
                           </p>

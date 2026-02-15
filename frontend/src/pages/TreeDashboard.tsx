@@ -169,16 +169,22 @@ function ScanProgressBar({ nextScanTime, interval, mode, scanProgress, isPolling
         {displayState === "scanning" ? (
           <div style={{
             height: "100%",
-            width: `${scanPercent}%`,
+            width: "100%",
             background: "#60a5fa",
-            transition: "width 0.3s ease-out",
+            transform: `scaleX(${scanPercent / 100})`,
+            transformOrigin: "left",
+            transition: "transform 0.3s ease-out",
+            willChange: "transform",
           }} />
         ) : displayState === "countdown" ? (
           <div style={{
             height: "100%",
-            width: `${countdownPercent}%`,
+            width: "100%",
             background: modeInfo.color,
-            transition: "width 0.1s linear",
+            transform: `scaleX(${countdownPercent / 100})`,
+            transformOrigin: "left",
+            transition: "transform 0.1s linear",
+            willChange: "transform",
           }} />
         ) : null}
       </div>

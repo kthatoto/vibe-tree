@@ -293,6 +293,8 @@ export default function TreeDashboard() {
   const [branchLinks, setBranchLinks] = useState<Map<string, BranchLink[]>>(new Map());
   // Branch descriptions (git branch descriptions for labels)
   const [branchDescriptions, setBranchDescriptions] = useState<Map<string, string>>(new Map());
+  // Repo labels (cached once per repo)
+  const [repoLabels, setRepoLabels] = useState<Record<string, string>>({});
 
   // Multi-session planning state (only store what's needed, not full session copy)
   const [selectedSessionBaseBranch, setSelectedSessionBaseBranch] = useState<string | null>(null);
@@ -1067,6 +1069,14 @@ export default function TreeDashboard() {
       })
       .catch(console.error);
   }, [snapshot?.repoId, snapshot?.nodes.length]);
+
+  // Load repo labels once per repo
+  useEffect(() => {
+    if (!snapshot?.repoId) return;
+    api.getRepoLabels(snapshot.repoId)
+      .then((labels) => setRepoLabels(labels))
+      .catch(console.error);
+  }, [snapshot?.repoId]);
 
   // Extract branchDescriptions from snapshot nodes (no separate API call needed)
   useEffect(() => {
@@ -2442,6 +2452,11 @@ export default function TreeDashboard() {
                     }}
                     onDescriptionChange={(branch, desc) => {
                       setBranchDescriptions((prev) => new Map(prev).set(branch, desc));
+                    }}
+                    branchLinksFromParent={branchLinks.get(selectedNode.branchName) || []}
+                    repoLabels={repoLabels}
+                    onBranchLinksChange={(links) => {
+                      setBranchLinks((prev) => new Map(prev).set(selectedNode.branchName, links));
                     }}
                   />
                 ) : (

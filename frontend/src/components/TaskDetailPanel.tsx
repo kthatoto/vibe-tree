@@ -170,6 +170,10 @@ interface TaskDetailPanelProps {
   instructionLoading?: boolean;
   onInstructionUpdate?: (instruction: TaskInstruction) => void;
   onDescriptionChange?: (branchName: string, description: string) => void;
+  // Data from parent (single source of truth)
+  branchLinksFromParent?: BranchLink[];
+  repoLabels?: Record<string, string>;
+  onBranchLinksChange?: (links: BranchLink[]) => void;
 }
 
 export function TaskDetailPanel({
@@ -187,6 +191,9 @@ export function TaskDetailPanel({
   instructionLoading = false,
   onInstructionUpdate,
   onDescriptionChange,
+  branchLinksFromParent,
+  repoLabels: repoLabelsFromParent,
+  onBranchLinksChange,
 }: TaskDetailPanelProps) {
   const isDefaultBranch = branchName === defaultBranch;
 
@@ -245,8 +252,14 @@ export function TaskDetailPanel({
     setCheckedOut(false);
   }, [branchName]);
 
-  // Branch links state
-  const [branchLinks, setBranchLinks] = useState<BranchLink[]>([]);
+  // Branch links state - use parent data if available
+  const [branchLinksLocal, setBranchLinksLocal] = useState<BranchLink[]>([]);
+  const branchLinks = branchLinksFromParent ?? branchLinksLocal;
+  const setBranchLinks = (links: BranchLink[] | ((prev: BranchLink[]) => BranchLink[])) => {
+    const newLinks = typeof links === 'function' ? links(branchLinks) : links;
+    setBranchLinksLocal(newLinks);
+    onBranchLinksChange?.(newLinks);
+  };
   const [addingLinkType, setAddingLinkType] = useState<"issue" | "pr" | null>(null);
   const [newLinkUrl, setNewLinkUrl] = useState("");
   const [deletingLinkId, setDeletingLinkId] = useState<number | null>(null);
@@ -274,9 +287,6 @@ export function TaskDetailPanel({
   const [descriptionSaved, setDescriptionSaved] = useState(false);
   const descriptionInputRef = useRef<HTMLInputElement>(null);
 
-  // Repo-level label colors cache
-  const [repoLabels, setRepoLabels] = useState<Record<string, string>>({});
-
   // The working path is either the worktree path or localPath if checked out
   const workingPath = worktreePath || (checkedOut ? localPath : null);
 
@@ -294,49 +304,26 @@ export function TaskDetailPanel({
     }
   }, [instruction]);
 
-  // Load branch links and refresh from GitHub
+  // Auto-link PR from node.pr if not already linked (only when parent provides data)
   useEffect(() => {
-    const loadBranchLinks = async () => {
-      try {
-        let links = await api.getBranchLinks(repoId, branchName);
-        setBranchLinks(links);
+    // Skip if parent doesn't provide data - data will come from parent
+    if (branchLinksFromParent === undefined) return;
 
-        // Auto-link PR from node.pr if not already linked
-        const hasPRLink = links.some((l) => l.linkType === "pr");
-        if (!hasPRLink && node?.pr?.url && node.pr.number) {
-          try {
-            const newLink = await api.createBranchLink({
-              repoId,
-              branchName,
-              linkType: "pr",
-              url: node.pr.url,
-              number: node.pr.number,
-            });
-            links = [...links, newLink];
-            setBranchLinks(links);
-          } catch (err) {
-            console.error("Failed to auto-link PR:", err);
-          }
-        }
-
-        // Auto-refresh links from GitHub sequentially (to avoid API overload)
-        const linksToRefresh = links.filter(l => l.number);
-        for (const link of linksToRefresh) {
-          try {
-            const refreshed = await api.refreshBranchLink(link.id);
-            setBranchLinks((prev) =>
-              prev.map((l) => (l.id === refreshed.id ? refreshed : l))
-            );
-          } catch (err) {
-            console.error(`Failed to refresh link ${link.id}:`, err);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load branch links:", err);
-      }
-    };
-    loadBranchLinks();
-  }, [repoId, branchName, node?.pr?.url, node?.pr?.number]);
+    const hasPRLink = branchLinks.some((l) => l.linkType === "pr");
+    if (!hasPRLink && node?.pr?.url && node.pr.number) {
+      api.createBranchLink({
+        repoId,
+        branchName,
+        linkType: "pr",
+        url: node.pr.url,
+        number: node.pr.number,
+      }).then((newLink) => {
+        setBranchLinks([...branchLinks, newLink]);
+      }).catch((err) => {
+        console.error("Failed to auto-link PR:", err);
+      });
+    }
+  }, [repoId, branchName, node?.pr?.url, node?.pr?.number, branchLinksFromParent]);
 
   // Check if branch is deletable (no commits + not on remote)
   useEffect(() => {
@@ -356,54 +343,26 @@ export function TaskDetailPanel({
     checkDeletable();
   }, [localPath, branchName, parentBranch, isDefaultBranch]);
 
-  // Load branch description
+  // Use description from node (already in snapshot) instead of API call
   useEffect(() => {
-    const loadDescription = async () => {
-      try {
-        const desc = await api.getBranchDescription(repoId, branchName);
-        setBranchDescription(desc);
-        setDescriptionDraft(desc?.description || "");
-      } catch (err) {
-        console.error("Failed to load branch description:", err);
-      }
-    };
-    loadDescription();
-  }, [repoId, branchName]);
+    const desc = node?.description || null;
+    setBranchDescription(desc ? { branchName, description: desc } : null);
+    setDescriptionDraft(desc || "");
+  }, [branchName, node?.description]);
 
-  // Load repo-level label colors
+  // Use repo labels from parent if available, otherwise load once
+  const [repoLabelsLocal, setRepoLabelsLocal] = useState<Record<string, string>>({});
+  const repoLabels = repoLabelsFromParent ?? repoLabelsLocal;
   useEffect(() => {
-    const loadRepoLabels = async () => {
-      try {
-        const labels = await api.getRepoLabels(repoId);
-        setRepoLabels(labels);
-      } catch (err) {
-        console.error("Failed to load repo labels:", err);
-      }
-    };
-    loadRepoLabels();
-  }, [repoId]);
+    // Skip if parent provides labels
+    if (repoLabelsFromParent !== undefined) return;
 
-  // Poll CI status for PRs every 30 seconds
-  useEffect(() => {
-    const pr = branchLinks.find((l) => l.linkType === "pr");
-    if (!pr?.number) return;
+    api.getRepoLabels(repoId)
+      .then((labels) => setRepoLabelsLocal(labels))
+      .catch((err) => console.error("Failed to load repo labels:", err));
+  }, [repoId, repoLabelsFromParent]);
 
-    const pollCI = async () => {
-      try {
-        const refreshed = await api.refreshBranchLink(pr.id);
-        setBranchLinks((prev) =>
-          prev.map((l) => (l.id === refreshed.id ? refreshed : l))
-        );
-      } catch (err) {
-        console.error("Failed to poll CI:", err);
-      }
-    };
-
-    const interval = setInterval(pollCI, 30000);
-    return () => clearInterval(interval);
-  }, [branchLinks]);
-
-  // Subscribe to branch link updates (for auto-linked PRs from chat)
+  // Subscribe to branch link updates (WebSocket handles live updates from scan)
   useEffect(() => {
     const unsubCreated = wsClient.on("branchLink.created", (msg) => {
       const data = msg.data as BranchLink;

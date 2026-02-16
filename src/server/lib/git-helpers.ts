@@ -214,27 +214,32 @@ export async function getPRs(repoPath: string): Promise<PRInfo[]> {
           }
         }
 
-        // Filter out CANCELLED checks (they don't affect the overall status)
+        // Filter out CANCELLED and STALE checks (they don't affect the overall status)
         const latestChecks = Array.from(checksByName.values());
         const activeChecks = latestChecks.filter(
-          (c) => c.conclusion !== "CANCELLED"
+          (c) => c.conclusion !== "CANCELLED" && c.conclusion !== "STALE"
         );
         if (activeChecks.length === 0) {
-          // All checks were cancelled, treat as success
+          // All checks were cancelled/stale, treat as success
           prInfo.checks = "SUCCESS";
         } else {
+          // Failure-like conclusions
           const hasFailure = activeChecks.some(
-            (c) => c.conclusion === "FAILURE" || c.conclusion === "ERROR"
+            (c) => c.conclusion === "FAILURE" || c.conclusion === "ERROR" ||
+                   c.conclusion === "TIMED_OUT" || c.conclusion === "STARTUP_FAILURE"
           );
-          const allSuccess = activeChecks.every(
-            (c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED"
+          // Pending-like: null conclusion means still running
+          const hasPending = activeChecks.some(
+            (c) => c.conclusion === null || c.conclusion === "ACTION_REQUIRED"
           );
+          // Success-like conclusions (SUCCESS, SKIPPED, NEUTRAL)
           if (hasFailure) {
             prInfo.checks = "FAILURE";
-          } else if (allSuccess) {
-            prInfo.checks = "SUCCESS";
-          } else {
+          } else if (hasPending) {
             prInfo.checks = "PENDING";
+          } else {
+            // All checks completed with non-failure conclusions
+            prInfo.checks = "SUCCESS";
           }
         }
       }

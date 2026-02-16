@@ -164,9 +164,11 @@ export async function getPRs(repoPath: string): Promise<PRInfo[]> {
         .map((r) => r.login || r.slug || r.name) // User has login, Team has slug/name
         .filter((name): name is string => !!name && !isBot(name));
 
-      // Check if there are any human reviews submitted (exclude bots)
+      // Check if there are any human reviews submitted (exclude bots and COMMENTED-only)
+      // Only count APPROVED, CHANGES_REQUESTED as actual reviews
       const humanReviews = (pr.reviews ?? []).filter(
-        (r) => r.author?.login && !isBot(r.author.login)
+        (r) => r.author?.login && !isBot(r.author.login) &&
+               (r.state === "APPROVED" || r.state === "CHANGES_REQUESTED")
       );
       const hasReviews = humanReviews.length > 0;
 

@@ -123,6 +123,7 @@ async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<GitH
     const checks = Array.from(checksMap.values());
 
     // Extract reviewers (filter out bots like GitHub Copilot)
+    // Only include reviewRequests (pending reviewers), not reviews (COMMENTED doesn't count)
     const isBot = (login: string) =>
       login.toLowerCase().includes("copilot") || login.endsWith("[bot]");
     const reviewers: string[] = [];
@@ -131,9 +132,12 @@ async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<GitH
         if (r.login && !isBot(r.login)) reviewers.push(r.login);
       }
     }
+    // Only add reviewers who have APPROVED or CHANGES_REQUESTED (not just COMMENTED)
     if (data.reviews) {
       for (const r of data.reviews) {
-        if (r.author?.login && !isBot(r.author.login) && !reviewers.includes(r.author.login)) {
+        const state = r.state;
+        if (r.author?.login && !isBot(r.author.login) && !reviewers.includes(r.author.login) &&
+            (state === "APPROVED" || state === "CHANGES_REQUESTED")) {
           reviewers.push(r.author.login);
         }
       }

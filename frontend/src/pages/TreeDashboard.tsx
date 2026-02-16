@@ -293,8 +293,6 @@ export default function TreeDashboard() {
   const [branchLinks, setBranchLinks] = useState<Map<string, BranchLink[]>>(new Map());
   // Branch descriptions (git branch descriptions for labels)
   const [branchDescriptions, setBranchDescriptions] = useState<Map<string, string>>(new Map());
-  // Repo labels (cached once per repo)
-  const [repoLabels, setRepoLabels] = useState<Record<string, string>>({});
 
   // Multi-session planning state (only store what's needed, not full session copy)
   const [selectedSessionBaseBranch, setSelectedSessionBaseBranch] = useState<string | null>(null);
@@ -399,6 +397,7 @@ export default function TreeDashboard() {
   const currentSnapshotVersion = useRef<number>(0);
   const [isApplyingUpdate, setIsApplyingUpdate] = useState(false);
   const isScanningRef = useRef<boolean>(false);
+  const lastScanCompleteTimeRef = useRef<number>(0);
 
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
@@ -868,6 +867,7 @@ export default function TreeDashboard() {
         if (data.isComplete) {
           // Clear the scanning lock immediately so new scans can be triggered
           isScanningRef.current = false;
+          lastScanCompleteTimeRef.current = Date.now();
           // Delay countdown start until after 100% display finishes
           // Must match queueProgressUpdate(null) delay so countdown starts fresh
           setTimeout(() => {
@@ -879,6 +879,12 @@ export default function TreeDashboard() {
 
     // Refetch branches when planning is confirmed
     const unsubBranches = wsClient.on("branches.changed", () => {
+      // Skip if scan just completed (within 3 seconds) to avoid duplicate scans
+      const timeSinceLastScan = Date.now() - lastScanCompleteTimeRef.current;
+      if (timeSinceLastScan < 3000) {
+        addLog("branches", "Branches changed (skipped - scan just completed)");
+        return;
+      }
       addLog("branches", "Branches changed, rescanning...");
       if (selectedPin) {
         triggerScan(selectedPin.localPath);
@@ -1085,14 +1091,6 @@ export default function TreeDashboard() {
       })
       .catch(console.error);
   }, [snapshot?.repoId, snapshot?.nodes.length]);
-
-  // Load repo labels once per repo
-  useEffect(() => {
-    if (!snapshot?.repoId) return;
-    api.getRepoLabels(snapshot.repoId)
-      .then((labels) => setRepoLabels(labels))
-      .catch(console.error);
-  }, [snapshot?.repoId]);
 
   // Extract branchDescriptions from snapshot nodes (no separate API call needed)
   useEffect(() => {
@@ -2468,11 +2466,6 @@ export default function TreeDashboard() {
                     }}
                     onDescriptionChange={(branch, desc) => {
                       setBranchDescriptions((prev) => new Map(prev).set(branch, desc));
-                    }}
-                    branchLinksFromParent={branchLinks.get(selectedNode.branchName) || []}
-                    repoLabels={repoLabels}
-                    onBranchLinksChange={(links) => {
-                      setBranchLinks((prev) => new Map(prev).set(selectedNode.branchName, links));
                     }}
                   />
                 ) : (

@@ -690,6 +690,22 @@ export default function TreeDashboard() {
     }
   }, [snapshot, selectedNode]);
 
+  // Escape key to deselect branch
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && selectedNode) {
+        // Don't deselect if user is typing in an input/textarea
+        const target = e.target as HTMLElement;
+        if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
+          return;
+        }
+        setSelectedNode(null);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [selectedNode]);
+
   // Load instruction when selectedNode changes (with caching)
   useEffect(() => {
     if (!snapshot?.repoId || !selectedNode) {

@@ -78,6 +78,50 @@ export function ChatPanel({
     artifactCount: number;
     totalRawTokens: number;
   } | null>(null);
+  // Textarea height (resizable from top)
+  const DEFAULT_TEXTAREA_HEIGHT = 80;
+  const [textareaHeight, setTextareaHeight] = useState(() => {
+    const saved = localStorage.getItem("chatPanel.textareaHeight");
+    return saved ? parseInt(saved, 10) : DEFAULT_TEXTAREA_HEIGHT;
+  });
+  const [isResizingTextarea, setIsResizingTextarea] = useState(false);
+  const resizeStartY = useRef(0);
+  const resizeStartHeight = useRef(0);
+
+  // Save textarea height to localStorage
+  useEffect(() => {
+    localStorage.setItem("chatPanel.textareaHeight", String(textareaHeight));
+  }, [textareaHeight]);
+
+  // Textarea resize handlers (drag from top edge)
+  const handleTextareaResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizingTextarea(true);
+    resizeStartY.current = e.clientY;
+    resizeStartHeight.current = textareaHeight;
+  }, [textareaHeight]);
+
+  useEffect(() => {
+    if (!isResizingTextarea) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      // Dragging up increases height, dragging down decreases
+      const deltaY = resizeStartY.current - e.clientY;
+      const newHeight = Math.max(60, Math.min(500, resizeStartHeight.current + deltaY));
+      setTextareaHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingTextarea(false);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizingTextarea]);
 
   // Refs for callbacks to avoid stale closures in WebSocket handlers
   const executeContextRef = useRef(executeContext);
@@ -1063,6 +1107,23 @@ export function ChatPanel({
             </div>
           )}
         </div>
+        {/* Resize handle at top of textarea */}
+        <div
+          onMouseDown={handleTextareaResizeStart}
+          style={{
+            height: 6,
+            background: isResizingTextarea ? "#60a5fa" : "transparent",
+            cursor: "ns-resize",
+            borderRadius: "4px 4px 0 0",
+            marginBottom: -2,
+            transition: "background 0.15s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "#374151")}
+          onMouseLeave={(e) => {
+            if (!isResizingTextarea) e.currentTarget.style.background = "transparent";
+          }}
+          title="Drag to resize"
+        />
         <div style={{ display: "flex", gap: 8 }}>
           <textarea
             ref={inputRef}
@@ -1072,7 +1133,7 @@ export function ChatPanel({
             placeholder="Type a message... (⌘+Enter to send)"
             style={{
               flex: 1,
-              resize: "vertical",
+              resize: "none",
               border: "1px solid #374151",
               borderRadius: 4,
               padding: "8px 12px",
@@ -1081,8 +1142,9 @@ export function ChatPanel({
               outline: "none",
               background: "#1f2937",
               color: "#f3f4f6",
-              minHeight: 80,
-              maxHeight: 400,
+              height: textareaHeight,
+              minHeight: 60,
+              maxHeight: 500,
             }}
             disabled={disabled}
           />

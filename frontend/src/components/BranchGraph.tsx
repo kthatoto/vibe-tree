@@ -1102,11 +1102,13 @@ export default function BranchGraph({
   // Helper to check if a branch is on the unfocused (right) side of separator
   const isUnfocusedBranch = useCallback((branchId: string): boolean => {
     // Find which root sibling this branch belongs to
-    const findRootSibling = (id: string): string | null => {
+    const findRootSibling = (id: string, visited: Set<string> = new Set()): string | null => {
       if (rootSiblings.includes(id)) return id;
+      if (visited.has(id)) return null; // Prevent infinite loop on cycles
+      visited.add(id);
       const parent = edges.find(e => e.child === id)?.parent;
-      if (!parent || parent === defaultBranch) return null;
-      return findRootSibling(parent);
+      if (!parent || parent === defaultBranch || parent === id) return null;
+      return findRootSibling(parent, visited);
     };
 
     const rootSibling = findRootSibling(branchId);

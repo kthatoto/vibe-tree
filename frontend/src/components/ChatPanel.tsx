@@ -1111,19 +1111,31 @@ export function ChatPanel({
         <div
           onMouseDown={handleTextareaResizeStart}
           style={{
-            height: 6,
-            background: isResizingTextarea ? "#60a5fa" : "transparent",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            height: 12,
+            background: isResizingTextarea ? "#1e3a5f" : "#111827",
             cursor: "ns-resize",
             borderRadius: "4px 4px 0 0",
-            marginBottom: -2,
+            border: "1px solid #374151",
+            borderBottom: "none",
             transition: "background 0.15s",
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "#374151")}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "#1e3a5f")}
           onMouseLeave={(e) => {
-            if (!isResizingTextarea) e.currentTarget.style.background = "transparent";
+            if (!isResizingTextarea) e.currentTarget.style.background = "#111827";
           }}
           title="Drag to resize"
-        />
+        >
+          {/* Grip indicator */}
+          <div style={{
+            width: 32,
+            height: 4,
+            borderRadius: 2,
+            background: "#4b5563",
+          }} />
+        </div>
         <div style={{ display: "flex", gap: 8 }}>
           <textarea
             ref={inputRef}
@@ -1135,7 +1147,8 @@ export function ChatPanel({
               flex: 1,
               resize: "none",
               border: "1px solid #374151",
-              borderRadius: 4,
+              borderTop: "none",
+              borderRadius: "0 0 4px 4px",
               padding: "8px 12px",
               fontSize: 14,
               fontFamily: "inherit",

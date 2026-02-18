@@ -2521,6 +2521,7 @@ export default function TreeDashboard() {
                   onToggleFullscreen={() => setChatFullscreen(!chatFullscreen)}
                   initialSessionId={urlSessionId}
                   onActiveSessionChange={handleActiveSessionChange}
+                  branchLinks={branchLinks}
                 />
               </div>
             </div>

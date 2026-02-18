@@ -39,6 +39,8 @@ interface PlanningPanelProps {
   // URL-based session selection
   initialSessionId?: string;
   onActiveSessionChange?: (sessionId: string | null) => void;
+  // Unified branch links from parent (TreeDashboard)
+  branchLinks?: Map<string, BranchLink[]>;
 }
 
 export function PlanningPanel({
@@ -54,6 +56,7 @@ export function PlanningPanel({
   onToggleFullscreen,
   initialSessionId,
   onActiveSessionChange,
+  branchLinks: branchLinksFromParent,
 }: PlanningPanelProps) {
   const [sessions, setSessions] = useState<PlanningSession[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1897,6 +1900,7 @@ export function PlanningPanel({
                 graphNodes={graphNodes}
                 graphEdges={graphEdges}
                 defaultBranch={defaultBranch}
+                branchLinks={branchLinksFromParent}
               />
             );
           })}

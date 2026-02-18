@@ -20,6 +20,8 @@ interface ExecuteSidebarProps {
   onExpandToggle?: () => void;
   isExpanded?: boolean;
   sessionType?: "execute" | "planning";
+  // Optional: branch links from parent (single source of truth)
+  branchLinksFromParent?: Map<string, BranchLink[]>;
 }
 
 export function ExecuteSidebar({
@@ -33,6 +35,7 @@ export function ExecuteSidebar({
   onExpandToggle,
   isExpanded = false,
   sessionType = "execute",
+  branchLinksFromParent,
 }: ExecuteSidebarProps) {
   // Preview branch (clicked but not switched to)
   const [previewBranch, setPreviewBranch] = useState<string | null>(null);
@@ -90,6 +93,7 @@ export function ExecuteSidebar({
   }, [currentExecuteIndex]);
 
   // Load branch links, external links, files, and instruction for display branch
+  // If branchLinksFromParent is available, use allBranchLinks (already populated from parent)
   useEffect(() => {
     if (!repoId || !displayBranch) {
       setBranchLinks([]);
@@ -98,6 +102,27 @@ export function ExecuteSidebar({
       setInstruction(null);
       return;
     }
+
+    // When branchLinksFromParent is available, use allBranchLinks for branch links
+    // but still load external links, files, and instruction via API
+    if (branchLinksFromParent) {
+      setBranchLinks(allBranchLinks.get(displayBranch) || []);
+      setInstructionLoading(true);
+      Promise.all([
+        api.getBranchExternalLinks(repoId, displayBranch).catch(() => []),
+        api.getBranchFiles(repoId, displayBranch).catch(() => []),
+        api.getTaskInstruction(repoId, displayBranch).catch(() => null),
+      ])
+        .then(([extLinks, files, inst]) => {
+          setExternalLinks(extLinks);
+          setBranchFiles(files);
+          setInstruction(inst);
+        })
+        .finally(() => setInstructionLoading(false));
+      return;
+    }
+
+    // Fallback: Load everything from API
     setInstructionLoading(true);
     Promise.all([
       api.getBranchLinks(repoId, displayBranch).catch(() => []),
@@ -123,7 +148,7 @@ export function ExecuteSidebar({
         setInstruction(inst);
       })
       .finally(() => setInstructionLoading(false));
-  }, [repoId, displayBranch]);
+  }, [repoId, displayBranch, branchLinksFromParent, allBranchLinks]);
 
   // Load all todos for all branches
   useEffect(() => {
@@ -148,9 +173,22 @@ export function ExecuteSidebar({
   }, [repoId, executeBranches]);
 
   // Load all branch links for all branches (with PR auto-detection)
+  // If branchLinksFromParent is available, use it as the primary source
   useEffect(() => {
     if (!repoId || executeBranches.length === 0) return;
 
+    // If branchLinksFromParent is provided, use it directly (single source of truth)
+    if (branchLinksFromParent) {
+      // Filter to only include branches in executeBranches
+      const filteredMap = new Map<string, BranchLink[]>();
+      for (const branch of executeBranches) {
+        filteredMap.set(branch, branchLinksFromParent.get(branch) || []);
+      }
+      setAllBranchLinks(filteredMap);
+      return;
+    }
+
+    // Fallback: Load from API if no parent data provided
     const loadAllBranchLinks = async () => {
       try {
         // Use batch API for single request
@@ -192,7 +230,7 @@ export function ExecuteSidebar({
     };
 
     loadAllBranchLinks();
-  }, [repoId, executeBranches]);
+  }, [repoId, executeBranches, branchLinksFromParent]);
 
   // Load all resource counts for all branches (for tree badges)
   useEffect(() => {

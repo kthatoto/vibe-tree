@@ -5,6 +5,7 @@ import {
   type TaskInstruction,
   type TreeNode,
   type TreeEdge,
+  type BranchLink,
 } from "../../lib/api";
 import { useIsStreaming } from "../../lib/useStreamingState";
 import { ChatPanel } from "../ChatPanel";
@@ -32,6 +33,8 @@ interface ExecuteSessionViewProps {
   graphNodes: TreeNode[];
   graphEdges: TreeEdge[];
   defaultBranch: string;
+  // Unified branch links from parent (single source of truth)
+  branchLinks?: Map<string, BranchLink[]>;
 }
 
 export function ExecuteSessionView({
@@ -52,6 +55,7 @@ export function ExecuteSessionView({
   graphNodes,
   graphEdges,
   defaultBranch,
+  branchLinks,
 }: ExecuteSessionViewProps) {
   // Session-specific state
   // Use global streaming state as single source of truth
@@ -349,6 +353,7 @@ export function ExecuteSessionView({
               onExpandToggle={() => onSidebarFullscreenChange(!sidebarFullscreen)}
               isExpanded={sidebarFullscreen}
               sessionType="execute"
+              branchLinksFromParent={branchLinks}
             />
           </div>
         </div>

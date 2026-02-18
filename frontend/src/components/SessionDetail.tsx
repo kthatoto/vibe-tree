@@ -1,4 +1,4 @@
-import { type PlanningSession, type TreeNode, type TreeEdge } from "../lib/api";
+import { type PlanningSession, type TreeNode, type TreeEdge, type BranchLink } from "../lib/api";
 import type { TaskSuggestion } from "../lib/task-parser";
 import { RefinementSessionView } from "./sessions/RefinementSessionView";
 import { ExecuteSessionView } from "./sessions/ExecuteSessionView";
@@ -25,6 +25,8 @@ export interface SessionDetailProps {
   graphNodes: TreeNode[];
   graphEdges: TreeEdge[];
   defaultBranch: string;
+  // Unified branch links from parent (single source of truth)
+  branchLinks?: Map<string, BranchLink[]>;
 }
 
 /**
@@ -53,6 +55,7 @@ export function SessionDetail({
   graphNodes,
   graphEdges,
   defaultBranch,
+  branchLinks,
 }: SessionDetailProps) {
   // Common props for all session views
   const commonProps = {
@@ -73,6 +76,7 @@ export function SessionDetail({
     graphNodes,
     graphEdges,
     defaultBranch,
+    branchLinks,
   };
 
   return (

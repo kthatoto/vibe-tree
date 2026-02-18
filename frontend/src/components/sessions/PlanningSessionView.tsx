@@ -5,6 +5,7 @@ import {
   type TaskInstruction,
   type TreeNode,
   type TreeEdge,
+  type BranchLink,
 } from "../../lib/api";
 import { wsClient } from "../../lib/ws";
 import { useIsStreaming } from "../../lib/useStreamingState";
@@ -32,6 +33,8 @@ interface PlanningSessionViewProps {
   graphNodes: TreeNode[];
   graphEdges: TreeEdge[];
   defaultBranch: string;
+  // Unified branch links from parent (single source of truth)
+  branchLinks?: Map<string, BranchLink[]>;
 }
 
 export function PlanningSessionView({
@@ -51,6 +54,7 @@ export function PlanningSessionView({
   graphNodes,
   graphEdges,
   defaultBranch,
+  branchLinks,
 }: PlanningSessionViewProps) {
   // Session-specific state
   // Use global streaming state as single source of truth
@@ -340,6 +344,7 @@ export function PlanningSessionView({
               sessionType="planning"
               onExpandToggle={() => onSidebarFullscreenChange(!sidebarFullscreen)}
               isExpanded={sidebarFullscreen}
+              branchLinksFromParent={branchLinks}
             />
           </div>
         </div>

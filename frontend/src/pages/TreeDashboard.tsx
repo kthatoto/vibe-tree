@@ -2489,8 +2489,20 @@ export default function TreeDashboard() {
                       }
                       setCurrentInstruction(updated);
                     }}
+                    description={branchDescriptions.get(selectedNode.branchName) || ""}
                     onDescriptionChange={(branch, desc) => {
+                      // Update branchDescriptions (derived state)
                       setBranchDescriptions((prev) => new Map(prev).set(branch, desc));
+                      // Also update snapshot.nodes to keep single source of truth
+                      setSnapshot((prev) => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          nodes: prev.nodes.map((n) =>
+                            n.branchName === branch ? { ...n, description: desc } : n
+                          ),
+                        };
+                      });
                     }}
                   />
                 ) : (

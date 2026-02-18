@@ -169,6 +169,8 @@ interface TaskDetailPanelProps {
   instruction?: TaskInstruction | null;
   instructionLoading?: boolean;
   onInstructionUpdate?: (instruction: TaskInstruction) => void;
+  // Description from parent (single source of truth)
+  description?: string;
   onDescriptionChange?: (branchName: string, description: string) => void;
 }
 
@@ -186,6 +188,7 @@ export function TaskDetailPanel({
   instruction,
   instructionLoading = false,
   onInstructionUpdate,
+  description: descriptionFromParent,
   onDescriptionChange,
 }: TaskDetailPanelProps) {
   const isDefaultBranch = branchName === defaultBranch;
@@ -266,8 +269,7 @@ export function TaskDetailPanel({
   // Deletable branch check (no commits + not on remote)
   const [isDeletable, setIsDeletable] = useState(false);
 
-  // Branch description state
-  const [branchDescription, setBranchDescription] = useState<BranchDescription | null>(null);
+  // Branch description state (descriptionFromParent is the single source of truth)
   const [descriptionDraft, setDescriptionDraft] = useState("");
   const [editingDescription, setEditingDescription] = useState(false);
   const [savingDescription, setSavingDescription] = useState(false);
@@ -356,19 +358,10 @@ export function TaskDetailPanel({
     checkDeletable();
   }, [localPath, branchName, parentBranch, isDefaultBranch]);
 
-  // Load branch description
+  // Sync description draft with parent's description (single source of truth)
   useEffect(() => {
-    const loadDescription = async () => {
-      try {
-        const desc = await api.getBranchDescription(repoId, branchName);
-        setBranchDescription(desc);
-        setDescriptionDraft(desc?.description || "");
-      } catch (err) {
-        console.error("Failed to load branch description:", err);
-      }
-    };
-    loadDescription();
-  }, [repoId, branchName]);
+    setDescriptionDraft(descriptionFromParent || "");
+  }, [descriptionFromParent]);
 
   // Load repo-level label colors
   useEffect(() => {
@@ -587,12 +580,12 @@ export function TaskDetailPanel({
   const handleSaveDescription = async () => {
     setEditingDescription(false);
     descriptionInputRef.current?.blur();
-    // Only save if changed
-    if (descriptionDraft === (branchDescription?.description || "")) return;
+    // Only save if changed (compare with parent's value - single source of truth)
+    if (descriptionDraft === (descriptionFromParent || "")) return;
     setSavingDescription(true);
     try {
-      const updated = await api.updateBranchDescription(repoId, branchName, descriptionDraft);
-      setBranchDescription(updated);
+      await api.updateBranchDescription(repoId, branchName, descriptionDraft);
+      // Notify parent to update the single source of truth
       onDescriptionChange?.(branchName, descriptionDraft);
       // Show saved feedback
       setDescriptionSaved(true);
@@ -942,7 +935,7 @@ export function TaskDetailPanel({
               if (e.key === "Enter") {
                 handleSaveDescription();
               } else if (e.key === "Escape") {
-                setDescriptionDraft(branchDescription?.description || "");
+                setDescriptionDraft(descriptionFromParent || "");
                 setEditingDescription(false);
               }
             }}

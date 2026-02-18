@@ -1505,7 +1505,11 @@ export default function BranchGraph({
                   whiteSpace: "nowrap",
                 }}>{descriptionLabel}</span>
               )}
-              {/* Row 2: R + CI + PR badges (no wrap, may overflow) */}
+              {/* Row 2: R + CI + PR badges (no wrap, may overflow) - only render if there's content */}
+              {(hasPR || prLink?.checksStatus || (prLink?.reviewers && (() => {
+                const reviewers = JSON.parse(prLink.reviewers) as string[];
+                return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
+              })())) && (
               <div style={{ display: "flex", gap: 3, flexWrap: "nowrap" }}>
                 {/* R (Review) badge - only show if human reviewers exist */}
                 {prLink?.reviewers && (() => {
@@ -1553,6 +1557,7 @@ export default function BranchGraph({
                   );
                 })()}
               </div>
+              )}
               {/* Row 3: (default) label */}
               {isDefault && (
                 <div style={{

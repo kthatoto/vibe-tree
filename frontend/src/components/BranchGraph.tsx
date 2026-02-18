@@ -132,6 +132,10 @@ export default function BranchGraph({
     currentInsertIndex: number; // current swap position (updates on swap)
   } | null>(null);
 
+  // Ref for columnDragState to avoid useEffect dependency issues
+  const columnDragStateRef = useRef(columnDragState);
+  columnDragStateRef.current = columnDragState;
+
   // Separator drag state
   const [separatorDragState, setSeparatorDragState] = useState<{
     startX: number;
@@ -765,6 +769,7 @@ export default function BranchGraph({
   }, [layoutNodes, edges]);
 
   // Handle column drag movement and drop (must be after layoutNodes is defined)
+  // Use ref to avoid re-running effect on every state update during drag
   useEffect(() => {
     if (!columnDragState) return;
 
@@ -773,14 +778,17 @@ export default function BranchGraph({
     document.body.style.userSelect = "none";
 
     const handleMouseMove = (e: MouseEvent) => {
+      const dragState = columnDragStateRef.current;
+      if (!dragState) return;
+
       const coords = getSVGCoords(e);
       const newX = coords.x;
 
       // Calculate drag center position
-      const dragCenterX = newX - columnDragState.offsetX;
+      const dragCenterX = newX - dragState.offsetX;
 
       // Get column bounds for all siblings, sorted by left edge
-      const siblingBounds = columnDragState.siblings.map(s => {
+      const siblingBounds = dragState.siblings.map(s => {
         const bounds = getColumnBoundsHelper(s);
         return {
           id: s,
@@ -791,14 +799,13 @@ export default function BranchGraph({
         };
       }).sort((a, b) => a.left - b.left);
 
-      const draggingInfo = siblingBounds.find(s => s.id === columnDragState.draggingBranch);
+      const draggingInfo = siblingBounds.find(s => s.id === dragState.draggingBranch);
       if (!draggingInfo) return;
 
-      const originalIndex = siblingBounds.findIndex(s => s.id === columnDragState.draggingBranch);
-      const currentInsertIndex = columnDragState.currentInsertIndex;
+      const currentInsertIndex = dragState.currentInsertIndex;
 
       // Build current order with dragging item at currentInsertIndex
-      const currentOrder = siblingBounds.filter(s => s.id !== columnDragState.draggingBranch);
+      const currentOrder = siblingBounds.filter(s => s.id !== dragState.draggingBranch);
       currentOrder.splice(currentInsertIndex, 0, draggingInfo);
 
       // Calculate visual positions based on current swap state
@@ -818,8 +825,8 @@ export default function BranchGraph({
       const dragRightEdge = dragCenterX + draggingInfo.width / 2;
 
       // For root siblings, include separator as a virtual element
-      const isRootSiblings = columnDragState.parentBranch === defaultBranch;
-      const currentSepIndex = focusSeparatorIndex ?? columnDragState.siblings.length;
+      const isRootSiblings = dragState.parentBranch === defaultBranch;
+      const currentSepIndex = focusSeparatorIndex ?? dragState.siblings.length;
 
       // Build positions including separator as a virtual element
       type PositionItem = { id: string; left: number; right: number; centerX: number; isSeparator?: boolean };
@@ -902,7 +909,7 @@ export default function BranchGraph({
         }
 
         // Convert adjusted index back to column-only index
-        const newSepIndex = focusSeparatorIndex ?? columnDragState.siblings.length;
+        const newSepIndex = focusSeparatorIndex ?? dragState.siblings.length;
         if (newAdjustedInsertIndex > newSepIndex) {
           newInsertIndex = newAdjustedInsertIndex - 1;
         } else {
@@ -919,25 +926,25 @@ export default function BranchGraph({
     };
 
     const handleMouseUp = () => {
-      if (columnDragState && onSiblingOrderChange) {
+      const dragState = columnDragStateRef.current;
+      if (dragState && onSiblingOrderChange) {
         // Get column bounds sorted by left edge
-        const siblingBounds = columnDragState.siblings.map(s => {
+        const siblingBounds = dragState.siblings.map(s => {
           const bounds = getColumnBoundsHelper(s);
           return { id: s, left: bounds?.left ?? 0 };
         }).sort((a, b) => a.left - b.left);
 
-        const originalIndex = siblingBounds.findIndex(s => s.id === columnDragState.draggingBranch);
-        const insertIndex = columnDragState.currentInsertIndex;
+        const insertIndex = dragState.currentInsertIndex;
 
         // Build new order based on currentInsertIndex
         const sorted = siblingBounds.map(s => s.id);
-        const reordered = sorted.filter(s => s !== columnDragState.draggingBranch);
-        reordered.splice(insertIndex, 0, columnDragState.draggingBranch);
+        const reordered = sorted.filter(s => s !== dragState.draggingBranch);
+        reordered.splice(insertIndex, 0, dragState.draggingBranch);
 
         // Only update if order changed
         if (JSON.stringify(reordered) !== JSON.stringify(sorted)) {
           const newSiblingOrder = { ...siblingOrder };
-          newSiblingOrder[columnDragState.parentBranch] = reordered;
+          newSiblingOrder[dragState.parentBranch] = reordered;
           onSiblingOrderChange(newSiblingOrder);
         }
       }
@@ -952,7 +959,8 @@ export default function BranchGraph({
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.userSelect = originalUserSelect;
     };
-  }, [columnDragState, getSVGCoords, layoutNodes, onSiblingOrderChange, siblingOrder, getColumnBoundsHelper, focusSeparatorIndex, onFocusSeparatorIndexChange, defaultBranch]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!columnDragState, getSVGCoords, onSiblingOrderChange, siblingOrder, getColumnBoundsHelper, focusSeparatorIndex, onFocusSeparatorIndexChange, defaultBranch]);
 
   // Handle separator drag
   useEffect(() => {

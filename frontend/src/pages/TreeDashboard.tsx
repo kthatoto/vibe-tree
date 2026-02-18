@@ -2124,24 +2124,32 @@ export default function TreeDashboard() {
                           </button>
                           <button
                             className="btn-icon btn-icon--active"
-                            onClick={() => {
-                              // Done: save current state to DB
+                            onClick={async () => {
+                              // Done: save current state to DB, then exit edit mode
                               if (selectedPin && snapshot?.repoId) {
-                                api.updateTreeSpec({
-                                  repoId: snapshot.repoId,
-                                  baseBranch: snapshot.treeSpec?.baseBranch ?? snapshot.defaultBranch,
-                                  nodes: snapshot.treeSpec?.specJson.nodes ?? [],
-                                  edges: snapshot.treeSpec?.specJson.edges ?? [],
-                                  siblingOrder: snapshot.treeSpec?.specJson.siblingOrder,
-                                }).then(() => {
+                                try {
+                                  await api.updateTreeSpec({
+                                    repoId: snapshot.repoId,
+                                    baseBranch: snapshot.treeSpec?.baseBranch ?? snapshot.defaultBranch,
+                                    nodes: snapshot.treeSpec?.specJson.nodes ?? [],
+                                    edges: snapshot.treeSpec?.specJson.edges ?? [],
+                                    siblingOrder: snapshot.treeSpec?.specJson.siblingOrder,
+                                  });
+                                  // Clear pending changes BEFORE exiting edit mode
+                                  // to prevent useEffect from overwriting our saved state
+                                  setPendingChanges(null);
+                                  setOriginalTreeSpecState(null);
+                                  setBranchGraphEditMode(false);
+                                  // Trigger scan after edit mode is closed
                                   triggerScan(selectedPin.localPath);
-                                }).catch((err) => {
+                                } catch (err) {
                                   console.error("Failed to save:", err);
                                   setError((err as Error).message);
-                                });
+                                }
+                              } else {
+                                setOriginalTreeSpecState(null);
+                                setBranchGraphEditMode(false);
                               }
-                              setOriginalTreeSpecState(null);
-                              setBranchGraphEditMode(false);
                             }}
                             title="Save and exit edit mode"
                           >

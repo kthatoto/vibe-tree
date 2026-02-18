@@ -96,6 +96,8 @@ export function mergeNodeAttributes(
     nodes: finalNodes,
     // Keep current edges - edge changes are unsafe
     edges: current.edges,
+    // Explicitly keep treeSpec from current (preserves user edits)
+    treeSpec: current.treeSpec,
     // Update other safe fields
     warnings: incoming.warnings,
     worktrees: incoming.worktrees,

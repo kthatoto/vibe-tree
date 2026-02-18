@@ -830,6 +830,7 @@ export default function TreeDashboard() {
           } else if (Date.now() < preserveLocalEdgesUntilRef.current) {
             // 保存直後の期間: ローカルのedgeを保持しつつ、safe fieldsのみマージ
             // (保存した内容が上書きされるのを防ぐ)
+            console.log("[TreeDashboard] Grace period active: preserving local edges (mergeNodeAttributes)");
             setSnapshot((prev) => {
               if (!prev) return prev;
               return mergeNodeAttributes(prev, data.snapshot!);
@@ -837,6 +838,7 @@ export default function TreeDashboard() {
             currentSnapshotVersion.current = newVersion;
             setPendingChanges(null);
           } else {
+            console.log("[TreeDashboard] No grace period: full snapshot replacement");
             // Edit mode中でなければ自動適用（incoming snapshotをそのまま使用）
             setSnapshot(data.snapshot!);
             currentSnapshotVersion.current = newVersion;
@@ -2149,6 +2151,7 @@ export default function TreeDashboard() {
                                   // Mark that we just saved - preserve local edges for 10 seconds
                                   // This prevents incoming scans from overwriting our saved structure
                                   preserveLocalEdgesUntilRef.current = Date.now() + 10000;
+                                  console.log("[TreeDashboard] Done: saved to DB, grace period set for 10s");
                                   // Clear pending changes BEFORE exiting edit mode
                                   // to prevent useEffect from overwriting our saved state
                                   setPendingChanges(null);

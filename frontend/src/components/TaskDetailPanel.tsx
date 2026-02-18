@@ -252,14 +252,8 @@ export function TaskDetailPanel({
     setCheckedOut(false);
   }, [branchName]);
 
-  // Branch links state - use parent data if available
-  const [branchLinksLocal, setBranchLinksLocal] = useState<BranchLink[]>([]);
-  const branchLinks = branchLinksFromParent ?? branchLinksLocal;
-  const setBranchLinks = (links: BranchLink[] | ((prev: BranchLink[]) => BranchLink[])) => {
-    const newLinks = typeof links === 'function' ? links(branchLinks) : links;
-    setBranchLinksLocal(newLinks);
-    onBranchLinksChange?.(newLinks);
-  };
+  // Branch links state
+  const [branchLinks, setBranchLinks] = useState<BranchLink[]>([]);
   const [addingLinkType, setAddingLinkType] = useState<"issue" | "pr" | null>(null);
   const [newLinkUrl, setNewLinkUrl] = useState("");
   const [deletingLinkId, setDeletingLinkId] = useState<number | null>(null);
@@ -287,6 +281,9 @@ export function TaskDetailPanel({
   const [descriptionSaved, setDescriptionSaved] = useState(false);
   const descriptionInputRef = useRef<HTMLInputElement>(null);
 
+  // Repo-level label colors cache
+  const [repoLabels, setRepoLabels] = useState<Record<string, string>>({});
+
   // The working path is either the worktree path or localPath if checked out
   const workingPath = worktreePath || (checkedOut ? localPath : null);
 
@@ -304,26 +301,49 @@ export function TaskDetailPanel({
     }
   }, [instruction]);
 
-  // Auto-link PR from node.pr if not already linked (only when parent provides data)
+  // Load branch links and refresh from GitHub
   useEffect(() => {
-    // Skip if parent doesn't provide data - data will come from parent
-    if (branchLinksFromParent === undefined) return;
+    const loadBranchLinks = async () => {
+      try {
+        let links = await api.getBranchLinks(repoId, branchName);
+        setBranchLinks(links);
 
-    const hasPRLink = branchLinks.some((l) => l.linkType === "pr");
-    if (!hasPRLink && node?.pr?.url && node.pr.number) {
-      api.createBranchLink({
-        repoId,
-        branchName,
-        linkType: "pr",
-        url: node.pr.url,
-        number: node.pr.number,
-      }).then((newLink) => {
-        setBranchLinks([...branchLinks, newLink]);
-      }).catch((err) => {
-        console.error("Failed to auto-link PR:", err);
-      });
-    }
-  }, [repoId, branchName, node?.pr?.url, node?.pr?.number, branchLinksFromParent]);
+        // Auto-link PR from node.pr if not already linked
+        const hasPRLink = links.some((l) => l.linkType === "pr");
+        if (!hasPRLink && node?.pr?.url && node.pr.number) {
+          try {
+            const newLink = await api.createBranchLink({
+              repoId,
+              branchName,
+              linkType: "pr",
+              url: node.pr.url,
+              number: node.pr.number,
+            });
+            links = [...links, newLink];
+            setBranchLinks(links);
+          } catch (err) {
+            console.error("Failed to auto-link PR:", err);
+          }
+        }
+
+        // Auto-refresh links from GitHub sequentially (to avoid API overload)
+        const linksToRefresh = links.filter(l => l.number);
+        for (const link of linksToRefresh) {
+          try {
+            const refreshed = await api.refreshBranchLink(link.id);
+            setBranchLinks((prev) =>
+              prev.map((l) => (l.id === refreshed.id ? refreshed : l))
+            );
+          } catch (err) {
+            console.error(`Failed to refresh link ${link.id}:`, err);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load branch links:", err);
+      }
+    };
+    loadBranchLinks();
+  }, [repoId, branchName, node?.pr?.url, node?.pr?.number]);
 
   // Check if branch is deletable (no commits + not on remote)
   useEffect(() => {
@@ -343,24 +363,32 @@ export function TaskDetailPanel({
     checkDeletable();
   }, [localPath, branchName, parentBranch, isDefaultBranch]);
 
-  // Use description from node (already in snapshot) instead of API call
+  // Load branch description
   useEffect(() => {
-    const desc = node?.description || null;
-    setBranchDescription(desc ? { branchName, description: desc } : null);
-    setDescriptionDraft(desc || "");
-  }, [branchName, node?.description]);
+    const loadDescription = async () => {
+      try {
+        const desc = await api.getBranchDescription(repoId, branchName);
+        setBranchDescription(desc);
+        setDescriptionDraft(desc?.description || "");
+      } catch (err) {
+        console.error("Failed to load branch description:", err);
+      }
+    };
+    loadDescription();
+  }, [repoId, branchName]);
 
-  // Use repo labels from parent if available, otherwise load once
-  const [repoLabelsLocal, setRepoLabelsLocal] = useState<Record<string, string>>({});
-  const repoLabels = repoLabelsFromParent ?? repoLabelsLocal;
+  // Load repo-level label colors
   useEffect(() => {
-    // Skip if parent provides labels
-    if (repoLabelsFromParent !== undefined) return;
-
-    api.getRepoLabels(repoId)
-      .then((labels) => setRepoLabelsLocal(labels))
-      .catch((err) => console.error("Failed to load repo labels:", err));
-  }, [repoId, repoLabelsFromParent]);
+    const loadRepoLabels = async () => {
+      try {
+        const labels = await api.getRepoLabels(repoId);
+        setRepoLabels(labels);
+      } catch (err) {
+        console.error("Failed to load repo labels:", err);
+      }
+    };
+    loadRepoLabels();
+  }, [repoId]);
 
   // Subscribe to branch link updates (WebSocket handles live updates from scan)
   useEffect(() => {

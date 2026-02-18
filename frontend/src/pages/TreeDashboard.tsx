@@ -253,6 +253,11 @@ export default function TreeDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Keep snapshotRef in sync with snapshot state (for use in WebSocket callbacks)
+  useEffect(() => {
+    snapshotRef.current = snapshot;
+  }, [snapshot]);
+
   // Track if selected branch has been restored from localStorage
   const restoredSelectedBranch = useRef(false);
 
@@ -397,6 +402,7 @@ export default function TreeDashboard() {
   // Smart update: pending changes that require user confirmation (unsafe changes)
   const [pendingChanges, setPendingChanges] = useState<PendingChanges | null>(null);
   const currentSnapshotVersion = useRef<number>(0);
+  const snapshotRef = useRef<ScanSnapshot | null>(null);
   const [isApplyingUpdate, setIsApplyingUpdate] = useState(false);
   const isScanningRef = useRef<boolean>(false);
   const lastScanCompleteTimeRef = useRef<number>(0);
@@ -790,7 +796,7 @@ export default function TreeDashboard() {
 
       // Verify repoId matches to prevent cross-project updates
       const msgRepoId = data.snapshot?.repoId ?? data.repoId;
-      if (msgRepoId && msgRepoId !== snapshot.repoId) {
+      if (msgRepoId && msgRepoId !== snapshotRef.current?.repoId) {
         return;
       }
 
@@ -816,7 +822,13 @@ export default function TreeDashboard() {
 
       // For final updates: analyze and handle safe vs unsafe changes
       if (data.isFinal) {
-        const analysis = analyzeChanges(snapshot, data.snapshot, newVersion);
+        const currentSnapshot = snapshotRef.current;
+        if (!currentSnapshot) {
+          setSnapshot(data.snapshot!);
+          currentSnapshotVersion.current = newVersion;
+          return;
+        }
+        const analysis = analyzeChanges(currentSnapshot, data.snapshot, newVersion);
 
         if (analysis.hasUnsafeChanges && analysis.pendingChanges) {
           if (branchGraphEditMode) {

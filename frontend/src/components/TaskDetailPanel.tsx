@@ -1151,6 +1151,17 @@ export function TaskDetailPanel({
           const checks: GitHubCheck[] = pr.checks ? ((): GitHubCheck[] => { try { return JSON.parse(pr.checks!) } catch { return [] } })() : [];
           const passedChecks = checks.filter((c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED").length;
           const totalChecks = checks.length;
+          // Compute checksStatus from checks array (more reliable than checksStatus field)
+          const computedChecksStatus = (() => {
+            if (checks.length === 0) return pr.checksStatus ?? null;
+            const hasFailure = checks.some(c => c.conclusion === "FAILURE" || c.conclusion === "ERROR");
+            const hasPending = checks.some(c => c.conclusion === null);
+            const allSuccess = checks.every(c => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED");
+            if (hasFailure) return "failure";
+            if (hasPending) return "pending";
+            if (allSuccess) return "success";
+            return pr.checksStatus ?? null;
+          })();
           // Helper to get contrasting text color
           const getTextColor = (bgColor: string) => {
             const r = parseInt(bgColor.slice(0, 2), 16);
@@ -1183,12 +1194,12 @@ export function TaskDetailPanel({
               <div className="task-detail-panel__link-meta">
                 {totalChecks > 0 && (
                   <button
-                    className={`task-detail-panel__ci-badge task-detail-panel__ci-badge--${pr.checksStatus}`}
+                    className={`task-detail-panel__ci-badge task-detail-panel__ci-badge--${computedChecksStatus}`}
                     onClick={() => setShowCIModal(true)}
                     title="View CI details"
                   >
                     <span className="task-detail-panel__ci-badge-icon">
-                      {pr.checksStatus === "success" ? "✓" : pr.checksStatus === "failure" ? "✗" : "●"}
+                      {computedChecksStatus === "success" ? "✓" : computedChecksStatus === "failure" ? "✗" : "●"}
                     </span>
                     <span className="task-detail-panel__ci-badge-count">{passedChecks}/{totalChecks}</span>
                   </button>

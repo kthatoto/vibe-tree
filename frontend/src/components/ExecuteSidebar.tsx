@@ -184,9 +184,6 @@ export function ExecuteSidebar({
       for (const branch of executeBranches) {
         filteredMap.set(branch, branchLinksFromParent.get(branch) || []);
       }
-      // Debug: log what we received from parent
-      const branchesWithPR = Array.from(filteredMap.entries()).filter(([_, links]) => links.some(l => l.linkType === "pr"));
-      console.log("[ExecuteSidebar] From parent - branches with PR:", branchesWithPR.map(([name]) => name));
       setAllBranchLinks(filteredMap);
       return;
     }
@@ -284,7 +281,10 @@ export function ExecuteSidebar({
   }, [repoId, executeBranches]);
 
   // WebSocket updates for branch links
+  // Only subscribe when parent data is NOT provided (parent handles WebSocket in that case)
   useEffect(() => {
+    // Skip if parent provides data - parent (TreeDashboard) handles WebSocket updates
+    if (branchLinksFromParent) return;
     if (!repoId || executeBranches.length === 0) return;
 
     const unsubCreated = wsClient.on("branchLink.created", (msg) => {
@@ -317,7 +317,7 @@ export function ExecuteSidebar({
       unsubCreated();
       unsubUpdated();
     };
-  }, [repoId, executeBranches]);
+  }, [repoId, executeBranches, branchLinksFromParent]);
 
   // WebSocket updates for instruction confirmation
   useEffect(() => {

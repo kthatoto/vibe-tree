@@ -202,8 +202,8 @@ export function PlanningPanel({
   // Keeping setters for useEffects, prefixing unused values with underscore
   const [_planningSidebarTab, _setPlanningSidebarTab] = useState<"info" | "instruction" | "todo" | "questions" | "resources">("instruction");
 
-  // Planning branch links - now fetched by ExecuteSidebar
-  const [_planningAllBranchLinks, setPlanningAllBranchLinks] = useState<Map<string, BranchLink[]>>(new Map());
+  // Note: Planning branch links are now managed by TreeDashboard (single source of truth)
+  // and passed down via branchLinksFromParent prop
 
   // Planning branch external links and files - now managed by ExecuteSidebar
   const [_planningExternalLinks, setPlanningExternalLinks] = useState<BranchExternalLink[]>([]);
@@ -816,73 +816,11 @@ export function PlanningPanel({
       .finally(() => setInstructionLoading(false));
   }, [selectedSession?.id, selectedSession?.executeBranches, userViewBranchIndex, repoId]);
 
-  // Load branch links (PR/Issue) for all Planning session branches
-  useEffect(() => {
-    if (!selectedSession || !repoId || selectedSession.type !== "planning") {
-      setPlanningAllBranchLinks(new Map());
-      return;
-    }
-    const planningBranches = selectedSession.executeBranches || [];
-    if (planningBranches.length === 0) {
-      setPlanningAllBranchLinks(new Map());
-      return;
-    }
-
-    const loadAllBranchLinks = async () => {
-      const linksMap = new Map<string, BranchLink[]>();
-      await Promise.all(
-        planningBranches.map(async (branch) => {
-          try {
-            const links = await api.getBranchLinks(repoId, branch);
-            linksMap.set(branch, links);
-          } catch {
-            linksMap.set(branch, []);
-          }
-        })
-      );
-      setPlanningAllBranchLinks(linksMap);
-    };
-
-    loadAllBranchLinks();
-  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, repoId]);
-
-  // Subscribe to branch link updates for Planning sessions
-  useEffect(() => {
-    if (!selectedSession || !repoId || selectedSession.type !== "planning") return;
-    const planningBranches = selectedSession.executeBranches || [];
-    if (planningBranches.length === 0) return;
-
-    const unsubCreated = wsClient.on("branchLink.created", (msg) => {
-      const data = msg.data as BranchLink;
-      if (data.repoId === repoId && planningBranches.includes(data.branchName)) {
-        setPlanningAllBranchLinks((prev) => {
-          const newMap = new Map(prev);
-          const current = newMap.get(data.branchName) || [];
-          if (!current.some((l) => l.id === data.id)) {
-            newMap.set(data.branchName, [data, ...current]);
-          }
-          return newMap;
-        });
-      }
-    });
-
-    const unsubUpdated = wsClient.on("branchLink.updated", (msg) => {
-      const data = msg.data as BranchLink;
-      if (data.repoId === repoId && planningBranches.includes(data.branchName)) {
-        setPlanningAllBranchLinks((prev) => {
-          const newMap = new Map(prev);
-          const current = newMap.get(data.branchName) || [];
-          newMap.set(data.branchName, current.map((l) => (l.id === data.id ? data : l)));
-          return newMap;
-        });
-      }
-    });
-
-    return () => {
-      unsubCreated();
-      unsubUpdated();
-    };
-  }, [selectedSession?.id, selectedSession?.type, selectedSession?.executeBranches, repoId]);
+  // Note: Branch links (PR/Issue) for Planning sessions are now handled by:
+  // 1. TreeDashboard loads branchLinks as single source of truth
+  // 2. TreeDashboard passes branchLinks to PlanningPanel via props
+  // 3. PlanningPanel passes to SessionDetail → ExecuteSidebar
+  // WebSocket updates are handled by TreeDashboard only
 
   // Load external links and files for the current planning branch
   useEffect(() => {

@@ -172,6 +172,9 @@ interface TaskDetailPanelProps {
   // Description from parent (single source of truth)
   description?: string;
   onDescriptionChange?: (branchName: string, description: string) => void;
+  // BranchLinks from parent (single source of truth for PR/CI status)
+  branchLinksFromParent?: BranchLink[];
+  onBranchLinksChange?: (branchName: string, links: BranchLink[]) => void;
 }
 
 export function TaskDetailPanel({
@@ -190,6 +193,8 @@ export function TaskDetailPanel({
   onInstructionUpdate,
   description: descriptionFromParent,
   onDescriptionChange,
+  branchLinksFromParent,
+  onBranchLinksChange,
 }: TaskDetailPanelProps) {
   const isDefaultBranch = branchName === defaultBranch;
 
@@ -248,8 +253,8 @@ export function TaskDetailPanel({
     setCheckedOut(false);
   }, [branchName]);
 
-  // Branch links state
-  const [branchLinks, setBranchLinks] = useState<BranchLink[]>([]);
+  // Branch links - use parent's data as single source of truth
+  const branchLinks = branchLinksFromParent || [];
   const [addingLinkType, setAddingLinkType] = useState<"issue" | "pr" | null>(null);
   const [newLinkUrl, setNewLinkUrl] = useState("");
   const [deletingLinkId, setDeletingLinkId] = useState<number | null>(null);
@@ -296,49 +301,28 @@ export function TaskDetailPanel({
     }
   }, [instruction]);
 
-  // Load branch links and refresh from GitHub
+  // Auto-link PR from node.pr if not already linked (notify parent to update)
   useEffect(() => {
-    const loadBranchLinks = async () => {
-      try {
-        let links = await api.getBranchLinks(repoId, branchName);
-        setBranchLinks(links);
-
-        // Auto-link PR from node.pr if not already linked
-        const hasPRLink = links.some((l) => l.linkType === "pr");
-        if (!hasPRLink && node?.pr?.url && node.pr.number) {
-          try {
-            const newLink = await api.createBranchLink({
-              repoId,
-              branchName,
-              linkType: "pr",
-              url: node.pr.url,
-              number: node.pr.number,
-            });
-            links = [...links, newLink];
-            setBranchLinks(links);
-          } catch (err) {
-            console.error("Failed to auto-link PR:", err);
-          }
+    const autoLinkPR = async () => {
+      const hasPRLink = branchLinks.some((l) => l.linkType === "pr");
+      if (!hasPRLink && node?.pr?.url && node.pr.number) {
+        try {
+          const newLink = await api.createBranchLink({
+            repoId,
+            branchName,
+            linkType: "pr",
+            url: node.pr.url,
+            number: node.pr.number,
+          });
+          // Notify parent to update branchLinks
+          onBranchLinksChange?.(branchName, [...branchLinks, newLink]);
+        } catch (err) {
+          console.error("Failed to auto-link PR:", err);
         }
-
-        // Auto-refresh links from GitHub sequentially (to avoid API overload)
-        const linksToRefresh = links.filter(l => l.number);
-        for (const link of linksToRefresh) {
-          try {
-            const refreshed = await api.refreshBranchLink(link.id);
-            setBranchLinks((prev) =>
-              prev.map((l) => (l.id === refreshed.id ? refreshed : l))
-            );
-          } catch (err) {
-            console.error(`Failed to refresh link ${link.id}:`, err);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load branch links:", err);
       }
     };
-    loadBranchLinks();
-  }, [repoId, branchName, node?.pr?.url, node?.pr?.number]);
+    autoLinkPR();
+  }, [repoId, branchName, node?.pr?.url, node?.pr?.number, branchLinks, onBranchLinksChange]);
 
   // Check if branch is deletable (no commits + not on remote)
   useEffect(() => {
@@ -376,33 +360,8 @@ export function TaskDetailPanel({
     loadRepoLabels();
   }, [repoId]);
 
-  // Subscribe to branch link updates (WebSocket handles live updates from scan)
-  useEffect(() => {
-    const unsubCreated = wsClient.on("branchLink.created", (msg) => {
-      const data = msg.data as BranchLink;
-      if (data.repoId === repoId && data.branchName === branchName) {
-        setBranchLinks((prev) => {
-          // Avoid duplicates
-          if (prev.some((l) => l.id === data.id)) return prev;
-          return [data, ...prev];
-        });
-      }
-    });
-
-    const unsubUpdated = wsClient.on("branchLink.updated", (msg) => {
-      const data = msg.data as BranchLink;
-      if (data.repoId === repoId && data.branchName === branchName) {
-        setBranchLinks((prev) =>
-          prev.map((l) => (l.id === data.id ? data : l))
-        );
-      }
-    });
-
-    return () => {
-      unsubCreated();
-      unsubUpdated();
-    };
-  }, [repoId, branchName]);
+  // Note: WebSocket updates for branchLinks are handled by parent (TreeDashboard)
+  // TaskDetailPanel receives updates via branchLinksFromParent prop
 
   // Load existing chat session for this branch
   useEffect(() => {
@@ -759,7 +718,8 @@ export function TaskDetailPanel({
   const handleDeleteBranchLink = async (id: number) => {
     try {
       await api.deleteBranchLink(id);
-      setBranchLinks((prev) => prev.filter((l) => l.id !== id));
+      // Notify parent to update branchLinks
+      onBranchLinksChange?.(branchName, branchLinks.filter((l) => l.id !== id));
       setDeletingLinkId(null);
     } catch (err) {
       setError((err as Error).message);
@@ -770,9 +730,8 @@ export function TaskDetailPanel({
     setRefreshingLink(id);
     try {
       const refreshed = await api.refreshBranchLink(id);
-      setBranchLinks((prev) =>
-        prev.map((l) => (l.id === refreshed.id ? refreshed : l))
-      );
+      // Notify parent to update branchLinks
+      onBranchLinksChange?.(branchName, branchLinks.map((l) => (l.id === refreshed.id ? refreshed : l)));
     } catch (err) {
       setError((err as Error).message);
     } finally {

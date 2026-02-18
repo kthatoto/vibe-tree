@@ -858,11 +858,15 @@ export function ExecuteSidebar({
                           <span className="execute-sidebar__ci-badge-count">{passedChecks}/{totalChecks}</span>
                         </span>
                       )}
-                      {prLink.reviewDecision && (
-                        <span className={`execute-sidebar__review-badge execute-sidebar__review-badge--${prLink.reviewDecision.toLowerCase().replace("_", "-")}`}>
+                      {(prLink.reviewDecision || reviewers.length > 0) && (
+                        <span className={`execute-sidebar__review-badge execute-sidebar__review-badge--${
+                          prLink.reviewDecision
+                            ? prLink.reviewDecision.toLowerCase().replace("_", "-")
+                            : "review-required"
+                        }`}>
                           {prLink.reviewDecision === "APPROVED" ? "Approved" :
                            prLink.reviewDecision === "CHANGES_REQUESTED" ? "Changes" :
-                           prLink.reviewDecision === "REVIEW_REQUIRED" ? "Review Required" : prLink.reviewDecision}
+                           (prLink.reviewDecision === "REVIEW_REQUIRED" || !prLink.reviewDecision) ? "Review Required" : prLink.reviewDecision}
                         </span>
                       )}
                       {prLink.projectStatus && (

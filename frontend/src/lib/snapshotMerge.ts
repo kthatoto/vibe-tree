@@ -18,6 +18,7 @@ const SAFE_NODE_FIELDS = [
   "pr",
   "lastCommitAt",
   "badges",
+  "description",
 ] as const;
 
 /**
@@ -76,6 +77,7 @@ export function mergeNodeAttributes(
       pr: incomingNode.pr,
       lastCommitAt: incomingNode.lastCommitAt,
       badges: incomingNode.badges,
+      description: incomingNode.description ?? currentNode.description,
     };
   });
 

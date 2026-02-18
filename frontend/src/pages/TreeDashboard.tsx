@@ -840,7 +840,18 @@ export default function TreeDashboard() {
           } else {
             console.log("[TreeDashboard] No grace period: full snapshot replacement");
             // Edit mode中でなければ自動適用（incoming snapshotをそのまま使用）
-            setSnapshot(data.snapshot!);
+            // Preserve descriptions from current snapshot if incoming doesn't have them
+            setSnapshot((prev) => {
+              if (!prev) return data.snapshot!;
+              const nodesWithDescriptions = data.snapshot!.nodes.map((node) => {
+                const prevNode = prev.nodes.find((n) => n.branchName === node.branchName);
+                return {
+                  ...node,
+                  description: node.description ?? prevNode?.description,
+                };
+              });
+              return { ...data.snapshot!, nodes: nodesWithDescriptions };
+            });
             currentSnapshotVersion.current = newVersion;
             setPendingChanges(null);
           }

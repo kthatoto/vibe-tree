@@ -941,6 +941,16 @@ export default function BranchGraph({
         const reordered = sorted.filter(s => s !== dragState.draggingBranch);
         reordered.splice(insertIndex, 0, dragState.draggingBranch);
 
+        // Debug: log the drag result
+        console.log("[BranchGraph] Column drag result:", {
+          draggingBranch: dragState.draggingBranch,
+          insertIndex,
+          siblingBounds: siblingBounds.map(s => ({ id: s.id, left: s.left })),
+          sorted,
+          reordered,
+          changed: JSON.stringify(reordered) !== JSON.stringify(sorted),
+        });
+
         // Only update if order changed
         if (JSON.stringify(reordered) !== JSON.stringify(sorted)) {
           const newSiblingOrder = { ...siblingOrder };
@@ -1294,14 +1304,25 @@ export default function BranchGraph({
     // Use branchLinks as single source of truth for PR info
     const prLink = branchLinks.get(id)?.find(l => l.linkType === "pr");
     const hasPR = !!prLink;
-    // Debug: log branchLinks for this node
-    if (!prLink && branchLinks.size > 0) {
-      const linksForBranch = branchLinks.get(id);
-      if (linksForBranch && linksForBranch.length > 0) {
-        console.log(`[BranchGraph] Branch ${id}: has links but no PR`, linksForBranch);
-      }
-    }
     const isMerged = prLink?.status === "merged";
+
+    // Calculate checksStatus from checks array (more reliable than checksStatus field)
+    const computedChecksStatus = (() => {
+      if (!prLink?.checks) return prLink?.checksStatus ?? null;
+      try {
+        const checks = JSON.parse(prLink.checks) as { conclusion: string | null }[];
+        if (checks.length === 0) return prLink?.checksStatus ?? null;
+        const hasFailure = checks.some(c => c.conclusion === "FAILURE" || c.conclusion === "ERROR");
+        const hasPending = checks.some(c => c.conclusion === null);
+        const allSuccess = checks.every(c => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED");
+        if (hasFailure) return "failure";
+        if (hasPending) return "pending";
+        if (allSuccess) return "success";
+        return prLink?.checksStatus ?? null;
+      } catch {
+        return prLink?.checksStatus ?? null;
+      }
+    })();
 
     // Check if PR base branch matches graph parent
     const graphParent = edges.find(e => e.child === id)?.parent;
@@ -1513,7 +1534,7 @@ export default function BranchGraph({
                 }}>{descriptionLabel}</span>
               )}
               {/* Row 2: R + CI + PR badges (no wrap, may overflow) - only render if there's content */}
-              {(hasPR || prLink?.checksStatus || (prLink?.reviewers && (() => {
+              {(hasPR || computedChecksStatus || (prLink?.reviewers && (() => {
                 const reviewers = JSON.parse(prLink.reviewers) as string[];
                 return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
               })())) && (
@@ -1533,17 +1554,17 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>{prLink?.reviewDecision === "APPROVED" ? "R✔" : prLink?.reviewDecision === "CHANGES_REQUESTED" ? "R✗" : "R"}</span>
                 )}
-                {/* CI badge */}
-                {prLink?.checksStatus && (
+                {/* CI badge - use computed status from checks array */}
+                {computedChecksStatus && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 4px",
                     borderRadius: 3,
-                    background: prLink.checksStatus === "success" ? "#14532d" : prLink.checksStatus === "failure" ? "#7f1d1d" : "#78350f",
-                    border: `1px solid ${prLink.checksStatus === "success" ? "#22c55e" : prLink.checksStatus === "failure" ? "#ef4444" : "#f59e0b"}`,
-                    color: prLink.checksStatus === "success" ? "#4ade80" : prLink.checksStatus === "failure" ? "#f87171" : "#fbbf24",
+                    background: computedChecksStatus === "success" ? "#14532d" : computedChecksStatus === "failure" ? "#7f1d1d" : "#78350f",
+                    border: `1px solid ${computedChecksStatus === "success" ? "#22c55e" : computedChecksStatus === "failure" ? "#ef4444" : "#f59e0b"}`,
+                    color: computedChecksStatus === "success" ? "#4ade80" : computedChecksStatus === "failure" ? "#f87171" : "#fbbf24",
                     whiteSpace: "nowrap",
-                  }}>{prLink.checksStatus === "success" ? "CI✔" : prLink.checksStatus === "failure" ? "CI✗" : "CI"}</span>
+                  }}>{computedChecksStatus === "success" ? "CI✔" : computedChecksStatus === "failure" ? "CI✗" : "CI"}</span>
                 )}
                 {/* PR badge - shows ✓ when approved by human reviewer */}
                 {hasPR && (() => {
@@ -1661,8 +1682,8 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>Review</span>
                 )}
-                {/* CI status */}
-                {prLink?.checksStatus === "success" && (
+                {/* CI status - use computed status from checks array */}
+                {computedChecksStatus === "success" && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",
@@ -1673,7 +1694,7 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>CI ✔</span>
                 )}
-                {prLink?.checksStatus === "failure" && (
+                {computedChecksStatus === "failure" && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",
@@ -1684,7 +1705,7 @@ export default function BranchGraph({
                     whiteSpace: "nowrap",
                   }}>CI ✗</span>
                 )}
-                {prLink?.checksStatus === "pending" && (
+                {computedChecksStatus === "pending" && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",

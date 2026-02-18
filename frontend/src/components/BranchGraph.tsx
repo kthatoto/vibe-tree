@@ -1616,7 +1616,7 @@ export default function BranchGraph({
           >
             {/* Line 1: Description label (left) + Status labels (right) - only if content exists */}
             {(descriptionLabel || hasPR) && (
-              <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", justifyContent: descriptionLabel ? "space-between" : "flex-end", alignItems: "center" }}>
                 {/* Description label - left */}
                 {descriptionLabel && (
                   <span style={{

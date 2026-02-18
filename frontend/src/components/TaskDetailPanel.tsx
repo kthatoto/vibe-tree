@@ -170,10 +170,6 @@ interface TaskDetailPanelProps {
   instructionLoading?: boolean;
   onInstructionUpdate?: (instruction: TaskInstruction) => void;
   onDescriptionChange?: (branchName: string, description: string) => void;
-  // Data from parent (single source of truth)
-  branchLinksFromParent?: BranchLink[];
-  repoLabels?: Record<string, string>;
-  onBranchLinksChange?: (links: BranchLink[]) => void;
 }
 
 export function TaskDetailPanel({
@@ -191,9 +187,6 @@ export function TaskDetailPanel({
   instructionLoading = false,
   onInstructionUpdate,
   onDescriptionChange,
-  branchLinksFromParent,
-  repoLabels: repoLabelsFromParent,
-  onBranchLinksChange,
 }: TaskDetailPanelProps) {
   const isDefaultBranch = branchName === defaultBranch;
 

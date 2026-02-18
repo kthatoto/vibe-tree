@@ -1294,6 +1294,13 @@ export default function BranchGraph({
     // Use branchLinks as single source of truth for PR info
     const prLink = branchLinks.get(id)?.find(l => l.linkType === "pr");
     const hasPR = !!prLink;
+    // Debug: log branchLinks for this node
+    if (!prLink && branchLinks.size > 0) {
+      const linksForBranch = branchLinks.get(id);
+      if (linksForBranch && linksForBranch.length > 0) {
+        console.log(`[BranchGraph] Branch ${id}: has links but no PR`, linksForBranch);
+      }
+    }
     const isMerged = prLink?.status === "merged";
 
     // Check if PR base branch matches graph parent
@@ -1586,11 +1593,11 @@ export default function BranchGraph({
               overflow: "hidden",
             }}
           >
-            {/* Line 1: Description label (left) + Status labels (right) */}
+            {/* Line 1: Description label (left) + Status labels (right) - only if content exists */}
             {(descriptionLabel || hasPR) && (
               <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", justifyContent: "space-between", alignItems: "center" }}>
                 {/* Description label - left */}
-                {descriptionLabel ? (
+                {descriptionLabel && (
                   <span style={{
                     fontSize: 10,
                     padding: "1px 5px",
@@ -1603,7 +1610,7 @@ export default function BranchGraph({
                     textOverflow: "ellipsis",
                     maxWidth: 80,
                   }}>{descriptionLabel}</span>
-                ) : <span />}
+                )}
                 {/* PR status badges - right */}
                 {hasPR && (
                   <div style={{ display: "flex", gap: 6, flexWrap: "nowrap" }}>

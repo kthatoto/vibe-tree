@@ -184,6 +184,9 @@ export function ExecuteSidebar({
       for (const branch of executeBranches) {
         filteredMap.set(branch, branchLinksFromParent.get(branch) || []);
       }
+      // Debug: log what we received from parent
+      const branchesWithPR = Array.from(filteredMap.entries()).filter(([_, links]) => links.some(l => l.linkType === "pr"));
+      console.log("[ExecuteSidebar] From parent - branches with PR:", branchesWithPR.map(([name]) => name));
       setAllBranchLinks(filteredMap);
       return;
     }

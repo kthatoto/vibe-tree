@@ -1100,6 +1100,10 @@ export default function TreeDashboard() {
         for (const branchName of branchNames) {
           linksMap.set(branchName, result[branchName] || []);
         }
+        // Debug: log loaded branchLinks
+        console.log("[TreeDashboard] Loaded branchLinks:", linksMap.size, "branches");
+        const branchesWithPR = Array.from(linksMap.entries()).filter(([_, links]) => links.some(l => l.linkType === "pr"));
+        console.log("[TreeDashboard] Branches with PR:", branchesWithPR.map(([name]) => name));
         setBranchLinks(linksMap);
       })
       .catch(console.error);

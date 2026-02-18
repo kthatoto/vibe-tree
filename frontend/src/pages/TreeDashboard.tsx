@@ -316,6 +316,8 @@ export default function TreeDashboard() {
 
   // Branch graph edit mode
   const [branchGraphEditMode, setBranchGraphEditMode] = useState(false);
+  // Flag to preserve local edges after saving (prevents scan from overwriting user's edits)
+  const preserveLocalEdgesUntilRef = useRef<number>(0);
 
   // Chat fullscreen mode (persisted in localStorage)
   const [chatFullscreen, setChatFullscreen] = useState(() => {
@@ -825,6 +827,15 @@ export default function TreeDashboard() {
               return mergeNodeAttributes(prev, data.snapshot!);
             });
             setPendingChanges(analysis.pendingChanges);
+          } else if (Date.now() < preserveLocalEdgesUntilRef.current) {
+            // 保存直後の期間: ローカルのedgeを保持しつつ、safe fieldsのみマージ
+            // (保存した内容が上書きされるのを防ぐ)
+            setSnapshot((prev) => {
+              if (!prev) return prev;
+              return mergeNodeAttributes(prev, data.snapshot!);
+            });
+            currentSnapshotVersion.current = newVersion;
+            setPendingChanges(null);
           } else {
             // Edit mode中でなければ自動適用（incoming snapshotをそのまま使用）
             setSnapshot(data.snapshot!);
@@ -2135,6 +2146,9 @@ export default function TreeDashboard() {
                                     edges: snapshot.treeSpec?.specJson.edges ?? [],
                                     siblingOrder: snapshot.treeSpec?.specJson.siblingOrder,
                                   });
+                                  // Mark that we just saved - preserve local edges for 10 seconds
+                                  // This prevents incoming scans from overwriting our saved structure
+                                  preserveLocalEdgesUntilRef.current = Date.now() + 10000;
                                   // Clear pending changes BEFORE exiting edit mode
                                   // to prevent useEffect from overwriting our saved state
                                   setPendingChanges(null);

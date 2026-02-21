@@ -1191,12 +1191,17 @@ export default function BranchGraph({
     if (siblings.includes(nodeId)) return nodeId;
 
     // Check ancestors to find which sibling column this belongs to
-    const getAncestors = (id: string): string[] => {
-      const parent = edges.find(e => e.child === id)?.parent;
-      if (!parent) return [];
-      return [parent, ...getAncestors(parent)];
-    };
-    const ancestors = getAncestors(nodeId);
+    const ancestors: string[] = [];
+    let currentId = nodeId;
+    const visited = new Set<string>();
+    while (true) {
+      if (visited.has(currentId)) break; // Cycle detection
+      visited.add(currentId);
+      const parent = edges.find(e => e.child === currentId)?.parent;
+      if (!parent || parent === currentId) break;
+      ancestors.push(parent);
+      currentId = parent;
+    }
     return siblings.find(s => ancestors.includes(s)) ?? null;
   }, [columnDragState, edges]);
 

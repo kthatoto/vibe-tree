@@ -175,6 +175,8 @@ interface TaskDetailPanelProps {
   // BranchLinks from parent (single source of truth for PR/CI status)
   branchLinksFromParent?: BranchLink[];
   onBranchLinksChange?: (branchName: string, links: BranchLink[]) => void;
+  // Callback when branch is deleted (for immediate UI update)
+  onBranchDeleted?: (branchName: string) => void;
 }
 
 export function TaskDetailPanel({
@@ -195,6 +197,7 @@ export function TaskDetailPanel({
   onDescriptionChange,
   branchLinksFromParent,
   onBranchLinksChange,
+  onBranchDeleted,
 }: TaskDetailPanelProps) {
   const isDefaultBranch = branchName === defaultBranch;
 
@@ -593,8 +596,9 @@ export function TaskDetailPanel({
     setError(null);
     try {
       await api.deleteBranch(localPath, branchName);
-      onClose(); // Close panel first
-      onWorktreeCreated?.(); // Rescan to update
+      onBranchDeleted?.(branchName); // Immediately remove from graph
+      onClose(); // Close panel
+      onWorktreeCreated?.(); // Rescan to sync
     } catch (err) {
       setError((err as Error).message);
       setDeleting(false);

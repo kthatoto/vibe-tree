@@ -2531,6 +2531,29 @@ export default function TreeDashboard() {
                     onBranchLinksChange={(branch, links) => {
                       setBranchLinks((prev) => new Map(prev).set(branch, links));
                     }}
+                    onBranchDeleted={(deletedBranch) => {
+                      // Immediately remove branch from graph
+                      setSnapshot((prev) => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          nodes: prev.nodes.filter((n) => n.branchName !== deletedBranch),
+                          edges: prev.edges.filter(
+                            (e) => e.child !== deletedBranch && e.parent !== deletedBranch
+                          ),
+                        };
+                      });
+                      // Also update snapshotRef
+                      if (snapshotRef.current) {
+                        snapshotRef.current = {
+                          ...snapshotRef.current,
+                          nodes: snapshotRef.current.nodes.filter((n) => n.branchName !== deletedBranch),
+                          edges: snapshotRef.current.edges.filter(
+                            (e) => e.child !== deletedBranch && e.parent !== deletedBranch
+                          ),
+                        };
+                      }
+                    }}
                   />
                 ) : (
                   <div className="panel">

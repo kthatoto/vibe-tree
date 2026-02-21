@@ -130,6 +130,7 @@ export default function BranchGraph({
     currentX: number;
     offsetX: number; // offset from node center to mouse position
     currentInsertIndex: number; // current swap position (updates on swap)
+    pendingSepIndex?: number; // pending separator index change (applied on drag end)
   } | null>(null);
 
   // Ref for columnDragState to avoid useEffect dependency issues
@@ -826,7 +827,8 @@ export default function BranchGraph({
 
       // For root siblings, include separator as a virtual element
       const isRootSiblings = dragState.parentBranch === defaultBranch;
-      const currentSepIndex = focusSeparatorIndex ?? dragState.siblings.length;
+      // Use pendingSepIndex if set (separator was crossed), otherwise use focusSeparatorIndex
+      const currentSepIndex = dragState.pendingSepIndex ?? focusSeparatorIndex ?? dragState.siblings.length;
 
       // Build positions including separator as a virtual element
       type PositionItem = { id: string; left: number; right: number; centerX: number; isSeparator?: boolean };
@@ -905,16 +907,15 @@ export default function BranchGraph({
               ? adjustedInsertIndex - 1
               : adjustedInsertIndex + 1
           ];
-          if (swappedWith?.isSeparator && onFocusSeparatorIndexChange) {
-            // Swapped with separator - update separator index
+          if (swappedWith?.isSeparator) {
+            // Swapped with separator - track pending separator index change
+            // Don't call onFocusSeparatorIndexChange during drag to avoid UI glitches
             if (newAdjustedInsertIndex < adjustedInsertIndex) {
               // Moved left past separator - separator moves right
               updatedSepIndex = currentSepIndex + 1;
-              onFocusSeparatorIndexChange(updatedSepIndex);
             } else {
               // Moved right past separator - separator moves left
               updatedSepIndex = currentSepIndex - 1;
-              onFocusSeparatorIndexChange(updatedSepIndex);
             }
           }
         }
@@ -928,11 +929,14 @@ export default function BranchGraph({
         }
       }
 
-      // Update state
+      // Update state (include pendingSepIndex if separator was crossed)
+      const newPendingSepIndex = updatedSepIndex !== currentSepIndex ? updatedSepIndex : undefined;
+      console.log("[ColumnDrag] State update:", { newInsertIndex, currentSepIndex, updatedSepIndex, newPendingSepIndex });
       setColumnDragState(prev => prev ? {
         ...prev,
         currentX: newX,
         currentInsertIndex: newInsertIndex,
+        pendingSepIndex: newPendingSepIndex ?? prev.pendingSepIndex,
       } : null);
     };
 
@@ -967,6 +971,11 @@ export default function BranchGraph({
           const newSiblingOrder = { ...siblingOrder };
           newSiblingOrder[dragState.parentBranch] = reordered;
           onSiblingOrderChange(newSiblingOrder);
+        }
+
+        // Apply pending separator index change (if separator was crossed during drag)
+        if (dragState.pendingSepIndex !== undefined && onFocusSeparatorIndexChange) {
+          onFocusSeparatorIndexChange(dragState.pendingSepIndex);
         }
       }
       setColumnDragState(null);
@@ -1127,7 +1136,8 @@ export default function BranchGraph({
   }, [edges, defaultBranch, layoutNodes]);
 
   // Effective separator index: if null, place at the end (all items focused)
-  const effectiveSeparatorIndex = focusSeparatorIndex ?? rootSiblings.length;
+  // During column drag, use pendingSepIndex for real-time preview
+  const effectiveSeparatorIndex = columnDragState?.pendingSepIndex ?? focusSeparatorIndex ?? rootSiblings.length;
 
   // Helper to check if a branch is on the unfocused (right) side of separator
   const isUnfocusedBranch = useCallback((branchId: string): boolean => {
@@ -1144,9 +1154,28 @@ export default function BranchGraph({
     const rootSibling = findRootSibling(branchId);
     if (!rootSibling) return false;
 
-    const siblingIndex = rootSiblings.indexOf(rootSibling);
-    return siblingIndex >= effectiveSeparatorIndex;
-  }, [effectiveSeparatorIndex, rootSiblings, edges, defaultBranch]);
+    const originalIndex = rootSiblings.indexOf(rootSibling);
+
+    // During column drag, compute the effective index accounting for reordering
+    let effectiveIndex = originalIndex;
+    if (columnDragState) {
+      const { draggingBranch, currentInsertIndex } = columnDragState;
+      const draggingOriginalIndex = rootSiblings.indexOf(draggingBranch);
+
+      if (rootSibling === draggingBranch) {
+        // The dragged column's effective index is currentInsertIndex
+        effectiveIndex = currentInsertIndex;
+      } else if (originalIndex < draggingOriginalIndex && originalIndex >= currentInsertIndex) {
+        // Columns between insert and original: shift right (index increases)
+        effectiveIndex = originalIndex + 1;
+      } else if (originalIndex > draggingOriginalIndex && originalIndex <= currentInsertIndex) {
+        // Columns between original and insert: shift left (index decreases)
+        effectiveIndex = originalIndex - 1;
+      }
+    }
+
+    return effectiveIndex >= effectiveSeparatorIndex;
+  }, [effectiveSeparatorIndex, rootSiblings, edges, defaultBranch, columnDragState]);
 
   const renderEdge = (edge: LayoutEdge, index: number) => {
     // Vertical edge: from bottom of parent to top of child

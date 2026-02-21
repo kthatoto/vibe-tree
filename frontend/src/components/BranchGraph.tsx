@@ -745,16 +745,12 @@ export default function BranchGraph({
 
   // Helper to get column bounds (used in multiple places)
   const getColumnBoundsHelper = useCallback((branchId: string) => {
-    const getDescendants = (id: string, visited: Set<string> = new Set()): string[] => {
-      if (visited.has(id)) return []; // Prevent infinite loop on cycles
-      visited.add(id);
-      const children = edges.filter(e => e.parent === id && e.child !== id).map(e => e.child);
+    const getDescendants = (id: string): string[] => {
+      const children = edges.filter(e => e.parent === id).map(e => e.child);
       const descendants: string[] = [];
       for (const child of children) {
-        if (!visited.has(child)) {
-          descendants.push(child);
-          descendants.push(...getDescendants(child, visited));
-        }
+        descendants.push(child);
+        descendants.push(...getDescendants(child));
       }
       return descendants;
     };
@@ -1195,12 +1191,10 @@ export default function BranchGraph({
     if (siblings.includes(nodeId)) return nodeId;
 
     // Check ancestors to find which sibling column this belongs to
-    const getAncestors = (id: string, visited: Set<string> = new Set()): string[] => {
-      if (visited.has(id)) return []; // Prevent infinite loop on cycles
-      visited.add(id);
+    const getAncestors = (id: string): string[] => {
       const parent = edges.find(e => e.child === id)?.parent;
-      if (!parent || parent === id) return []; // Also check self-reference
-      return [parent, ...getAncestors(parent, visited)];
+      if (!parent) return [];
+      return [parent, ...getAncestors(parent)];
     };
     const ancestors = getAncestors(nodeId);
     return siblings.find(s => ancestors.includes(s)) ?? null;
@@ -2110,16 +2104,12 @@ export default function BranchGraph({
             const draggingBranch = columnDragState?.draggingBranch ?? null;
 
             // Helper to get all descendants of a branch
-            const getDescendants = (branchId: string, visited: Set<string> = new Set()): string[] => {
-              if (visited.has(branchId)) return []; // Prevent infinite loop on cycles
-              visited.add(branchId);
-              const children = edges.filter(e => e.parent === branchId && e.child !== branchId).map(e => e.child);
+            const getDescendants = (branchId: string): string[] => {
+              const children = edges.filter(e => e.parent === branchId).map(e => e.child);
               const descendants: string[] = [];
               for (const child of children) {
-                if (!visited.has(child)) {
-                  descendants.push(child);
-                  descendants.push(...getDescendants(child, visited));
-                }
+                descendants.push(child);
+                descendants.push(...getDescendants(child));
               }
               return descendants;
             };

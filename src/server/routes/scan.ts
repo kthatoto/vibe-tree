@@ -907,10 +907,24 @@ scanRouter.post("/", async (c) => {
                 });
               }
               await db.update(schema.branchLinks).set(prData).where(eq(schema.branchLinks.id, existing[0].id));
+              // Broadcast branchLink.updated so frontend branchLinks state is updated
+              broadcast({
+                type: "branchLink.updated",
+                repoId,
+                data: { ...existing[0], ...prData },
+              });
             } else {
               // New PR - always broadcast
-              await db.insert(schema.branchLinks).values({ repoId, branchName: pr.branch, linkType: "pr", url: pr.url, number: pr.number, ...prData, createdAt: now });
+              const insertResult = await db.insert(schema.branchLinks).values({ repoId, branchName: pr.branch, linkType: "pr", url: pr.url, number: pr.number, ...prData, createdAt: now }).returning();
               updatedPrs.push({ branch: pr.branch, checks: prData.checksStatus, state: prData.status, changes: [{ type: "new" }] });
+              // Broadcast branchLink.created so frontend branchLinks state is updated
+              if (insertResult[0]) {
+                broadcast({
+                  type: "branchLink.created",
+                  repoId,
+                  data: insertResult[0],
+                });
+              }
             }
 
             // Broadcast progress after each PR

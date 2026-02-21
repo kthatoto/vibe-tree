@@ -869,25 +869,34 @@ export default function BranchGraph({
 
       // Swap detection based on edge overlap (now including separator)
       let newAdjustedInsertIndex = adjustedInsertIndex;
+      let swappedWithSeparator = false;
 
       // Left swap
       if (adjustedInsertIndex > 0) {
         const leftNeighbor = positionsWithSeparator[adjustedInsertIndex - 1];
         if (dragLeftEdge < leftNeighbor.left) {
           newAdjustedInsertIndex = adjustedInsertIndex - 1;
+          if (leftNeighbor.isSeparator) {
+            swappedWithSeparator = true;
+          }
         }
       }
 
-      // Right swap
-      if (adjustedInsertIndex < positionsWithSeparator.length - 1) {
+      // Right swap (only if we didn't swap with separator - prevent double swap)
+      if (!swappedWithSeparator && adjustedInsertIndex < positionsWithSeparator.length - 1) {
         const rightNeighbor = positionsWithSeparator[adjustedInsertIndex + 1];
         if (dragRightEdge > rightNeighbor.right) {
           newAdjustedInsertIndex = adjustedInsertIndex + 1;
+          if (rightNeighbor.isSeparator) {
+            swappedWithSeparator = true;
+          }
         }
       }
 
+
       // Convert back to column-only index and update separator if needed
       let newInsertIndex = newAdjustedInsertIndex;
+      let updatedSepIndex = currentSepIndex; // Track the updated separator index
       if (isRootSiblings) {
         // Check if we swapped with separator
         if (newAdjustedInsertIndex !== adjustedInsertIndex) {
@@ -900,17 +909,19 @@ export default function BranchGraph({
             // Swapped with separator - update separator index
             if (newAdjustedInsertIndex < adjustedInsertIndex) {
               // Moved left past separator - separator moves right
-              onFocusSeparatorIndexChange(currentSepIndex + 1);
+              updatedSepIndex = currentSepIndex + 1;
+              onFocusSeparatorIndexChange(updatedSepIndex);
             } else {
               // Moved right past separator - separator moves left
-              onFocusSeparatorIndexChange(currentSepIndex - 1);
+              updatedSepIndex = currentSepIndex - 1;
+              onFocusSeparatorIndexChange(updatedSepIndex);
             }
           }
         }
 
         // Convert adjusted index back to column-only index
-        const newSepIndex = focusSeparatorIndex ?? dragState.siblings.length;
-        if (newAdjustedInsertIndex > newSepIndex) {
+        // Use updatedSepIndex which reflects any separator position change from this frame
+        if (newAdjustedInsertIndex > updatedSepIndex) {
           newInsertIndex = newAdjustedInsertIndex - 1;
         } else {
           newInsertIndex = newAdjustedInsertIndex;
@@ -988,7 +999,8 @@ export default function BranchGraph({
       const childNodes = layoutNodes.filter(n => children.includes(n.id));
       const sortedSiblings = childNodes.sort((a, b) => a.x - b.x);
 
-      const currentIndex = separatorDragState.currentIndex;
+      // Clamp currentIndex to valid range (in case rootSiblings changed since drag started)
+      const currentIndex = Math.min(separatorDragState.currentIndex, sortedSiblings.length);
       let newIndex = currentIndex;
 
       // Calculate visual positions for boundary checking

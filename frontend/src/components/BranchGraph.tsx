@@ -1352,23 +1352,9 @@ export default function BranchGraph({
     const hasPR = !!prLink;
     const isMerged = prLink?.status === "merged";
 
-    // Calculate checksStatus from checks array (more reliable than checksStatus field)
-    const computedChecksStatus = (() => {
-      if (!prLink?.checks) return prLink?.checksStatus ?? null;
-      try {
-        const checks = JSON.parse(prLink.checks) as { conclusion: string | null }[];
-        if (checks.length === 0) return prLink?.checksStatus ?? null;
-        const hasFailure = checks.some(c => c.conclusion === "FAILURE" || c.conclusion === "ERROR");
-        const hasPending = checks.some(c => c.conclusion === null);
-        const allSuccess = checks.every(c => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED");
-        if (hasFailure) return "failure";
-        if (hasPending) return "pending";
-        if (allSuccess) return "success";
-        return prLink?.checksStatus ?? null;
-      } catch {
-        return prLink?.checksStatus ?? null;
-      }
-    })();
+    // Use checksStatus field directly (scan.ts calculates correct status from latest checks)
+    // The checks array in DB may contain stale check results, so checksStatus is more reliable
+    const computedChecksStatus = prLink?.checksStatus ?? null;
 
     // Check if PR base branch matches graph parent
     const graphParent = edges.find(e => e.child === id)?.parent;

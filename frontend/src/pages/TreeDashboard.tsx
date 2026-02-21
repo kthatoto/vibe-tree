@@ -895,9 +895,6 @@ export default function TreeDashboard() {
           currentSnapshotVersion.current = newVersion;
         }
 
-        // branchLinks are updated via getBranchLinksBatch (DB is single source of truth)
-        // No need to update from snapshot - it may contain stale PR data
-
         // Only notify polling when scan is FULLY complete (isComplete flag)
         // When scan is fully complete, clear scanning state and start countdown
         if (data.isComplete) {
@@ -909,6 +906,23 @@ export default function TreeDashboard() {
           setTimeout(() => {
             notifyScanCompleteRef.current();
           }, 2000); // Must match progress clear delay (2000ms)
+
+          // Force reload branchLinks when scan completes (DB is single source of truth)
+          // This ensures frontend has the latest PR data from the scan
+          // Use data.snapshot directly instead of snapshotRef (which may be stale)
+          const scanRepoId = data.snapshot?.repoId || snapshotRef.current?.repoId;
+          const branchNames = data.snapshot?.nodes.map(n => n.branchName) || snapshotRef.current?.nodes.map(n => n.branchName) || [];
+          if (scanRepoId && branchNames.length > 0) {
+            api.getBranchLinksBatch(scanRepoId, branchNames)
+              .then((result) => {
+                const linksMap = new Map<string, BranchLink[]>();
+                for (const branchName of branchNames) {
+                  linksMap.set(branchName, result[branchName] || []);
+                }
+                setBranchLinks(linksMap);
+              })
+              .catch(console.error);
+          }
         }
       }
     });

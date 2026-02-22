@@ -39,12 +39,23 @@ interface BranchGraphProps {
   onFocusSeparatorIndexChange?: (index: number | null) => void;
   // Highlighted branch (for log hover effect with rotating dashed border)
   highlightedBranch?: string | null;
+  // Worktree move callback
+  onWorktreeMove?: (worktreePath: string, fromBranch: string, toBranch: string) => void;
 }
 
 interface DragState {
   fromBranch: string;
   fromX: number;
   fromY: number;
+  currentX: number;
+  currentY: number;
+}
+
+interface WorktreeDragState {
+  worktreePath: string;
+  fromBranch: string;
+  startX: number;
+  startY: number;
   currentX: number;
   currentY: number;
 }
@@ -116,10 +127,13 @@ export default function BranchGraph({
   focusSeparatorIndex = null,
   onFocusSeparatorIndexChange,
   highlightedBranch = null,
+  onWorktreeMove,
 }: BranchGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [worktreeDragState, setWorktreeDragState] = useState<WorktreeDragState | null>(null);
+  const [worktreeDropTarget, setWorktreeDropTarget] = useState<string | null>(null);
 
   // Column reorder drag state
   const [columnDragState, setColumnDragState] = useState<{
@@ -1128,6 +1142,55 @@ export default function BranchGraph({
     };
   }, [paintModeDragState, getSVGCoords, layoutNodes, defaultBranch, paintMode, onCheckedChange]);
 
+  // Worktree drag effect
+  useEffect(() => {
+    if (!worktreeDragState) return;
+
+    const originalUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const coords = getSVGCoords(e);
+      setWorktreeDragState(prev => prev ? {
+        ...prev,
+        currentX: coords.x,
+        currentY: coords.y,
+      } : null);
+
+      // Find drop target (branch without worktree)
+      const targetNode = layoutNodes.find(node => {
+        if (node.id === worktreeDragState.fromBranch) return false;
+        if (node.isTentative) return false;
+        // Check if node already has a worktree
+        if (node.node.worktree) return false;
+        // Check if mouse is over this node
+        const nodeX = node.x;
+        const nodeY = node.y;
+        const nodeRight = nodeX + node.width;
+        const nodeBottom = nodeY + node.height;
+        return coords.x >= nodeX && coords.x <= nodeRight && coords.y >= nodeY && coords.y <= nodeBottom;
+      });
+      setWorktreeDropTarget(targetNode?.id || null);
+    };
+
+    const handleMouseUp = () => {
+      if (worktreeDragState && worktreeDropTarget && onWorktreeMove) {
+        onWorktreeMove(worktreeDragState.worktreePath, worktreeDragState.fromBranch, worktreeDropTarget);
+      }
+      setWorktreeDragState(null);
+      setWorktreeDropTarget(null);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.userSelect = originalUserSelect;
+    };
+  }, [worktreeDragState, getSVGCoords, layoutNodes, worktreeDropTarget, onWorktreeMove]);
+
   // Get root siblings (children of default branch) sorted by X position
   const rootSiblings = useMemo(() => {
     const children = edges.filter(e => e.parent === defaultBranch).map(e => e.child);
@@ -1827,8 +1890,32 @@ export default function BranchGraph({
         {/* Worktree label on top + active border effect */}
         {hasWorktree && (() => {
           const worktreeName = node.worktree?.path?.split("/").pop() || "worktree";
+          const worktreePath = node.worktree?.path || "";
           const isActive = node.worktree?.isActive;
           const labelWidth = Math.min(worktreeName.length * 7 + 16, nodeWidth);
+          const isDraggingThisWorktree = worktreeDragState?.fromBranch === id;
+          const isWorktreeDropTarget = worktreeDropTarget === id && worktreeDragState && worktreeDragState.fromBranch !== id;
+
+          const handleWorktreeDragStart = (e: React.MouseEvent) => {
+            if (!onWorktreeMove) return;
+            e.stopPropagation();
+            e.preventDefault();
+            const svg = svgRef.current;
+            if (!svg) return;
+            const pt = svg.createSVGPoint();
+            pt.x = e.clientX;
+            pt.y = e.clientY;
+            const svgP = pt.matrixTransform(svg.getScreenCTM()?.inverse());
+            setWorktreeDragState({
+              worktreePath,
+              fromBranch: id,
+              startX: svgP.x,
+              startY: svgP.y,
+              currentX: svgP.x,
+              currentY: svgP.y,
+            });
+          };
+
           return (
             <g>
               {/* Active glow effect */}
@@ -1846,28 +1933,48 @@ export default function BranchGraph({
                   opacity={0.6}
                 />
               )}
+              {/* Worktree drop target highlight */}
+              {isWorktreeDropTarget && (
+                <rect
+                  x={x - 3}
+                  y={y - 25}
+                  width={nodeWidth + 6}
+                  height={26}
+                  rx={6}
+                  fill="none"
+                  stroke="#a855f7"
+                  strokeWidth={2}
+                  strokeDasharray="4,2"
+                />
+              )}
               {/* Worktree folder name label - positioned above node */}
-              <rect
-                x={x}
-                y={y - 22}
-                width={labelWidth}
-                height={20}
-                rx={4}
-                fill={isActive ? "#14532d" : "#1e3a5f"}
-                stroke={isActive ? "#22c55e" : "#3b82f6"}
-                strokeWidth={1.5}
-              />
-              <text
-                x={x + 6}
-                y={y - 11}
-                textAnchor="start"
-                dominantBaseline="middle"
-                fontSize={11}
-                fill={isActive ? "#4ade80" : "#60a5fa"}
-                fontWeight="600"
+              <g
+                style={{ cursor: onWorktreeMove ? "grab" : "default" }}
+                onMouseDown={handleWorktreeDragStart}
+                opacity={isDraggingThisWorktree ? 0.5 : 1}
               >
-                {worktreeName.length > 22 ? worktreeName.substring(0, 20) + "…" : worktreeName}
-              </text>
+                <rect
+                  x={x}
+                  y={y - 22}
+                  width={labelWidth}
+                  height={20}
+                  rx={4}
+                  fill={isActive ? "#14532d" : "#1e3a5f"}
+                  stroke={isActive ? "#22c55e" : "#3b82f6"}
+                  strokeWidth={1.5}
+                />
+                <text
+                  x={x + 6}
+                  y={y - 11}
+                  textAnchor="start"
+                  dominantBaseline="middle"
+                  fontSize={11}
+                  fill={isActive ? "#4ade80" : "#60a5fa"}
+                  fontWeight="600"
+                >
+                  {worktreeName.length > 22 ? worktreeName.substring(0, 20) + "…" : worktreeName}
+                </text>
+              </g>
             </g>
           );
         })()}
@@ -2279,6 +2386,38 @@ export default function BranchGraph({
             );
           })()}
         </g>
+
+        {/* Dragging worktree label */}
+        {worktreeDragState && (() => {
+          const worktreeName = worktreeDragState.worktreePath.split("/").pop() || "worktree";
+          const labelWidth = Math.min(worktreeName.length * 7 + 16, 150);
+          return (
+            <g style={{ pointerEvents: "none" }}>
+              <rect
+                x={worktreeDragState.currentX - labelWidth / 2}
+                y={worktreeDragState.currentY - 10}
+                width={labelWidth}
+                height={20}
+                rx={4}
+                fill="#7c3aed"
+                stroke="#a855f7"
+                strokeWidth={2}
+                opacity={0.9}
+              />
+              <text
+                x={worktreeDragState.currentX}
+                y={worktreeDragState.currentY + 1}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize={11}
+                fill="#fff"
+                fontWeight="600"
+              >
+                {worktreeName.length > 18 ? worktreeName.substring(0, 16) + "…" : worktreeName}
+              </text>
+            </g>
+          );
+        })()}
       </svg>
     </div>
   );

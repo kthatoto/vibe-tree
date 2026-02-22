@@ -2491,6 +2491,19 @@ export default function TreeDashboard() {
                       focusSeparatorIndex={focusSeparatorIndex}
                       onFocusSeparatorIndexChange={setFocusSeparatorIndex}
                       highlightedBranch={hoveredLogBranch}
+                      onWorktreeMove={async (worktreePath, _fromBranch, toBranch) => {
+                        try {
+                          // Use existing checkout API with worktree path
+                          await api.checkout(worktreePath, toBranch);
+                          // Trigger scan to refresh worktree state
+                          if (selectedPin) {
+                            triggerScan(selectedPin.localPath);
+                          }
+                        } catch (err) {
+                          console.error("Failed to move worktree:", err);
+                          setError((err as Error).message);
+                        }
+                      }}
                     />
                   </div>
                 </div>

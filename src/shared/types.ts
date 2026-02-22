@@ -121,6 +121,13 @@ export interface WorktreeInfo {
   activeAgent?: string; // e.g., "claude"
 }
 
+export interface PRCheckDetail {
+  name: string;
+  status: string;
+  conclusion: string | null;
+  detailsUrl: string | null;
+}
+
 export interface PRInfo {
   number: number;
   title: string;
@@ -134,6 +141,7 @@ export interface PRInfo {
   reviewStatus?: "none" | "requested" | "reviewed" | "approved"; // Computed review status
   reviewers?: string[]; // Requested reviewers (excluding bots like GitHub Copilot)
   checks?: string; // SUCCESS, FAILURE, PENDING
+  checksDetail?: PRCheckDetail[]; // Detailed check results
   additions?: number;
   deletions?: number;
   changedFiles?: number;

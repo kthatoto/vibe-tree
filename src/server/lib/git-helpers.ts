@@ -205,22 +205,39 @@ export async function getPRs(repoPath: string): Promise<PRInfo[]> {
       // We need to deduplicate by check name and use only the latest run
       if (pr.statusCheckRollup && pr.statusCheckRollup.length > 0) {
         // Group checks by name, keeping only the latest (most recent completedAt)
-        const checksByName = new Map<string, { conclusion: string | null; completedAt: string | null }>();
+        const checksByName = new Map<string, {
+          name: string;
+          status: string;
+          conclusion: string | null;
+          completedAt: string | null;
+          detailsUrl: string | null;
+        }>();
         for (const check of pr.statusCheckRollup) {
           const name = check.name || "unknown";
           const existing = checksByName.get(name);
           const completedAt = check.completedAt || null;
           const conclusion = check.conclusion || null;
+          const status = check.status || "COMPLETED";
+          const detailsUrl = check.detailsUrl || null;
           if (!existing || (completedAt && (!existing.completedAt || completedAt > existing.completedAt))) {
-            checksByName.set(name, { conclusion, completedAt });
+            checksByName.set(name, { name, status, conclusion, completedAt, detailsUrl });
           }
         }
 
-        // Filter out CANCELLED and STALE checks (they don't affect the overall status)
+        // Build checksDetail array (all latest checks, excluding CANCELLED and STALE)
         const latestChecks = Array.from(checksByName.values());
         const activeChecks = latestChecks.filter(
           (c) => c.conclusion !== "CANCELLED" && c.conclusion !== "STALE"
         );
+
+        // Store detailed check info
+        prInfo.checksDetail = activeChecks.map((c) => ({
+          name: c.name,
+          status: c.status,
+          conclusion: c.conclusion,
+          detailsUrl: c.detailsUrl,
+        }));
+
         if (activeChecks.length === 0) {
           // All checks were cancelled/stale, treat as success
           prInfo.checks = "SUCCESS";

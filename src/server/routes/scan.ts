@@ -844,6 +844,7 @@ scanRouter.post("/", async (c) => {
               title: pr.title,
               status: pr.state.toLowerCase(),
               checksStatus: pr.checks?.toLowerCase() ?? null,
+              checks: pr.checksDetail ? JSON.stringify(pr.checksDetail) : null,
               reviewDecision: pr.reviewDecision ?? null,
               reviewStatus: pr.reviewStatus ?? null,
               labels: pr.labels ? JSON.stringify(pr.labels) : null,

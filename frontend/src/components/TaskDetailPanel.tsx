@@ -1188,16 +1188,19 @@ export function TaskDetailPanel({
                 </button>
               </div>
               <div className="task-detail-panel__link-meta">
-                {computedChecksStatus && (
+                {(totalChecks > 0 || computedChecksStatus) && (
                   <button
                     className={`task-detail-panel__ci-badge task-detail-panel__ci-badge--${computedChecksStatus}`}
                     onClick={() => totalChecks > 0 && setShowCIModal(true)}
-                    title={`CI: ${computedChecksStatus}`}
+                    title={totalChecks > 0 ? "View CI details" : `CI: ${computedChecksStatus}`}
                     style={{ cursor: totalChecks > 0 ? "pointer" : "default" }}
                   >
                     <span className="task-detail-panel__ci-badge-icon">
                       {computedChecksStatus === "success" ? "✓" : computedChecksStatus === "failure" ? "✗" : "●"}
                     </span>
+                    {totalChecks > 0 && (
+                      <span className="task-detail-panel__ci-badge-count">{passedChecks}/{totalChecks}</span>
+                    )}
                   </button>
                 )}
                 {(pr.reviewDecision || reviewers.length > 0) && (

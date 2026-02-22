@@ -243,6 +243,13 @@ export default function TreeDashboard() {
   const [showAddNew, setShowAddNew] = useState(false);
   const [deletingPinId, setDeletingPinId] = useState<number | null>(null);
 
+  // Pending worktree move (for confirmation modal)
+  const [pendingWorktreeMove, setPendingWorktreeMove] = useState<{
+    worktreePath: string;
+    fromBranch: string;
+    toBranch: string;
+  } | null>(null);
+
   // Selected pin derived from URL
   const selectedPinId = urlPinId ? parseInt(urlPinId, 10) : null;
 
@@ -2491,18 +2498,9 @@ export default function TreeDashboard() {
                       focusSeparatorIndex={focusSeparatorIndex}
                       onFocusSeparatorIndexChange={setFocusSeparatorIndex}
                       highlightedBranch={hoveredLogBranch}
-                      onWorktreeMove={async (worktreePath, _fromBranch, toBranch) => {
-                        try {
-                          // Use existing checkout API with worktree path
-                          await api.checkout(worktreePath, toBranch);
-                          // Trigger scan to refresh worktree state
-                          if (selectedPin) {
-                            triggerScan(selectedPin.localPath);
-                          }
-                        } catch (err) {
-                          console.error("Failed to move worktree:", err);
-                          setError((err as Error).message);
-                        }
+                      onWorktreeMove={(worktreePath, fromBranch, toBranch) => {
+                        // Show confirmation modal instead of immediate execution
+                        setPendingWorktreeMove({ worktreePath, fromBranch, toBranch });
                       }}
                     />
                   </div>
@@ -3128,6 +3126,75 @@ export default function TreeDashboard() {
                   </button>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Worktree Move Confirmation Modal */}
+      {pendingWorktreeMove && (
+        <div className="modal-overlay" onClick={() => setPendingWorktreeMove(null)}>
+          <div className="modal modal--small" onClick={(e) => e.stopPropagation()}>
+            <div className="modal__header">
+              <h2>Move Worktree</h2>
+            </div>
+            <div className="modal__body">
+              {/* Worktree name */}
+              <div style={{ marginBottom: 16, padding: "12px 16px", background: "#1e3a5f", borderRadius: 8, border: "1px solid #3b82f6" }}>
+                <div style={{ fontSize: "0.75em", color: "#9ca3af", marginBottom: 4 }}>Worktree</div>
+                <div style={{ fontSize: "1.1em", fontWeight: 600, color: "#60a5fa" }}>
+                  {pendingWorktreeMove.worktreePath.split("/").pop()}
+                </div>
+              </div>
+
+              {/* From → To */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                {/* From */}
+                <div style={{ flex: 1, padding: "12px 16px", background: "#422006", borderRadius: 8, border: "1px solid #f59e0b" }}>
+                  <div style={{ fontSize: "0.75em", color: "#9ca3af", marginBottom: 4 }}>From</div>
+                  <div style={{ fontSize: "1em", fontWeight: 600, color: "#fbbf24" }}>
+                    {pendingWorktreeMove.fromBranch}
+                  </div>
+                </div>
+
+                {/* Arrow */}
+                <div style={{ fontSize: "1.5em", color: "#6b7280" }}>→</div>
+
+                {/* To */}
+                <div style={{ flex: 1, padding: "12px 16px", background: "#14532d", borderRadius: 8, border: "1px solid #22c55e" }}>
+                  <div style={{ fontSize: "0.75em", color: "#9ca3af", marginBottom: 4 }}>To</div>
+                  <div style={{ fontSize: "1em", fontWeight: 600, color: "#4ade80" }}>
+                    {pendingWorktreeMove.toBranch}
+                  </div>
+                </div>
+              </div>
+
+              <p style={{ margin: "16px 0 0", fontSize: "0.85em", color: "#9ca3af" }}>
+                This will checkout the target branch in the worktree directory.
+              </p>
+            </div>
+            <div className="modal__footer">
+              <button className="btn-secondary" onClick={() => setPendingWorktreeMove(null)}>
+                Cancel
+              </button>
+              <button
+                className="btn-primary"
+                onClick={async () => {
+                  const { worktreePath, toBranch } = pendingWorktreeMove;
+                  setPendingWorktreeMove(null);
+                  try {
+                    await api.checkout(worktreePath, toBranch);
+                    if (selectedPin) {
+                      triggerScan(selectedPin.localPath);
+                    }
+                  } catch (err) {
+                    console.error("Failed to move worktree:", err);
+                    setError((err as Error).message);
+                  }
+                }}
+              >
+                Move
+              </button>
             </div>
           </div>
         </div>

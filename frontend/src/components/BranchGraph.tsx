@@ -58,6 +58,9 @@ interface WorktreeDragState {
   startY: number;
   currentX: number;
   currentY: number;
+  // Offset from click point to label center (to maintain relative position during drag)
+  offsetX: number;
+  offsetY: number;
 }
 
 interface LayoutNode {
@@ -1900,19 +1903,23 @@ export default function BranchGraph({
             if (!onWorktreeMove) return;
             e.stopPropagation();
             e.preventDefault();
-            const svg = svgRef.current;
-            if (!svg) return;
-            const pt = svg.createSVGPoint();
-            pt.x = e.clientX;
-            pt.y = e.clientY;
-            const svgP = pt.matrixTransform(svg.getScreenCTM()?.inverse());
+            // Use getSVGCoords for consistent coordinate calculation
+            const clickCoords = getSVGCoords(e);
+            // Label center position: x + labelWidth/2, y - 12 (center of 20px height label at y-22)
+            const labelCenterX = x + labelWidth / 2;
+            const labelCenterY = y - 12;
+            // Calculate offset from click to label center (so label follows cursor naturally)
+            const offsetX = labelCenterX - clickCoords.x;
+            const offsetY = labelCenterY - clickCoords.y;
             setWorktreeDragState({
               worktreePath,
               fromBranch: id,
-              startX: svgP.x,
-              startY: svgP.y,
-              currentX: svgP.x,
-              currentY: svgP.y,
+              startX: clickCoords.x,
+              startY: clickCoords.y,
+              currentX: clickCoords.x,
+              currentY: clickCoords.y,
+              offsetX,
+              offsetY,
             });
           };
 
@@ -2387,33 +2394,46 @@ export default function BranchGraph({
           })()}
         </g>
 
-        {/* Dragging worktree label */}
+        {/* Dragging worktree label - styled like original label */}
         {worktreeDragState && (() => {
           const worktreeName = worktreeDragState.worktreePath.split("/").pop() || "worktree";
+          const displayName = worktreeName.length > 22 ? worktreeName.substring(0, 20) + "…" : worktreeName;
           const labelWidth = Math.min(worktreeName.length * 7 + 16, 150);
+          // Apply offset to maintain label position relative to cursor
+          const centerX = worktreeDragState.currentX + worktreeDragState.offsetX;
+          const centerY = worktreeDragState.currentY + worktreeDragState.offsetY;
           return (
             <g style={{ pointerEvents: "none" }}>
+              {/* Shadow for depth effect */}
               <rect
-                x={worktreeDragState.currentX - labelWidth / 2}
-                y={worktreeDragState.currentY - 10}
+                x={centerX - labelWidth / 2 + 2}
+                y={centerY - 10 + 2}
                 width={labelWidth}
                 height={20}
                 rx={4}
-                fill="#7c3aed"
-                stroke="#a855f7"
-                strokeWidth={2}
-                opacity={0.9}
+                fill="rgba(0,0,0,0.3)"
+              />
+              {/* Main label - matching original style */}
+              <rect
+                x={centerX - labelWidth / 2}
+                y={centerY - 10}
+                width={labelWidth}
+                height={20}
+                rx={4}
+                fill="#1e3a5f"
+                stroke="#3b82f6"
+                strokeWidth={1.5}
               />
               <text
-                x={worktreeDragState.currentX}
-                y={worktreeDragState.currentY + 1}
+                x={centerX}
+                y={centerY + 1}
                 textAnchor="middle"
                 dominantBaseline="middle"
                 fontSize={11}
-                fill="#fff"
+                fill="#60a5fa"
                 fontWeight="600"
               >
-                {worktreeName.length > 18 ? worktreeName.substring(0, 16) + "…" : worktreeName}
+                {displayName}
               </text>
             </g>
           );

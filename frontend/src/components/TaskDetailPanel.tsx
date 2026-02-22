@@ -1155,17 +1155,9 @@ export function TaskDetailPanel({
           const checks: GitHubCheck[] = pr.checks ? ((): GitHubCheck[] => { try { return JSON.parse(pr.checks!) } catch { return [] } })() : [];
           const passedChecks = checks.filter((c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED").length;
           const totalChecks = checks.length;
-          // Compute checksStatus from checks array (more reliable than checksStatus field)
-          const computedChecksStatus = (() => {
-            if (checks.length === 0) return pr.checksStatus ?? null;
-            const hasFailure = checks.some(c => c.conclusion === "FAILURE" || c.conclusion === "ERROR");
-            const hasPending = checks.some(c => c.conclusion === null);
-            const allSuccess = checks.every(c => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED");
-            if (hasFailure) return "failure";
-            if (hasPending) return "pending";
-            if (allSuccess) return "success";
-            return pr.checksStatus ?? null;
-          })();
+          // Use checksStatus field directly (scan.ts calculates correct status from latest checks)
+          // The checks array in DB may contain stale check results, so checksStatus is more reliable
+          const computedChecksStatus = pr.checksStatus ?? null;
           // Helper to get contrasting text color
           const getTextColor = (bgColor: string) => {
             const r = parseInt(bgColor.slice(0, 2), 16);
@@ -1196,19 +1188,16 @@ export function TaskDetailPanel({
                 </button>
               </div>
               <div className="task-detail-panel__link-meta">
-                {(totalChecks > 0 || computedChecksStatus) && (
+                {computedChecksStatus && (
                   <button
                     className={`task-detail-panel__ci-badge task-detail-panel__ci-badge--${computedChecksStatus}`}
                     onClick={() => totalChecks > 0 && setShowCIModal(true)}
-                    title={totalChecks > 0 ? "View CI details" : `CI: ${computedChecksStatus}`}
+                    title={`CI: ${computedChecksStatus}`}
                     style={{ cursor: totalChecks > 0 ? "pointer" : "default" }}
                   >
                     <span className="task-detail-panel__ci-badge-icon">
                       {computedChecksStatus === "success" ? "✓" : computedChecksStatus === "failure" ? "✗" : "●"}
                     </span>
-                    {totalChecks > 0 && (
-                      <span className="task-detail-panel__ci-badge-count">{passedChecks}/{totalChecks}</span>
-                    )}
                   </button>
                 )}
                 {(pr.reviewDecision || reviewers.length > 0) && (

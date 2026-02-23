@@ -25,10 +25,12 @@ import { wsClient } from "../lib/ws";
 import { diff, formatDiffSummary } from "../lib/scanDiff";
 import {
   mergeNodeAttributes,
+  mergeNodeAttributesWithTimestamps,
   createInferredEdgesForNewBranches,
   analyzeChanges,
   formatPendingChangesSummary,
   type PendingChanges,
+  type NodeFieldTimestamps,
 } from "../lib/snapshotMerge";
 import BranchGraph, { MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from "../components/BranchGraph";
 import { ScanUpdateToast } from "../components/ScanUpdateToast";
@@ -307,6 +309,10 @@ export default function TreeDashboard() {
   const [branchDescriptions, setBranchDescriptions] = useState<Map<string, string>>(new Map());
   // Branches currently refreshing their status (for loading UI)
   const [refreshingBranches, setRefreshingBranches] = useState<Set<string>>(new Set());
+  // Field-level timestamps for conflict resolution with scan results
+  const [fieldTimestamps, setFieldTimestamps] = useState<Map<string, NodeFieldTimestamps>>(new Map());
+  // Scan start time for timestamp-based merge protection
+  const scanStartTimeRef = useRef<number | null>(null);
 
   // Multi-session planning state (only store what's needed, not full session copy)
   const [selectedSessionBaseBranch, setSelectedSessionBaseBranch] = useState<string | null>(null);
@@ -618,9 +624,12 @@ export default function TreeDashboard() {
   const triggerScan = useCallback((localPath: string) => {
     if (isScanningRef.current) return;
     isScanningRef.current = true;
+    // Record scan start time for timestamp-based merge protection
+    scanStartTimeRef.current = Date.now();
     api.startScan(localPath).catch((err) => {
       console.warn("[TreeDashboard] Background scan failed:", err);
       isScanningRef.current = false; // Only reset on error
+      scanStartTimeRef.current = null;
     });
     // Note: isScanningRef is cleared in WebSocket handler when isComplete is received
   }, []);
@@ -824,7 +833,13 @@ export default function TreeDashboard() {
 
         setSnapshot((prev) => {
           if (!prev) return prev;
-          return mergeNodeAttributes(prev, data.snapshot!);
+          // Use timestamp-based merge to preserve newer local updates
+          return mergeNodeAttributesWithTimestamps(
+            prev,
+            data.snapshot!,
+            fieldTimestamps,
+            scanStartTimeRef.current
+          );
         });
         return;
       }
@@ -842,48 +857,61 @@ export default function TreeDashboard() {
         if (analysis.hasUnsafeChanges && analysis.pendingChanges) {
           if (branchGraphEditMode) {
             // Edit mode中は保留（終了時に自動適用される）
-            // Safe fieldsはmergeしておく
+            // Safe fieldsはmergeしておく（タイムスタンプベースで保護）
             setSnapshot((prev) => {
               if (!prev) return prev;
-              return mergeNodeAttributes(prev, data.snapshot!);
+              return mergeNodeAttributesWithTimestamps(
+                prev,
+                data.snapshot!,
+                fieldTimestamps,
+                scanStartTimeRef.current
+              );
             });
             setPendingChanges(analysis.pendingChanges);
           } else if (Date.now() < preserveLocalEdgesUntilRef.current) {
             // 保存直後の期間: ローカルのedgeを保持しつつ、safe fieldsのみマージ
             // (保存した内容が上書きされるのを防ぐ)
-            console.log("[TreeDashboard] Grace period active: preserving local edges (mergeNodeAttributes)");
+            console.log("[TreeDashboard] Grace period active: preserving local edges");
             setSnapshot((prev) => {
               if (!prev) return prev;
-              return mergeNodeAttributes(prev, data.snapshot!);
+              return mergeNodeAttributesWithTimestamps(
+                prev,
+                data.snapshot!,
+                fieldTimestamps,
+                scanStartTimeRef.current
+              );
             });
             currentSnapshotVersion.current = newVersion;
             setPendingChanges(null);
           } else {
-            console.log("[TreeDashboard] No grace period: full snapshot replacement");
-            // Edit mode中でなければ自動適用（incoming snapshotをそのまま使用）
-            // Preserve descriptions from current snapshot if incoming doesn't have them
+            console.log("[TreeDashboard] No grace period: full snapshot replacement (with timestamp protection)");
+            // Edit mode中でなければ自動適用
+            // Use timestamp-based merge to preserve newer local updates
             setSnapshot((prev) => {
               if (!prev) return data.snapshot!;
-              const nodesWithDescriptions = data.snapshot!.nodes.map((node) => {
-                const prevNode = prev.nodes.find((n) => n.branchName === node.branchName);
-                return {
-                  ...node,
-                  description: node.description ?? prevNode?.description,
-                };
-              });
-              return { ...data.snapshot!, nodes: nodesWithDescriptions };
+              return mergeNodeAttributesWithTimestamps(
+                prev,
+                data.snapshot!,
+                fieldTimestamps,
+                scanStartTimeRef.current
+              );
             });
             currentSnapshotVersion.current = newVersion;
             setPendingChanges(null);
           }
         } else {
-          // Only safe changes - merge them
+          // Only safe changes - merge them (with timestamp protection)
           if (!branchGraphEditMode) {
             setSnapshot((prev) => {
               if (!prev) return data.snapshot!;
 
-              // Merge node attributes (also merges warnings, worktrees, etc.)
-              let merged = mergeNodeAttributes(prev, data.snapshot!);
+              // Merge node attributes with timestamp-based protection
+              let merged = mergeNodeAttributesWithTimestamps(
+                prev,
+                data.snapshot!,
+                fieldTimestamps,
+                scanStartTimeRef.current
+              );
 
               // Add inferred edges for new branches
               if (analysis.pendingChanges?.newBranches.length) {
@@ -910,6 +938,9 @@ export default function TreeDashboard() {
           // Clear the scanning lock immediately so new scans can be triggered
           isScanningRef.current = false;
           lastScanCompleteTimeRef.current = Date.now();
+          // Clear scan start time and field timestamps (next scan starts fresh)
+          scanStartTimeRef.current = null;
+          setFieldTimestamps(new Map());
           // Delay countdown start until after 100% display finishes
           // Must match queueProgressUpdate(null) delay so countdown starts fresh
           setTimeout(() => {
@@ -2584,6 +2615,23 @@ export default function TreeDashboard() {
                     }}
                     edges={snapshot.edges}
                     onBranchStatusRefresh={(updates) => {
+                      const now = Date.now();
+
+                      // Record timestamps for updated fields (for scan merge protection)
+                      setFieldTimestamps((prev) => {
+                        const next = new Map(prev);
+                        Object.keys(updates).forEach((branchName) => {
+                          const update = updates[branchName];
+                          const existing = next.get(branchName) || {};
+                          next.set(branchName, {
+                            ...existing,
+                            aheadBehind: update.aheadBehind ? now : existing.aheadBehind,
+                            remoteAheadBehind: update.remoteAheadBehind ? now : existing.remoteAheadBehind,
+                          });
+                        });
+                        return next;
+                      });
+
                       // Partial update: only update ahead/behind for specified branches
                       setSnapshot((prev) => {
                         if (!prev) return prev;

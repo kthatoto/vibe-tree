@@ -275,3 +275,102 @@ export function formatPendingChangesSummary(pending: PendingChanges): string {
 
   return parts.length > 0 ? parts.join(", ") : "structure changes";
 }
+
+/**
+ * Timestamps for node fields that can be updated independently
+ */
+export interface NodeFieldTimestamps {
+  aheadBehind?: number;
+  remoteAheadBehind?: number;
+  worktree?: number;
+}
+
+/**
+ * Merge node attributes with timestamp-based conflict resolution.
+ * Fields updated after scanStartTime are preserved (not overwritten by scan results).
+ *
+ * @param current - Current displayed snapshot
+ * @param incoming - New snapshot from scan
+ * @param fieldTimestamps - Map of branchName -> field timestamps
+ * @param scanStartTime - When the current scan started (null = no protection)
+ * @returns Merged snapshot with newer local updates preserved
+ */
+export function mergeNodeAttributesWithTimestamps(
+  current: ScanSnapshot,
+  incoming: ScanSnapshot,
+  fieldTimestamps: Map<string, NodeFieldTimestamps>,
+  scanStartTime: number | null
+): ScanSnapshot {
+  // Build lookup map for incoming nodes
+  const incomingMap = new Map<string, TreeNode>();
+  for (const node of incoming.nodes) {
+    incomingMap.set(node.branchName, node);
+  }
+
+  // Merge with timestamp-based protection
+  const mergedNodes = current.nodes.map((currentNode) => {
+    const incomingNode = incomingMap.get(currentNode.branchName);
+    if (!incomingNode) {
+      return currentNode;
+    }
+
+    const timestamps = fieldTimestamps.get(currentNode.branchName);
+
+    // Check if local update is newer than scan start
+    const keepAheadBehind =
+      scanStartTime &&
+      timestamps?.aheadBehind &&
+      timestamps.aheadBehind > scanStartTime;
+
+    const keepRemoteAheadBehind =
+      scanStartTime &&
+      timestamps?.remoteAheadBehind &&
+      timestamps.remoteAheadBehind > scanStartTime;
+
+    const keepWorktree =
+      scanStartTime &&
+      timestamps?.worktree &&
+      timestamps.worktree > scanStartTime;
+
+    return {
+      ...currentNode,
+      // Protected fields: keep current if updated after scan start
+      aheadBehind: keepAheadBehind
+        ? currentNode.aheadBehind
+        : incomingNode.aheadBehind,
+      remoteAheadBehind: keepRemoteAheadBehind
+        ? currentNode.remoteAheadBehind
+        : incomingNode.remoteAheadBehind,
+      worktree: keepWorktree
+        ? currentNode.worktree
+        : incomingNode.worktree,
+      // Non-protected fields: always use incoming
+      pr: incomingNode.pr,
+      lastCommitAt: incomingNode.lastCommitAt,
+      badges: incomingNode.badges,
+      description: incomingNode.description ?? currentNode.description,
+    };
+  });
+
+  // Find new branches
+  const currentBranches = new Set(current.nodes.map((n) => n.branchName));
+  const newNodes: TreeNode[] = [];
+  for (const incomingNode of incoming.nodes) {
+    if (!currentBranches.has(incomingNode.branchName)) {
+      newNodes.push(incomingNode);
+    }
+  }
+
+  const finalNodes = [...mergedNodes, ...newNodes];
+
+  return {
+    ...current,
+    nodes: finalNodes,
+    edges: current.edges,
+    warnings: incoming.warnings,
+    worktrees: incoming.worktrees,
+    rules: incoming.rules,
+    restart: incoming.restart,
+    treeSpec: current.treeSpec,
+  };
+}

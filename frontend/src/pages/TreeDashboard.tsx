@@ -2148,6 +2148,7 @@ export default function TreeDashboard() {
                   : log.type === "branch" ? "#a78bfa"
                   : log.type === "fetch" ? "#34d399"
                   : log.type === "pr" ? "#d1d5db"
+                  : log.type === "manual" ? "#fbbf24"
                   : "#9ca3af";
                 const hasBranch = !!log.branch;
 
@@ -2160,8 +2161,8 @@ export default function TreeDashboard() {
                   marginLeft: isGrouped ? 12 : 0,
                 };
 
-                // PR logs: 2-column grid (Time/Label | Branch/Content)
-                if (log.type === "pr" && log.html) {
+                // PR/Manual logs: 2-column grid (Time/Label | Branch/Content)
+                if ((log.type === "pr" || log.type === "manual") && log.html) {
                   let logData: { branch: string; changeType: string; data: Record<string, unknown> } | null = null;
                   try {
                     logData = JSON.parse(log.html);
@@ -2330,7 +2331,7 @@ export default function TreeDashboard() {
 
               // Render change content (used in grouped view)
               const renderChangeContent = (log: LogEntry) => {
-                if (log.type !== "pr" || !log.html) return null;
+                if ((log.type !== "pr" && log.type !== "manual") || !log.html) return null;
                 let logData: { branch: string; changeType: string; data: Record<string, unknown> } | null = null;
                 try {
                   logData = JSON.parse(log.html);

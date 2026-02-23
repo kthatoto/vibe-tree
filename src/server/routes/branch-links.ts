@@ -980,6 +980,21 @@ branchLinksRouter.post("/:id/labels/add", async (c) => {
         .set({ labels: JSON.stringify(currentLabels), updatedAt: now })
         .where(eq(schema.branchLinks.id, id));
 
+      // Save manual action log
+      const logData = {
+        branch: link.branchName,
+        changeType: "labels",
+        data: { added: [{ name: labelName, color }], removed: [] },
+      };
+      await db.insert(schema.scanLogs).values({
+        repoId: link.repoId,
+        logType: "manual",
+        message: `${link.branchName}: labels (manual)`,
+        html: JSON.stringify(logData),
+        branchName: link.branchName,
+        createdAt: now,
+      });
+
       // Broadcast update
       const [updated] = await db.select().from(schema.branchLinks).where(eq(schema.branchLinks.id, id)).limit(1);
       broadcast({ type: "branchLink.updated", repoId: link.repoId, data: updated });
@@ -1016,12 +1031,30 @@ branchLinksRouter.post("/:id/labels/remove", async (c) => {
 
     // Update local cache
     const currentLabels: Array<{ name: string; color: string }> = link.labels ? JSON.parse(link.labels) : [];
+    const removedLabel = currentLabels.find((l) => l.name === labelName);
     const updatedLabels = currentLabels.filter((l) => l.name !== labelName);
 
     const now = new Date().toISOString();
     await db.update(schema.branchLinks)
       .set({ labels: JSON.stringify(updatedLabels), updatedAt: now })
       .where(eq(schema.branchLinks.id, id));
+
+    // Save manual action log
+    if (removedLabel) {
+      const logData = {
+        branch: link.branchName,
+        changeType: "labels",
+        data: { added: [], removed: [{ name: removedLabel.name, color: removedLabel.color }] },
+      };
+      await db.insert(schema.scanLogs).values({
+        repoId: link.repoId,
+        logType: "manual",
+        message: `${link.branchName}: labels (manual)`,
+        html: JSON.stringify(logData),
+        branchName: link.branchName,
+        createdAt: now,
+      });
+    }
 
     // Broadcast update
     const [updated] = await db.select().from(schema.branchLinks).where(eq(schema.branchLinks.id, id)).limit(1);
@@ -1071,6 +1104,21 @@ branchLinksRouter.post("/:id/reviewers/add", async (c) => {
         .set({ reviewers: JSON.stringify(currentReviewers), updatedAt: now })
         .where(eq(schema.branchLinks.id, id));
 
+      // Save manual action log
+      const logData = {
+        branch: link.branchName,
+        changeType: "reviewers",
+        data: { old: "", new: reviewer },
+      };
+      await db.insert(schema.scanLogs).values({
+        repoId: link.repoId,
+        logType: "manual",
+        message: `${link.branchName}: reviewers (manual)`,
+        html: JSON.stringify(logData),
+        branchName: link.branchName,
+        createdAt: now,
+      });
+
       // Broadcast update
       const [updated] = await db.select().from(schema.branchLinks).where(eq(schema.branchLinks.id, id)).limit(1);
       broadcast({ type: "branchLink.updated", repoId: link.repoId, data: updated });
@@ -1112,12 +1160,30 @@ branchLinksRouter.post("/:id/reviewers/remove", async (c) => {
 
     // Update local cache
     const currentReviewers: string[] = link.reviewers ? JSON.parse(link.reviewers) : [];
+    const wasPresent = currentReviewers.includes(reviewer);
     const updatedReviewers = currentReviewers.filter((r) => r !== reviewer);
 
     const now = new Date().toISOString();
     await db.update(schema.branchLinks)
       .set({ reviewers: JSON.stringify(updatedReviewers), updatedAt: now })
       .where(eq(schema.branchLinks.id, id));
+
+    // Save manual action log
+    if (wasPresent) {
+      const logData = {
+        branch: link.branchName,
+        changeType: "reviewers",
+        data: { old: reviewer, new: "" },
+      };
+      await db.insert(schema.scanLogs).values({
+        repoId: link.repoId,
+        logType: "manual",
+        message: `${link.branchName}: reviewers (manual)`,
+        html: JSON.stringify(logData),
+        branchName: link.branchName,
+        createdAt: now,
+      });
+    }
 
     // Broadcast update
     const [updated] = await db.select().from(schema.branchLinks).where(eq(schema.branchLinks.id, id)).limit(1);

@@ -186,6 +186,8 @@ interface TaskDetailPanelProps {
   // For partial status refresh (instead of full scan)
   edges?: { parent: string; child: string }[];
   onBranchStatusRefresh?: (updates: Record<string, BranchStatusUpdate>) => void;
+  onBranchStatusRefreshStart?: (branches: string[]) => void;
+  onBranchStatusRefreshEnd?: (branches: string[]) => void;
 }
 
 export function TaskDetailPanel({
@@ -209,6 +211,8 @@ export function TaskDetailPanel({
   onBranchDeleted,
   edges,
   onBranchStatusRefresh,
+  onBranchStatusRefreshStart,
+  onBranchStatusRefreshEnd,
 }: TaskDetailPanelProps) {
   const isDefaultBranch = branchName === defaultBranch;
 
@@ -612,6 +616,10 @@ export function TaskDetailPanel({
     if (!onBranchStatusRefresh || !edges || !defaultBranch) return;
 
     const branches = getAffectedBranches(targetBranch);
+
+    // Notify start of refresh (for loading UI)
+    onBranchStatusRefreshStart?.(branches);
+
     try {
       const updates = await api.refreshBranchStatus({
         localPath,
@@ -622,8 +630,11 @@ export function TaskDetailPanel({
       onBranchStatusRefresh(updates);
     } catch (err) {
       console.error("Failed to refresh branch status:", err);
+    } finally {
+      // Notify end of refresh
+      onBranchStatusRefreshEnd?.(branches);
     }
-  }, [localPath, edges, defaultBranch, getAffectedBranches, onBranchStatusRefresh]);
+  }, [localPath, edges, defaultBranch, getAffectedBranches, onBranchStatusRefresh, onBranchStatusRefreshStart, onBranchStatusRefreshEnd]);
 
   const handlePull = async () => {
     setPulling(true);

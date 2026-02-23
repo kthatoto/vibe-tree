@@ -41,6 +41,8 @@ interface BranchGraphProps {
   highlightedBranch?: string | null;
   // Worktree move callback
   onWorktreeMove?: (worktreePath: string, fromBranch: string, toBranch: string) => void;
+  // Branches currently refreshing their status (for loading indicator)
+  refreshingBranches?: Set<string>;
 }
 
 interface DragState {
@@ -131,6 +133,7 @@ export default function BranchGraph({
   onFocusSeparatorIndexChange,
   highlightedBranch = null,
   onWorktreeMove,
+  refreshingBranches = new Set(),
 }: BranchGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -1990,6 +1993,42 @@ export default function BranchGraph({
 
         {/* All badges in a single horizontal row below the node */}
         {(() => {
+          const isRefreshing = refreshingBranches.has(id);
+
+          // Show loading indicator if refreshing
+          if (isRefreshing) {
+            const startX = x + 4;
+            return (
+              <g>
+                <rect
+                  x={startX}
+                  y={y + nodeHeight + 3}
+                  width={36}
+                  height={14}
+                  rx={3}
+                  fill="#6b7280"
+                >
+                  <animate
+                    attributeName="opacity"
+                    values="0.5;1;0.5"
+                    dur="1s"
+                    repeatCount="indefinite"
+                  />
+                </rect>
+                <text
+                  x={startX + 18}
+                  y={y + nodeHeight + 11}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize={8}
+                  fill="white"
+                >
+                  ...
+                </text>
+              </g>
+            );
+          }
+
           const badges: Array<{ label: string; color: string }> = [];
           // Local ahead/behind (vs parent branch)
           if (node.aheadBehind?.ahead && node.aheadBehind.ahead > 0) {

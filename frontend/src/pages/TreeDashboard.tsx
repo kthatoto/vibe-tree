@@ -305,6 +305,8 @@ export default function TreeDashboard() {
   const [branchLinks, setBranchLinks] = useState<Map<string, BranchLink[]>>(new Map());
   // Branch descriptions (git branch descriptions for labels)
   const [branchDescriptions, setBranchDescriptions] = useState<Map<string, string>>(new Map());
+  // Branches currently refreshing their status (for loading UI)
+  const [refreshingBranches, setRefreshingBranches] = useState<Set<string>>(new Set());
 
   // Multi-session planning state (only store what's needed, not full session copy)
   const [selectedSessionBaseBranch, setSelectedSessionBaseBranch] = useState<string | null>(null);
@@ -2502,6 +2504,7 @@ export default function TreeDashboard() {
                         // Show confirmation modal instead of immediate execution
                         setPendingWorktreeMove({ worktreePath, fromBranch, toBranch });
                       }}
+                      refreshingBranches={refreshingBranches}
                     />
                   </div>
                 </div>
@@ -2596,6 +2599,16 @@ export default function TreeDashboard() {
                             };
                           }),
                         };
+                      });
+                    }}
+                    onBranchStatusRefreshStart={(branches) => {
+                      setRefreshingBranches((prev) => new Set([...prev, ...branches]));
+                    }}
+                    onBranchStatusRefreshEnd={(branches) => {
+                      setRefreshingBranches((prev) => {
+                        const next = new Set(prev);
+                        branches.forEach((b) => next.delete(b));
+                        return next;
                       });
                     }}
                   />

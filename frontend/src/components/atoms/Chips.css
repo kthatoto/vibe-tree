@@ -1,0 +1,136 @@
+/* Base chip styles */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.chip--removed {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+.chip--clickable {
+  cursor: pointer;
+}
+
+.chip--clickable:hover {
+  opacity: 0.85;
+}
+
+/* Label chip */
+.chip--label {
+  padding: 1px 6px;
+}
+
+/* User chip */
+.chip--user {
+  background: #1f2937;
+  border: 1px solid #374151;
+  padding: 2px 8px 2px 2px;
+  color: #e5e7eb;
+}
+
+.chip__avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+}
+
+.chip__avatar-placeholder {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #4b5563;
+  color: #e5e7eb;
+  font-size: 10px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Review badge */
+.chip--review {
+  padding: 2px 8px;
+  font-weight: 500;
+}
+
+.chip--review-approved {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+}
+
+.chip--review-changes {
+  background: #ef4444;
+  color: #fff;
+}
+
+.chip--review-required {
+  background: #1f2937;
+  color: #9ca3af;
+}
+
+.chip--review-pending {
+  background: #1f2937;
+  color: #9ca3af;
+}
+
+/* CI badge */
+.chip--ci {
+  padding: 2px 8px;
+  font-weight: 500;
+}
+
+.chip--ci-success {
+  background: #065f46;
+  color: #34d399;
+}
+
+.chip--ci-failure {
+  background: #7f1d1d;
+  color: #f87171;
+}
+
+.chip--ci-pending {
+  background: #78350f;
+  color: #fbbf24;
+}
+
+.chip--ci-unknown {
+  background: #1f2937;
+  color: #9ca3af;
+}
+
+.chip__icon {
+  font-size: 10px;
+}
+
+.chip__count {
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.chip__text {
+  font-size: 11px;
+}
+
+/* Remove button */
+.chip__remove {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 2px;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.7;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.chip__remove:hover {
+  opacity: 1;
+}

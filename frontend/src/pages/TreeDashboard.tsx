@@ -20,6 +20,7 @@ import {
   type BranchNamingRule,
   type TaskInstruction,
   type BranchLink,
+  type RepoCollaborator,
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import { diff, formatDiffSummary } from "../lib/scanDiff";
@@ -454,16 +455,24 @@ export default function TreeDashboard() {
   const [prQuickLabels, setPrQuickLabels] = useState<string[]>([]);
   const [prQuickReviewers, setPrQuickReviewers] = useState<string[]>([]);
   const [repoLabels, setRepoLabels] = useState<Array<{ name: string; color: string; description: string }>>([]);
-  const [repoCollaborators, setRepoCollaborators] = useState<string[]>([]);
+  const [repoCollaborators, setRepoCollaborators] = useState<RepoCollaborator[]>([]);
   // PR settings search filters
   const [labelSearch, setLabelSearch] = useState("");
   const [reviewerSearch, setReviewerSearch] = useState("");
+  const [isSyncingCache, setIsSyncingCache] = useState(false);
 
   // Load PR settings when project is loaded
   useEffect(() => {
     if (!snapshot?.repoId) return;
     const loadPrSettings = async () => {
       try {
+        // Check if sync is needed
+        const syncStatus = await api.getRepoCacheSyncStatus(snapshot.repoId).catch(() => null);
+        if (syncStatus?.needsSync) {
+          // Sync in background
+          api.syncRepoCache(snapshot.repoId).catch(console.error);
+        }
+
         const [prSettings, labels, collaborators] = await Promise.all([
           api.getPrSettings(snapshot.repoId),
           api.getRepoLabels(snapshot.repoId).catch(() => []),
@@ -3156,7 +3165,32 @@ export default function TreeDashboard() {
                     {/* PR Labels Settings */}
                     {settingsCategory === "pr-labels" && (
                       <>
-                        <h3>Labels</h3>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                          <h3 style={{ margin: 0 }}>Labels</h3>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            disabled={isSyncingCache}
+                            onClick={async () => {
+                              if (!snapshot?.repoId) return;
+                              setIsSyncingCache(true);
+                              try {
+                                await api.syncRepoCache(snapshot.repoId);
+                                const [labels, collaborators] = await Promise.all([
+                                  api.getRepoLabels(snapshot.repoId).catch(() => []),
+                                  api.getRepoCollaborators(snapshot.repoId).catch(() => []),
+                                ]);
+                                setRepoLabels(labels);
+                                setRepoCollaborators(collaborators);
+                              } finally {
+                                setIsSyncingCache(false);
+                              }
+                            }}
+                            style={{ padding: "4px 12px", fontSize: 12 }}
+                          >
+                            {isSyncingCache ? "Syncing..." : "Sync from GitHub"}
+                          </button>
+                        </div>
                         <p style={{ color: "#9ca3af", margin: "0 0 16px" }}>
                           Quick toggle labels in the PR section of branch details.
                         </p>
@@ -3233,7 +3267,32 @@ export default function TreeDashboard() {
                     {/* PR Reviewers Settings */}
                     {settingsCategory === "pr-reviewers" && (
                       <>
-                        <h3>Reviewers</h3>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                          <h3 style={{ margin: 0 }}>Reviewers</h3>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            disabled={isSyncingCache}
+                            onClick={async () => {
+                              if (!snapshot?.repoId) return;
+                              setIsSyncingCache(true);
+                              try {
+                                await api.syncRepoCache(snapshot.repoId);
+                                const [labels, collaborators] = await Promise.all([
+                                  api.getRepoLabels(snapshot.repoId).catch(() => []),
+                                  api.getRepoCollaborators(snapshot.repoId).catch(() => []),
+                                ]);
+                                setRepoLabels(labels);
+                                setRepoCollaborators(collaborators);
+                              } finally {
+                                setIsSyncingCache(false);
+                              }
+                            }}
+                            style={{ padding: "4px 12px", fontSize: 12 }}
+                          >
+                            {isSyncingCache ? "Syncing..." : "Sync from GitHub"}
+                          </button>
+                        </div>
                         <p style={{ color: "#9ca3af", margin: "0 0 16px" }}>
                           Quick toggle reviewers in the PR section of branch details.
                         </p>
@@ -3255,18 +3314,21 @@ export default function TreeDashboard() {
                         />
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, maxHeight: 300, overflowY: "auto" }}>
                           {repoCollaborators
-                            .filter((c) => c.toLowerCase().includes(reviewerSearch.toLowerCase()))
+                            .filter((c) => {
+                              const search = reviewerSearch.toLowerCase();
+                              return c.login.toLowerCase().includes(search) || (c.name && c.name.toLowerCase().includes(search));
+                            })
                             .map((collaborator) => {
-                              const isSelected = prQuickReviewers.includes(collaborator);
+                              const isSelected = prQuickReviewers.includes(collaborator.login);
                               return (
                                 <button
-                                  key={collaborator}
+                                  key={collaborator.login}
                                   type="button"
                                   onClick={() => {
                                     if (isSelected) {
-                                      setPrQuickReviewers(prQuickReviewers.filter((r) => r !== collaborator));
+                                      setPrQuickReviewers(prQuickReviewers.filter((r) => r !== collaborator.login));
                                     } else {
-                                      setPrQuickReviewers([...prQuickReviewers, collaborator]);
+                                      setPrQuickReviewers([...prQuickReviewers, collaborator.login]);
                                     }
                                   }}
                                   style={{
@@ -3282,20 +3344,25 @@ export default function TreeDashboard() {
                                     fontSize: 13,
                                     fontWeight: 500,
                                   }}
+                                  title={collaborator.name ? `${collaborator.name} (@${collaborator.login})` : `@${collaborator.login}`}
                                 >
                                   <img
-                                    src={`https://github.com/${collaborator}.png?size=32`}
-                                    alt={collaborator}
+                                    src={collaborator.avatarUrl || `https://github.com/${collaborator.login}.png?size=32`}
+                                    alt={collaborator.login}
                                     style={{ width: 18, height: 18, borderRadius: "50%" }}
                                   />
-                                  {isSelected && "✓ "}{collaborator}
+                                  {isSelected && "✓ "}{collaborator.login}
+                                  {collaborator.name && <span style={{ color: "#6b7280", marginLeft: 4, fontSize: 11 }}>({collaborator.name})</span>}
                                 </button>
                               );
                             })}
                           {repoCollaborators.length === 0 && (
                             <span style={{ color: "#6b7280", fontStyle: "italic" }}>No collaborators found</span>
                           )}
-                          {repoCollaborators.length > 0 && repoCollaborators.filter((c) => c.toLowerCase().includes(reviewerSearch.toLowerCase())).length === 0 && (
+                          {repoCollaborators.length > 0 && repoCollaborators.filter((c) => {
+                            const search = reviewerSearch.toLowerCase();
+                            return c.login.toLowerCase().includes(search) || (c.name && c.name.toLowerCase().includes(search));
+                          }).length === 0 && (
                             <span style={{ color: "#6b7280", fontStyle: "italic" }}>No matching reviewers</span>
                           )}
                         </div>

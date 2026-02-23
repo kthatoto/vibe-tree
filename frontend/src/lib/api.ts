@@ -52,6 +52,19 @@ export interface RepoLabel {
   description: string;
 }
 
+export interface RepoCollaborator {
+  login: string;
+  name: string | null;
+  avatarUrl: string | null;
+  role: string | null;
+}
+
+export interface RepoTeam {
+  slug: string;
+  name: string;
+  description: string | null;
+}
+
 export interface Plan {
   id: number;
   repoId: string;
@@ -1162,8 +1175,37 @@ export const api = {
       `${API_BASE}/branch-links/repo-labels-full?repoId=${encodeURIComponent(repoId)}`
     ),
   getRepoCollaborators: (repoId: string) =>
-    fetchJson<string[]>(
+    fetchJson<RepoCollaborator[]>(
       `${API_BASE}/branch-links/repo-collaborators?repoId=${encodeURIComponent(repoId)}`
+    ),
+
+  // Repo Cache APIs
+  syncRepoCache: (repoId: string) =>
+    fetchJson<{ success: boolean }>(`${API_BASE}/repo-cache/sync`, {
+      method: "POST",
+      body: JSON.stringify({ repoId }),
+    }),
+  getRepoCacheSyncStatus: (repoId: string) =>
+    fetchJson<{
+      needsSync: boolean;
+      labels: { syncedAt: string | null; needsSync: boolean };
+      collaborators: { syncedAt: string | null; needsSync: boolean };
+    }>(`${API_BASE}/repo-cache/sync-status?repoId=${encodeURIComponent(repoId)}`),
+  searchRepoLabels: (repoId: string, q?: string) =>
+    fetchJson<RepoLabel[]>(
+      `${API_BASE}/repo-cache/labels?repoId=${encodeURIComponent(repoId)}${q ? `&q=${encodeURIComponent(q)}` : ''}`
+    ),
+  searchRepoCollaborators: (repoId: string, q?: string) =>
+    fetchJson<RepoCollaborator[]>(
+      `${API_BASE}/repo-cache/collaborators?repoId=${encodeURIComponent(repoId)}${q ? `&q=${encodeURIComponent(q)}` : ''}`
+    ),
+  searchRepoTeams: (repoId: string, q?: string) =>
+    fetchJson<RepoTeam[]>(
+      `${API_BASE}/repo-cache/teams?repoId=${encodeURIComponent(repoId)}${q ? `&q=${encodeURIComponent(q)}` : ''}`
+    ),
+  hasRepoTeams: (repoId: string) =>
+    fetchJson<{ hasTeams: boolean }>(
+      `${API_BASE}/repo-cache/has-teams?repoId=${encodeURIComponent(repoId)}`
     ),
   addPrLabel: (linkId: number, labelName: string) =>
     fetchJson<{ success: boolean; labels: Array<{ name: string; color: string }> }>(

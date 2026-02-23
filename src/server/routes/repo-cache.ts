@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { db, schema } from "../../db";
 import { execAsync } from "../utils";
-import { eq, and, like, or, desc } from "drizzle-orm";
+import { eq, and, like, or } from "drizzle-orm";
 import { z } from "zod";
 import { validateOrThrow } from "../../shared/validation";
 import { BadRequestError } from "../middleware/error-handler";

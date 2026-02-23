@@ -42,6 +42,7 @@ import { DraggableTask, DroppableTreeNode } from "../components/DndComponents";
 import { PlanningPanel } from "../components/PlanningPanel";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import { useSmartPolling, INTERVALS, COUNTDOWN_INITIAL_PAUSE } from "../hooks/useSmartPolling";
+import { LabelChip, UserChip, ReviewBadge, CIBadge } from "../components/atoms/Chips";
 import type { PlanningSession, TaskNode, TaskEdge } from "../lib/api";
 
 // Scan progress bar component
@@ -1112,102 +1113,16 @@ export default function TreeDashboard() {
       };
       if (!data.prs || data.prs.length === 0) return;
 
-      // Helper to get contrasting text color for a background
-      const getTextColor = (bgColor: string) => {
-        const hex = bgColor.replace("#", "");
-        const r = parseInt(hex.substr(0, 2), 16);
-        const g = parseInt(hex.substr(2, 2), 16);
-        const b = parseInt(hex.substr(4, 2), 16);
-        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-        return luminance > 0.5 ? "#000000" : "#ffffff";
-      };
-
-      // Format change content HTML (2nd line)
-      const formatChangeContent = (change: Change): string => {
-        const ciHtml = (status: string | null | undefined) => {
-          if (status === "success") return '<span style="background:#166534;color:#fff;padding:1px 6px;border-radius:10px;font-size:11px">✔ Passed</span>';
-          if (status === "failure") return '<span style="background:#991b1b;color:#fff;padding:1px 6px;border-radius:10px;font-size:11px">✗ Failed</span>';
-          if (status === "pending") return '<span style="background:#854d0e;color:#fff;padding:1px 6px;border-radius:10px;font-size:11px">⏳ Pending</span>';
-          return '<span style="background:#374151;color:#fff;padding:1px 6px;border-radius:10px;font-size:11px">?</span>';
-        };
-
-        switch (change.type) {
-          case "new":
-            return '<span style="color:#22c55e;font-weight:600">NEW PR</span>';
-          case "checks":
-            return `<span style="color:#6b7280">CI:</span> ${ciHtml(change.old)} → ${ciHtml(change.new)}`;
-          case "labels": {
-            const parts: string[] = [];
-            if (change.added) {
-              change.added.forEach(label => {
-                const bg = `#${label.color}`;
-                const text = getTextColor(label.color);
-                parts.push(`<span style="background:${bg};color:${text};padding:1px 6px;border-radius:10px;font-size:11px">+${label.name}</span>`);
-              });
-            }
-            if (change.removed) {
-              change.removed.forEach(label => {
-                const bg = `#${label.color}`;
-                const text = getTextColor(label.color);
-                parts.push(`<span style="background:${bg};color:${text};padding:1px 6px;border-radius:10px;font-size:11px;text-decoration:line-through;opacity:0.6">-${label.name}</span>`);
-              });
-            }
-            return `<span style="color:#6b7280">Labels:</span> ${parts.join(" ")}`;
-          }
-          case "review": {
-            const newStatus = change.new?.toLowerCase();
-            if (newStatus === "approved") {
-              return '<span style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:2px 8px;border-radius:10px;font-weight:600;font-size:11px">✓ Approved</span>';
-            }
-            if (newStatus === "changes_requested") {
-              return '<span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">⚠ Changes Requested</span>';
-            }
-            return `<span style="color:#6b7280">Review:</span> <span style="color:#a78bfa">${change.new || "none"}</span>`;
-          }
-          case "reviewers": {
-            const parts: string[] = [];
-            const formatReviewer = (name: string, isAdded: boolean) => {
-              const isCopilot = name.toLowerCase().includes("copilot");
-              const displayName = isCopilot ? "Copilot" : name;
-              const avatarUrl = isCopilot
-                ? "https://avatars.githubusercontent.com/in/946600?v=4"
-                : `https://github.com/${name}.png?size=20`;
-              const strike = isAdded ? "" : "text-decoration:line-through;opacity:0.5;";
-              return `<span style="display:inline-flex;align-items:center;gap:3px;background:#374151;padding:1px 6px;border-radius:10px;${strike}"><img src="${avatarUrl}" style="width:14px;height:14px;border-radius:50%" onerror="this.style.display='none'"/><span style="color:#e5e7eb;font-size:11px">${displayName}</span></span>`;
-            };
-            if (change.new) {
-              change.new.split(",").forEach(r => {
-                if (r.trim()) parts.push(formatReviewer(r.trim(), true));
-              });
-            }
-            if (change.old) {
-              change.old.split(",").forEach(r => {
-                if (r.trim()) parts.push(formatReviewer(r.trim(), false));
-              });
-            }
-            return `<span style="color:#6b7280">Reviewers:</span> ${parts.join(" ")}`;
-          }
-          default:
-            return change.type;
-        }
-      };
-
-      // Log each change with 2-column grid structure
-      // Row 1: Time | Branch, Row 2+: Label | Content
+      // Log each change with structured data (rendered by React components)
       for (const pr of data.prs) {
         for (const change of pr.changes) {
-          const { label, content } = (() => {
-            switch (change.type) {
-              case "new": return { label: "", content: '<span style="color:#22c55e;font-weight:600">NEW PR</span>' };
-              case "checks": return { label: "CI", content: formatChangeContent(change) };
-              case "labels": return { label: "Labels", content: formatChangeContent(change).replace('<span style="color:#6b7280">Labels:</span> ', '') };
-              case "review": return { label: "Review", content: formatChangeContent(change).replace('<span style="color:#6b7280">Review:</span> ', '') };
-              case "reviewers": return { label: "Reviewers", content: formatChangeContent(change).replace('<span style="color:#6b7280">Reviewers:</span> ', '') };
-              default: return { label: change.type, content: "" };
-            }
-          })();
-          // Store as JSON for grid rendering
-          const html = JSON.stringify({ branch: pr.branch, label, content });
+          // Store structured data for rendering with React components
+          const logData = {
+            branch: pr.branch,
+            changeType: change.type,
+            data: change,
+          };
+          const html = JSON.stringify(logData);
           const plainText = `${pr.branch}: ${change.type}`;
           addLog("pr", plainText, html, pr.branch);
         }
@@ -2205,13 +2120,70 @@ export default function TreeDashboard() {
 
               // PR logs: 2-column grid (Time/Label | Branch/Content)
               if (log.type === "pr" && log.html) {
-                let prData: { branch: string; label: string; content: string } | null = null;
+                let logData: { branch: string; changeType: string; data: Record<string, unknown> } | null = null;
                 try {
-                  prData = JSON.parse(log.html);
+                  logData = JSON.parse(log.html);
                 } catch {
                   // Not JSON, skip
                 }
-                if (prData) {
+                if (logData && logData.changeType) {
+                  const { changeType, data } = logData;
+                  const labelMap: Record<string, string> = {
+                    new: "",
+                    checks: "CI",
+                    labels: "Labels",
+                    review: "Review",
+                    reviewers: "Reviewers",
+                  };
+                  const label = labelMap[changeType] || changeType;
+
+                  // Render content based on change type
+                  const renderContent = () => {
+                    switch (changeType) {
+                      case "new":
+                        return <span style={{ color: "#22c55e", fontWeight: 600 }}>NEW PR</span>;
+                      case "checks": {
+                        const oldStatus = (data.old as string)?.toLowerCase() || "unknown";
+                        const newStatus = (data.new as string)?.toLowerCase() || "unknown";
+                        return (
+                          <>
+                            <CIBadge status={oldStatus as "success" | "failure" | "pending" | "unknown"} />
+                            <span style={{ color: "#6b7280" }}>→</span>
+                            <CIBadge status={newStatus as "success" | "failure" | "pending" | "unknown"} />
+                          </>
+                        );
+                      }
+                      case "labels": {
+                        const added = (data.added as { name: string; color: string }[]) || [];
+                        const removed = (data.removed as { name: string; color: string }[]) || [];
+                        return (
+                          <>
+                            {added.map((l, i) => <LabelChip key={`a-${i}`} name={l.name} color={l.color} />)}
+                            {removed.map((l, i) => <LabelChip key={`r-${i}`} name={l.name} color={l.color} removed />)}
+                          </>
+                        );
+                      }
+                      case "review": {
+                        const status = (data.new as string)?.toLowerCase();
+                        if (status === "approved") return <ReviewBadge status="approved" />;
+                        if (status === "changes_requested") return <ReviewBadge status="changes_requested" />;
+                        return <ReviewBadge status="pending" />;
+                      }
+                      case "reviewers": {
+                        const newReviewers = (data.new as string)?.split(",").filter(r => r.trim()) || [];
+                        const oldReviewers = (data.old as string)?.split(",").filter(r => r.trim()) || [];
+                        return (
+                          <>
+                            {newReviewers.map((r, i) => <UserChip key={`a-${i}`} login={r.trim()} />)}
+                            {oldReviewers.map((r, i) => <UserChip key={`r-${i}`} login={r.trim()} removed />)}
+                          </>
+                        );
+                      }
+                      default:
+                        return <span>{changeType}</span>;
+                    }
+                  };
+
                   return (
                     <div
                       key={log.id}
@@ -2232,12 +2204,11 @@ export default function TreeDashboard() {
                       }}
                     >
                       <span style={{ color: "#6b7280", fontSize: 12, textAlign: "right" }}>{timeStr}</span>
-                      <span style={{ color: "#e5e7eb", fontWeight: 500 }}>{prData.branch}</span>
-                      <span style={{ color: "#6b7280", fontSize: 11, textAlign: "right" }}>{prData.label}</span>
-                      <div
-                        style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}
-                        dangerouslySetInnerHTML={{ __html: prData.content }}
-                      />
+                      <span style={{ color: "#e5e7eb", fontWeight: 500 }}>{logData.branch}</span>
+                      <span style={{ color: "#6b7280", fontSize: 11, textAlign: "right" }}>{label}</span>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+                        {renderContent()}
+                      </div>
                     </div>
                   );
                 }

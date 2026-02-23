@@ -412,7 +412,11 @@ export function TaskDetailPanel({
     const loadRepoLabels = async () => {
       try {
         const labels = await api.getRepoLabels(repoId);
-        setRepoLabels(labels);
+        const labelMap: Record<string, string> = {};
+        for (const label of labels) {
+          labelMap[label.name] = label.color;
+        }
+        setRepoLabels(labelMap);
       } catch (err) {
         console.error("Failed to load repo labels:", err);
       }
@@ -1388,13 +1392,7 @@ export function TaskDetailPanel({
                 <span className="task-detail-panel__pr-row-label">Labels:</span>
                 <div className="task-detail-panel__pr-row-items">
                   {labels.map((l, i) => (
-                    <span
-                      key={i}
-                      className="task-detail-panel__pr-label"
-                      style={{ backgroundColor: `#${l.color}`, color: getTextColor(l.color) }}
-                    >
-                      {l.name}
-                    </span>
+                    <LabelChip key={i} name={l.name} color={l.color} />
                   ))}
                   <button
                     className="task-detail-panel__pr-add-btn"
@@ -1448,31 +1446,16 @@ export function TaskDetailPanel({
                 <span className="task-detail-panel__pr-row-label">Reviewers:</span>
                 <div className="task-detail-panel__pr-row-items">
                   {reviewers.map((r, i) => {
-                    const isCopilot = r.toLowerCase().includes("copilot");
                     const isTeam = r.startsWith("team/");
-                    const displayName = isCopilot ? "Copilot" : isTeam ? r.replace("team/", "@") : r;
-                    return (
-                      <span key={i} className="task-detail-panel__pr-reviewer-chip">
-                        {isTeam ? (
-                          <span className="task-detail-panel__pr-reviewer-team-icon">👥</span>
-                        ) : (
-                          <img
-                            src={isCopilot ? COPILOT_REVIEWER.avatarUrl : `https://github.com/${r}.png?size=32`}
-                            alt={displayName}
-                            className="task-detail-panel__pr-reviewer-avatar"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = "none";
-                              const placeholder = document.createElement("span");
-                              placeholder.className = "task-detail-panel__pr-reviewer-placeholder";
-                              placeholder.textContent = displayName.charAt(0).toUpperCase();
-                              target.parentElement?.insertBefore(placeholder, target);
-                            }}
-                          />
-                        )}
-                        {displayName}
-                      </span>
-                    );
+                    if (isTeam) {
+                      return (
+                        <span key={i} className="chip chip--user">
+                          <span style={{ fontSize: 12 }}>👥</span>
+                          <span className="chip__text">{r.replace("team/", "@")}</span>
+                        </span>
+                      );
+                    }
+                    return <UserChip key={i} login={r} />;
                   })}
                   <button
                     className="task-detail-panel__pr-add-btn"

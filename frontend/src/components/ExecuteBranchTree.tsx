@@ -1,5 +1,6 @@
 import type { BranchLink, InstructionConfirmationStatus } from "../lib/api";
 import { getResourceIcon } from "../lib/resourceIcons";
+import { CIBadge, ReviewBadge } from "./atoms/Chips";
 import "./ExecuteBranchTree.css";
 
 interface QuestionCounts {
@@ -140,17 +141,28 @@ export function ExecuteBranchTree({
                       onClick={(e) => e.stopPropagation()}
                     >
                       PR #{prLink.number}
-                      {prLink.checksStatus === "success" && <span className="execute-branch-tree__ci execute-branch-tree__ci--success">✔</span>}
-                      {prLink.checksStatus === "failure" && <span className="execute-branch-tree__ci execute-branch-tree__ci--failure">✗</span>}
-                      {prLink.checksStatus === "pending" && <span className="execute-branch-tree__ci execute-branch-tree__ci--pending">◌</span>}
+                      {prLink.checksStatus && (() => {
+                        const checks: { conclusion: string }[] = prLink.checks
+                          ? (() => { try { return JSON.parse(prLink.checks) } catch { return [] } })()
+                          : [];
+                        const passedChecks = checks.filter((c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED").length;
+                        const totalChecks = checks.length;
+                        return totalChecks > 0 ? (
+                          <CIBadge
+                            status={prLink.checksStatus as "success" | "failure" | "pending" | "unknown"}
+                            passed={passedChecks}
+                            total={totalChecks}
+                          />
+                        ) : null;
+                      })()}
                     </a>
                   )}
                   {/* Review status */}
                   {hasPR && prLink.reviewDecision === "APPROVED" && (
-                    <span className="execute-branch-tree__review execute-branch-tree__review--approved">Approved</span>
+                    <ReviewBadge status="approved" />
                   )}
                   {hasPR && prLink.reviewDecision === "CHANGES_REQUESTED" && (
-                    <span className="execute-branch-tree__review execute-branch-tree__review--changes">Changes</span>
+                    <ReviewBadge status="changes_requested" />
                   )}
                   {hasPR && (prLink.reviewDecision === "REVIEW_REQUIRED" || (!prLink.reviewDecision && prLink.reviewers && (() => {
                     const reviewers = JSON.parse(prLink.reviewers) as string[];
@@ -158,7 +170,7 @@ export function ExecuteBranchTree({
                     const humanReviewers = reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]"));
                     return humanReviewers.length > 0;
                   })())) && (
-                    <span className="execute-branch-tree__review execute-branch-tree__review--requested">Review</span>
+                    <ReviewBadge status="review_required" />
                   )}
                   {/* ToDo badge */}
                   {hasTodos && (

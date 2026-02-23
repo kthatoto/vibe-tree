@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import type { TreeNode, TreeEdge, TaskNode, TaskEdge, BranchLink } from "../lib/api";
+import { CIBadge, ReviewBadge } from "./atoms/Chips";
 
 interface BranchGraphProps {
   nodes: TreeNode[];
@@ -1651,44 +1652,37 @@ export default function BranchGraph({
                 }}>{descriptionLabel}</span>
               )}
               {/* Row 2: R + CI + PR badges (no wrap, may overflow) - only render if there's content */}
-              {(hasPR || computedChecksStatus || (prLink?.reviewers && (() => {
-                const reviewers = JSON.parse(prLink.reviewers) as string[];
-                return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
-              })())) && (
+              {(() => {
+                const hasHumanReviewers = prLink?.reviewers && (() => {
+                  try {
+                    const reviewers = JSON.parse(prLink.reviewers) as string[];
+                    return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
+                  } catch { return false; }
+                })();
+                if (!hasPR && !computedChecksStatus && !hasHumanReviewers) return null;
+                return (
               <div style={{ display: "flex", gap: 3, flexWrap: "nowrap" }}>
                 {/* R (Review) badge - only show if human reviewers exist */}
-                {prLink?.reviewers && (() => {
-                  const reviewers = JSON.parse(prLink.reviewers) as string[];
-                  return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
-                })() && (
-                  <span style={{
-                    fontSize: 10,
-                    padding: "1px 4px",
-                    borderRadius: 3,
-                    background: prLink?.reviewDecision === "APPROVED" ? "#14532d" : prLink?.reviewDecision === "CHANGES_REQUESTED" ? "#7f1d1d" : "#78350f",
-                    border: `1px solid ${prLink?.reviewDecision === "APPROVED" ? "#22c55e" : prLink?.reviewDecision === "CHANGES_REQUESTED" ? "#ef4444" : "#f59e0b"}`,
-                    color: prLink?.reviewDecision === "APPROVED" ? "#4ade80" : prLink?.reviewDecision === "CHANGES_REQUESTED" ? "#f87171" : "#fbbf24",
-                    whiteSpace: "nowrap",
-                  }}>{prLink?.reviewDecision === "APPROVED" ? "R✔" : prLink?.reviewDecision === "CHANGES_REQUESTED" ? "R✗" : "R"}</span>
+                {hasHumanReviewers && (
+                  <ReviewBadge
+                    status={
+                      prLink?.reviewDecision === "APPROVED" ? "approved" :
+                      prLink?.reviewDecision === "CHANGES_REQUESTED" ? "changes_requested" :
+                      "review_required"
+                    }
+                    compact
+                  />
                 )}
                 {/* CI badge - use computed status from checks array */}
                 {computedChecksStatus && (
-                  <span style={{
-                    fontSize: 10,
-                    padding: "1px 4px",
-                    borderRadius: 3,
-                    background: computedChecksStatus === "success" ? "#14532d" : computedChecksStatus === "failure" ? "#7f1d1d" : "#78350f",
-                    border: `1px solid ${computedChecksStatus === "success" ? "#22c55e" : computedChecksStatus === "failure" ? "#ef4444" : "#f59e0b"}`,
-                    color: computedChecksStatus === "success" ? "#4ade80" : computedChecksStatus === "failure" ? "#f87171" : "#fbbf24",
-                    whiteSpace: "nowrap",
-                  }}>{computedChecksStatus === "success" ? "CI✔" : computedChecksStatus === "failure" ? "CI✗" : "CI"}</span>
+                  <CIBadge
+                    status={computedChecksStatus as "success" | "failure" | "pending" | "unknown"}
+                    compact
+                  />
                 )}
                 {/* PR badge - shows ✓ when approved by human reviewer */}
                 {hasPR && (() => {
-                  const isApproved = prLink?.reviewDecision === "APPROVED" && prLink?.reviewers && (() => {
-                    const reviewers = JSON.parse(prLink.reviewers) as string[];
-                    return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
-                  })();
+                  const isApproved = prLink?.reviewDecision === "APPROVED" && hasHumanReviewers;
                   return (
                     <span style={{
                       fontSize: 10,
@@ -1702,7 +1696,8 @@ export default function BranchGraph({
                   );
                 })()}
               </div>
-              )}
+                );
+              })()}
               {/* Row 3: (default) label */}
               {isDefault && (
                 <div style={{
@@ -1758,30 +1753,14 @@ export default function BranchGraph({
                   const reviewers = JSON.parse(prLink.reviewers) as string[];
                   return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
                 })() && (
-                  <span style={{
-                    fontSize: 10,
-                    padding: "1px 5px",
-                    borderRadius: 3,
-                    background: "#7f1d1d",
-                    border: "1px solid #ef4444",
-                    color: "#f87171",
-                    whiteSpace: "nowrap",
-                  }}>Changes ✗</span>
+                  <ReviewBadge status="changes_requested" compact />
                 )}
                 {prLink?.reviewDecision === "REVIEW_REQUIRED" && prLink?.reviewers && (() => {
                   const reviewers = JSON.parse(prLink.reviewers) as string[];
                   const humanReviewers = reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]"));
                   return humanReviewers.length > 0;
                 })() && (
-                  <span style={{
-                    fontSize: 10,
-                    padding: "1px 5px",
-                    borderRadius: 3,
-                    background: "#78350f",
-                    border: "1px solid #f59e0b",
-                    color: "#fbbf24",
-                    whiteSpace: "nowrap",
-                  }}>Review</span>
+                  <ReviewBadge status="review_required" compact />
                 )}
                 {/* Reviewers requested but no decision yet */}
                 {!prLink?.reviewDecision && prLink?.reviewers && (() => {
@@ -1789,49 +1768,11 @@ export default function BranchGraph({
                   const humanReviewers = reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]"));
                   return humanReviewers.length > 0;
                 })() && (
-                  <span style={{
-                    fontSize: 10,
-                    padding: "1px 5px",
-                    borderRadius: 3,
-                    background: "#78350f",
-                    border: "1px solid #f59e0b",
-                    color: "#fbbf24",
-                    whiteSpace: "nowrap",
-                  }}>Review</span>
+                  <ReviewBadge status="pending" compact />
                 )}
                 {/* CI status - use computed status from checks array */}
-                {computedChecksStatus === "success" && (
-                  <span style={{
-                    fontSize: 10,
-                    padding: "1px 5px",
-                    borderRadius: 3,
-                    background: "#14532d",
-                    border: "1px solid #22c55e",
-                    color: "#4ade80",
-                    whiteSpace: "nowrap",
-                  }}>CI ✔</span>
-                )}
-                {computedChecksStatus === "failure" && (
-                  <span style={{
-                    fontSize: 10,
-                    padding: "1px 5px",
-                    borderRadius: 3,
-                    background: "#7f1d1d",
-                    border: "1px solid #ef4444",
-                    color: "#f87171",
-                    whiteSpace: "nowrap",
-                  }}>CI ✗</span>
-                )}
-                {computedChecksStatus === "pending" && (
-                  <span style={{
-                    fontSize: 10,
-                    padding: "1px 5px",
-                    borderRadius: 3,
-                    background: "#78350f",
-                    border: "1px solid #f59e0b",
-                    color: "#fbbf24",
-                    whiteSpace: "nowrap",
-                  }}>CI …</span>
+                {computedChecksStatus && (
+                  <CIBadge status={computedChecksStatus as "success" | "failure" | "pending" | "unknown"} compact />
                 )}
                 {/* PR indicator - shows ✓ when approved by human reviewer */}
                 {(() => {

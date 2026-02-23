@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, type BranchLink, type TaskInstruction } from "../lib/api";
 import { wsClient } from "../lib/ws";
+import { CIBadge, ReviewBadge, UserChip } from "./atoms/Chips";
 import "./ExecuteBranchDetail.css";
 
 interface ExecuteBranchDetailProps {
@@ -162,47 +163,51 @@ export function ExecuteBranchDetail({
       {/* PR/Issue Info */}
       {(prLink || issueLink) && (
         <div className="execute-branch-detail__links">
-          {prLink && (
-            <div className="execute-branch-detail__pr">
-              <a
-                href={prLink.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="execute-branch-detail__pr-link"
-              >
-                PR #{prLink.number}
-              </a>
-              {prLink.checksStatus && (
-                <span
-                  className={`execute-branch-detail__checks execute-branch-detail__checks--${getChecksStatusColor(prLink.checksStatus)}`}
+          {prLink && (() => {
+            const checks: { conclusion: string }[] = prLink.checks
+              ? (() => { try { return JSON.parse(prLink.checks) } catch { return [] } })()
+              : [];
+            const passedChecks = checks.filter((c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED").length;
+            const totalChecks = checks.length;
+            const reviewers: string[] = prLink.reviewers
+              ? (() => { try { return JSON.parse(prLink.reviewers) } catch { return [] } })()
+              : [];
+            return (
+              <div className="execute-branch-detail__pr">
+                <a
+                  href={prLink.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="execute-branch-detail__pr-link"
                 >
-                  {prLink.checksStatus === "success" ? "✓" : prLink.checksStatus === "failure" ? "✕" : "◌"} CI
-                </span>
-              )}
-              {prLink.reviewDecision && (
-                <span
-                  className={`execute-branch-detail__review execute-branch-detail__review--${getReviewDecisionColor(prLink.reviewDecision)}`}
-                >
-                  {prLink.reviewDecision === "APPROVED" ? "✓ Approved" :
-                    prLink.reviewDecision === "CHANGES_REQUESTED" ? "Changes requested" :
-                      "Review required"}
-                </span>
-              )}
-              {/* Reviewers */}
-              {(() => {
-                const reviewers: string[] = prLink.reviewers
-                  ? (() => { try { return JSON.parse(prLink.reviewers) } catch { return [] } })()
-                  : [];
-                return reviewers.length > 0 ? (
+                  PR #{prLink.number}
+                </a>
+                {prLink.checksStatus && totalChecks > 0 && (
+                  <CIBadge
+                    status={prLink.checksStatus as "success" | "failure" | "pending" | "unknown"}
+                    passed={passedChecks}
+                    total={totalChecks}
+                  />
+                )}
+                {prLink.reviewDecision && (
+                  <ReviewBadge
+                    status={
+                      prLink.reviewDecision === "APPROVED" ? "approved" :
+                      prLink.reviewDecision === "CHANGES_REQUESTED" ? "changes_requested" :
+                      "review_required"
+                    }
+                  />
+                )}
+                {reviewers.length > 0 && (
                   <span className="execute-branch-detail__reviewers">
                     {reviewers.map((r, i) => (
-                      <span key={i} className="execute-branch-detail__reviewer">@{r}</span>
+                      <UserChip key={i} login={r} />
                     ))}
                   </span>
-                ) : null;
-              })()}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })()}
           {issueLink && (
             <div className="execute-branch-detail__issue">
               <a

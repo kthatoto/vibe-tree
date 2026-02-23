@@ -44,8 +44,8 @@ export function LabelChip({ name, color, removed, onClick, onRemove }: LabelChip
 // GitHub User Chip (for reviewers, assignees, etc.)
 interface UserChipProps {
   login: string;
-  name?: string;
-  avatarUrl?: string;
+  name?: string | null;
+  avatarUrl?: string | null;
   removed?: boolean;
   onClick?: () => void;
   onRemove?: () => void;
@@ -53,8 +53,8 @@ interface UserChipProps {
 
 export function UserChip({ login, name, avatarUrl, removed, onClick, onRemove }: UserChipProps) {
   const isCopilot = login.toLowerCase().includes("copilot");
-  const displayName = name || (isCopilot ? "Copilot" : login);
-  const avatar = avatarUrl || (isCopilot
+  const displayName = name ?? (isCopilot ? "Copilot" : login);
+  const avatar = avatarUrl ?? (isCopilot
     ? "https://avatars.githubusercontent.com/in/946600?v=4"
     : `https://github.com/${login}.png?size=32`);
 
@@ -97,16 +97,25 @@ type ReviewStatus = "approved" | "changes_requested" | "review_required" | "pend
 
 interface ReviewBadgeProps {
   status: ReviewStatus;
+  compact?: boolean;
 }
 
-export function ReviewBadge({ status }: ReviewBadgeProps) {
-  const config: Record<ReviewStatus, { icon: string; text: string; className: string }> = {
-    approved: { icon: "✓", text: "Approved", className: "chip--review-approved" },
-    changes_requested: { icon: "⚠", text: "Changes Requested", className: "chip--review-changes" },
-    review_required: { icon: "○", text: "Review Required", className: "chip--review-required" },
-    pending: { icon: "○", text: "Pending", className: "chip--review-pending" },
+export function ReviewBadge({ status, compact }: ReviewBadgeProps) {
+  const config: Record<ReviewStatus, { icon: string; text: string; compactText: string; className: string }> = {
+    approved: { icon: "✓", text: "Approved", compactText: "R✔", className: "chip--review-approved" },
+    changes_requested: { icon: "⚠", text: "Changes Requested", compactText: "R✗", className: "chip--review-changes" },
+    review_required: { icon: "○", text: "Review Required", compactText: "R", className: "chip--review-required" },
+    pending: { icon: "○", text: "Pending", compactText: "R", className: "chip--review-pending" },
   };
-  const { icon, text, className } = config[status] || config.pending;
+  const { icon, text, compactText, className } = config[status] || config.pending;
+
+  if (compact) {
+    return (
+      <span className={`chip chip--review chip--compact ${className}`}>
+        {compactText}
+      </span>
+    );
+  }
 
   return (
     <span className={`chip chip--review ${className}`}>
@@ -124,17 +133,29 @@ interface CIBadgeProps {
   passed?: number;
   total?: number;
   onClick?: () => void;
+  compact?: boolean;
 }
 
-export function CIBadge({ status, passed, total, onClick }: CIBadgeProps) {
-  const config: Record<CIStatus, { icon: string; className: string }> = {
-    success: { icon: "✓", className: "chip--ci-success" },
-    failure: { icon: "✗", className: "chip--ci-failure" },
-    pending: { icon: "●", className: "chip--ci-pending" },
-    unknown: { icon: "?", className: "chip--ci-unknown" },
+export function CIBadge({ status, passed, total, onClick, compact }: CIBadgeProps) {
+  const config: Record<CIStatus, { icon: string; compactIcon: string; className: string }> = {
+    success: { icon: "✓", compactIcon: "CI✔", className: "chip--ci-success" },
+    failure: { icon: "✗", compactIcon: "CI✗", className: "chip--ci-failure" },
+    pending: { icon: "●", compactIcon: "CI", className: "chip--ci-pending" },
+    unknown: { icon: "?", compactIcon: "CI?", className: "chip--ci-unknown" },
   };
-  const { icon, className } = config[status] || config.unknown;
+  const { icon, compactIcon, className } = config[status] || config.unknown;
   const hasCount = typeof passed === "number" && typeof total === "number";
+
+  if (compact) {
+    return (
+      <span
+        className={`chip chip--ci chip--compact ${className} ${onClick ? "chip--clickable" : ""}`}
+        onClick={onClick}
+      >
+        {compactIcon}
+      </span>
+    );
+  }
 
   return (
     <span

@@ -134,3 +134,48 @@
 .chip__remove:hover {
   opacity: 1;
 }
+
+/* Compact mode for graph nodes */
+.chip--compact {
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  gap: 0;
+}
+
+.chip--compact.chip--review-approved {
+  background: #14532d;
+  border: 1px solid #22c55e;
+  color: #4ade80;
+}
+
+.chip--compact.chip--review-changes {
+  background: #7f1d1d;
+  border: 1px solid #ef4444;
+  color: #f87171;
+}
+
+.chip--compact.chip--review-required,
+.chip--compact.chip--review-pending {
+  background: #78350f;
+  border: 1px solid #f59e0b;
+  color: #fbbf24;
+}
+
+.chip--compact.chip--ci-success {
+  background: #14532d;
+  border: 1px solid #22c55e;
+  color: #4ade80;
+}
+
+.chip--compact.chip--ci-failure {
+  background: #7f1d1d;
+  border: 1px solid #ef4444;
+  color: #f87171;
+}
+
+.chip--compact.chip--ci-pending {
+  background: #78350f;
+  border: 1px solid #f59e0b;
+  color: #fbbf24;
+}

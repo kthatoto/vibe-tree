@@ -7,6 +7,7 @@ import { getResourceIcon } from "../lib/resourceIcons";
 import ExecuteBranchTree from "./ExecuteBranchTree";
 import ExecuteTodoList from "./ExecuteTodoList";
 import PlanningQuestionsPanel from "./PlanningQuestionsPanel";
+import { LabelChip, UserChip, ReviewBadge, CIBadge } from "./atoms/Chips";
 import "./ExecuteSidebar.css";
 
 interface ExecuteSidebarProps {
@@ -839,13 +840,7 @@ export function ExecuteSidebar({
                     {labels.length > 0 && (
                       <div className="execute-sidebar__link-labels">
                         {labels.map((l, i) => (
-                          <span
-                            key={i}
-                            className="execute-sidebar__link-label"
-                            style={{ backgroundColor: `#${l.color}`, color: getTextColor(l.color) }}
-                          >
-                            {l.name}
-                          </span>
+                          <LabelChip key={i} name={l.name} color={l.color} />
                         ))}
                       </div>
                     )}
@@ -892,23 +887,20 @@ export function ExecuteSidebar({
                     </div>
                     <div className="execute-sidebar__link-meta">
                       {totalChecks > 0 && (
-                        <span className={`execute-sidebar__ci-badge execute-sidebar__ci-badge--${prLink.checksStatus}`}>
-                          <span className="execute-sidebar__ci-badge-icon">
-                            {prLink.checksStatus === "success" ? "✓" : prLink.checksStatus === "failure" ? "✗" : "●"}
-                          </span>
-                          <span className="execute-sidebar__ci-badge-count">{passedChecks}/{totalChecks}</span>
-                        </span>
+                        <CIBadge
+                          status={prLink.checksStatus as "success" | "failure" | "pending" | "unknown"}
+                          passed={passedChecks}
+                          total={totalChecks}
+                        />
                       )}
                       {(prLink.reviewDecision || reviewers.length > 0) && (
-                        <span className={`execute-sidebar__review-badge execute-sidebar__review-badge--${
-                          prLink.reviewDecision
-                            ? prLink.reviewDecision.toLowerCase().replace("_", "-")
-                            : "review-required"
-                        }`}>
-                          {prLink.reviewDecision === "APPROVED" ? "Approved" :
-                           prLink.reviewDecision === "CHANGES_REQUESTED" ? "Changes" :
-                           (prLink.reviewDecision === "REVIEW_REQUIRED" || !prLink.reviewDecision) ? "Review Required" : prLink.reviewDecision}
-                        </span>
+                        <ReviewBadge
+                          status={
+                            prLink.reviewDecision === "APPROVED" ? "approved" :
+                            prLink.reviewDecision === "CHANGES_REQUESTED" ? "changes_requested" :
+                            "review_required"
+                          }
+                        />
                       )}
                       {prLink.projectStatus && (
                         <span className="execute-sidebar__link-project">{prLink.projectStatus}</span>
@@ -916,7 +908,7 @@ export function ExecuteSidebar({
                       <span className="execute-sidebar__link-reviewers">
                         {reviewers.length > 0 ? (
                           reviewers.map((r, i) => (
-                            <span key={i} className="execute-sidebar__link-reviewer">{r}</span>
+                            <UserChip key={i} login={r} />
                           ))
                         ) : (
                           <span className="execute-sidebar__link-reviewer execute-sidebar__link-reviewer--none">No Reviewers</span>
@@ -926,13 +918,7 @@ export function ExecuteSidebar({
                     {labels.length > 0 && (
                       <div className="execute-sidebar__pr-labels">
                         {labels.map((l, i) => (
-                          <span
-                            key={i}
-                            className="execute-sidebar__pr-label"
-                            style={{ backgroundColor: `#${l.color}`, color: getTextColor(l.color) }}
-                          >
-                            {l.name}
-                          </span>
+                          <LabelChip key={i} name={l.name} color={l.color} />
                         ))}
                       </div>
                     )}

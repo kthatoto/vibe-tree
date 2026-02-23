@@ -864,7 +864,10 @@ scanRouter.post("/", async (c) => {
                   try {
                     const checks = JSON.parse(checksJson) as { conclusion?: string }[];
                     const total = checks.length;
-                    const passed = checks.filter(c => c.conclusion === "success").length;
+                    const passed = checks.filter(c => {
+                      const conclusion = c.conclusion?.toUpperCase();
+                      return conclusion === "SUCCESS" || conclusion === "SKIPPED";
+                    }).length;
                     return { passed, total };
                   } catch {
                     return { passed: 0, total: 0 };
@@ -931,15 +934,22 @@ scanRouter.post("/", async (c) => {
                   state: prData.status,
                   changes,
                 });
-                // Save to scan logs
-                await db.insert(schema.scanLogs).values({
-                  repoId,
-                  logType: "pr",
-                  message: `${pr.branch}: ${changes.map(c => c.type).join(", ")}`,
-                  branchName: pr.branch,
-                  metadata: JSON.stringify({ changes }),
-                  createdAt: now,
-                });
+                // Save to scan logs - one log per change
+                for (const change of changes) {
+                  const logData = {
+                    branch: pr.branch,
+                    changeType: change.type,
+                    data: change,
+                  };
+                  await db.insert(schema.scanLogs).values({
+                    repoId,
+                    logType: "pr",
+                    message: `${pr.branch}: ${change.type}`,
+                    html: JSON.stringify(logData),
+                    branchName: pr.branch,
+                    createdAt: now,
+                  });
+                }
               }
               await db.update(schema.branchLinks).set(prData).where(eq(schema.branchLinks.id, existing[0].id));
               // Broadcast branchLink.updated so frontend branchLinks state is updated
@@ -953,12 +963,17 @@ scanRouter.post("/", async (c) => {
               const insertResult = await db.insert(schema.branchLinks).values({ repoId, branchName: pr.branch, linkType: "pr", url: pr.url, number: pr.number, ...prData, createdAt: now }).returning();
               updatedPrs.push({ branch: pr.branch, checks: prData.checksStatus, state: prData.status, changes: [{ type: "new" }] });
               // Save to scan logs
+              const logData = {
+                branch: pr.branch,
+                changeType: "new",
+                data: { type: "new" },
+              };
               await db.insert(schema.scanLogs).values({
                 repoId,
                 logType: "pr",
                 message: `${pr.branch}: new`,
+                html: JSON.stringify(logData),
                 branchName: pr.branch,
-                metadata: JSON.stringify({ changes: [{ type: "new" }] }),
                 createdAt: now,
               });
               // Broadcast branchLink.created so frontend branchLinks state is updated

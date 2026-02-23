@@ -1125,10 +1125,10 @@ export default function TreeDashboard() {
       // Format change content HTML (2nd line)
       const formatChangeContent = (change: Change): string => {
         const ciHtml = (status: string | null | undefined) => {
-          if (status === "success") return '<span style="color:#22c55e">✔ Passed</span>';
-          if (status === "failure") return '<span style="color:#ef4444">✗ Failed</span>';
-          if (status === "pending") return '<span style="color:#eab308">⏳ Pending</span>';
-          return '<span style="color:#9ca3af">?</span>';
+          if (status === "success") return '<span style="background:#166534;color:#fff;padding:1px 6px;border-radius:10px;font-size:11px">✔ Passed</span>';
+          if (status === "failure") return '<span style="background:#991b1b;color:#fff;padding:1px 6px;border-radius:10px;font-size:11px">✗ Failed</span>';
+          if (status === "pending") return '<span style="background:#854d0e;color:#fff;padding:1px 6px;border-radius:10px;font-size:11px">⏳ Pending</span>';
+          return '<span style="background:#374151;color:#fff;padding:1px 6px;border-radius:10px;font-size:11px">?</span>';
         };
 
         switch (change.type) {
@@ -1173,7 +1173,7 @@ export default function TreeDashboard() {
                 ? "https://avatars.githubusercontent.com/in/946600?v=4"
                 : `https://github.com/${name}.png?size=20`;
               const strike = isAdded ? "" : "text-decoration:line-through;opacity:0.5;";
-              return `<span style="display:inline-flex;align-items:center;gap:3px;${strike}"><img src="${avatarUrl}" style="width:14px;height:14px;border-radius:50%" onerror="this.style.display='none'"/><span style="color:#e5e7eb;font-size:11px">${displayName}</span></span>`;
+              return `<span style="display:inline-flex;align-items:center;gap:3px;background:#374151;padding:1px 6px;border-radius:10px;${strike}"><img src="${avatarUrl}" style="width:14px;height:14px;border-radius:50%" onerror="this.style.display='none'"/><span style="color:#e5e7eb;font-size:11px">${displayName}</span></span>`;
             };
             if (change.new) {
               change.new.split(",").forEach(r => {

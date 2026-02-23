@@ -2220,8 +2220,8 @@ export default function TreeDashboard() {
                       style={{
                         ...baseStyle,
                         display: "grid",
-                        gridTemplateColumns: "70px 1fr",
-                        gap: "2px 8px",
+                        gridTemplateColumns: "52px 1fr",
+                        gap: "2px 4px",
                         marginBottom: 4,
                       }}
                       onMouseEnter={() => hasBranch && setHoveredLogBranch(log.branch!)}

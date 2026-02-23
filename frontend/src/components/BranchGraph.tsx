@@ -1428,6 +1428,9 @@ export default function BranchGraph({
     const hasPRBaseMismatch = hasPR && prBaseBranch && graphParent && prBaseBranch !== graphParent;
     const isDragging = dragState?.fromBranch === id;
     const isDropTarget = dropTarget === id && dragState && dragState.fromBranch !== id;
+    // Worktree drop target: valid if dragging worktree, this node has no worktree, and is not the source
+    const isValidWorktreeDropTarget = worktreeDragState && !node.worktree && worktreeDragState.fromBranch !== id && !isTentative;
+    const isWorktreeDropTargetActive = worktreeDropTarget === id;
     const canDrag = editMode && !isTentative && !isDefault && onEdgeCreate;
 
     // Determine node color (dark mode)
@@ -1465,10 +1468,23 @@ export default function BranchGraph({
       strokeColor = "#6366f1";
     }
 
-    // Highlight drop target
+    // Highlight drop target (edge creation)
     if (isDropTarget) {
       fillColor = "#14532d";
       strokeColor = "#22c55e";
+    }
+
+    // Highlight valid worktree drop targets (nodes without worktrees)
+    if (isValidWorktreeDropTarget) {
+      // Subtle highlight for valid targets
+      strokeColor = "#a855f7";
+      strokeDash = "4,2";
+    }
+    // Active worktree drop target (mouse over)
+    if (isWorktreeDropTargetActive) {
+      fillColor = "#3b1f5c";
+      strokeColor = "#a855f7";
+      strokeDash = undefined;
     }
 
     // For tentative nodes, show task title; for real nodes, show branch name
@@ -1897,7 +1913,6 @@ export default function BranchGraph({
           const isActive = node.worktree?.isActive;
           const labelWidth = Math.min(worktreeName.length * 7 + 16, nodeWidth);
           const isDraggingThisWorktree = worktreeDragState?.fromBranch === id;
-          const isWorktreeDropTarget = worktreeDropTarget === id && worktreeDragState && worktreeDragState.fromBranch !== id;
 
           const handleWorktreeDragStart = (e: React.MouseEvent) => {
             if (!onWorktreeMove) return;
@@ -1938,20 +1953,6 @@ export default function BranchGraph({
                   stroke="#22c55e"
                   strokeWidth={2}
                   opacity={0.6}
-                />
-              )}
-              {/* Worktree drop target highlight */}
-              {isWorktreeDropTarget && (
-                <rect
-                  x={x - 3}
-                  y={y - 25}
-                  width={nodeWidth + 6}
-                  height={26}
-                  rx={6}
-                  fill="none"
-                  stroke="#a855f7"
-                  strokeWidth={2}
-                  strokeDasharray="4,2"
                 />
               )}
               {/* Worktree folder name label - positioned above node */}

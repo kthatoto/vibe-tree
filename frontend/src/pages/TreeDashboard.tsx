@@ -3134,42 +3134,49 @@ export default function TreeDashboard() {
       {/* Worktree Move Confirmation Modal */}
       {pendingWorktreeMove && (
         <div className="modal-overlay" onClick={() => setPendingWorktreeMove(null)}>
-          <div className="modal modal--small" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <h2>Move Worktree</h2>
             </div>
             <div className="modal__body">
               {/* Worktree name */}
-              <div style={{ marginBottom: 16, padding: "12px 16px", background: "#1e3a5f", borderRadius: 8, border: "1px solid #3b82f6" }}>
-                <div style={{ fontSize: "0.75em", color: "#9ca3af", marginBottom: 4 }}>Worktree</div>
-                <div style={{ fontSize: "1.1em", fontWeight: 600, color: "#60a5fa" }}>
+              <div style={{ marginBottom: 16, padding: "10px 14px", background: "#1e3a5f", borderRadius: 6, border: "1px solid #3b82f6" }}>
+                <div style={{ fontSize: "0.7em", color: "#9ca3af", marginBottom: 2, textTransform: "uppercase", letterSpacing: "0.05em" }}>Worktree</div>
+                <div style={{ fontSize: "1em", fontWeight: 600, color: "#60a5fa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {pendingWorktreeMove.worktreePath.split("/").pop()}
                 </div>
               </div>
 
-              {/* From → To */}
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {/* From → To (vertical layout) */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {/* From */}
-                <div style={{ flex: 1, padding: "12px 16px", background: "#422006", borderRadius: 8, border: "1px solid #f59e0b" }}>
-                  <div style={{ fontSize: "0.75em", color: "#9ca3af", marginBottom: 4 }}>From</div>
-                  <div style={{ fontSize: "1em", fontWeight: 600, color: "#fbbf24" }}>
-                    {pendingWorktreeMove.fromBranch}
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 50, fontSize: "0.8em", color: "#9ca3af", textAlign: "right" }}>From</div>
+                  <div style={{ flex: 1, padding: "8px 12px", background: "#422006", borderRadius: 6, border: "1px solid #f59e0b", overflow: "hidden" }}>
+                    <div style={{ fontSize: "0.9em", fontWeight: 600, color: "#fbbf24", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {pendingWorktreeMove.fromBranch}
+                    </div>
                   </div>
                 </div>
 
                 {/* Arrow */}
-                <div style={{ fontSize: "1.5em", color: "#6b7280" }}>→</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 50 }} />
+                  <div style={{ color: "#6b7280", fontSize: "1.2em" }}>↓</div>
+                </div>
 
                 {/* To */}
-                <div style={{ flex: 1, padding: "12px 16px", background: "#14532d", borderRadius: 8, border: "1px solid #22c55e" }}>
-                  <div style={{ fontSize: "0.75em", color: "#9ca3af", marginBottom: 4 }}>To</div>
-                  <div style={{ fontSize: "1em", fontWeight: 600, color: "#4ade80" }}>
-                    {pendingWorktreeMove.toBranch}
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 50, fontSize: "0.8em", color: "#9ca3af", textAlign: "right" }}>To</div>
+                  <div style={{ flex: 1, padding: "8px 12px", background: "#14532d", borderRadius: 6, border: "1px solid #22c55e", overflow: "hidden" }}>
+                    <div style={{ fontSize: "0.9em", fontWeight: 600, color: "#4ade80", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {pendingWorktreeMove.toBranch}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <p style={{ margin: "16px 0 0", fontSize: "0.85em", color: "#9ca3af" }}>
+              <p style={{ margin: "16px 0 0", fontSize: "0.8em", color: "#6b7280" }}>
                 This will checkout the target branch in the worktree directory.
               </p>
             </div>

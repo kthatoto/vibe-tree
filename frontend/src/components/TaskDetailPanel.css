@@ -2168,3 +2168,24 @@
   font-size: 11px;
   text-align: center;
 }
+
+/* Team icon in popup */
+.task-detail-panel__pr-popup-team-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+/* Team icon in reviewer chip */
+.task-detail-panel__pr-reviewer-team-icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}

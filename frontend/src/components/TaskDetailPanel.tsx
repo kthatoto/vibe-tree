@@ -239,6 +239,22 @@ export function TaskDetailPanel({
   // Popup state for Labels/Reviewers
   const [showLabelPopup, setShowLabelPopup] = useState<number | null>(null); // PR id
   const [showReviewerPopup, setShowReviewerPopup] = useState<number | null>(null); // PR id
+  const labelPopupRef = useRef<HTMLDivElement>(null);
+  const reviewerPopupRef = useRef<HTMLDivElement>(null);
+
+  // Close popups when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (showLabelPopup !== null && labelPopupRef.current && !labelPopupRef.current.contains(e.target as Node)) {
+        setShowLabelPopup(null);
+      }
+      if (showReviewerPopup !== null && reviewerPopupRef.current && !reviewerPopupRef.current.contains(e.target as Node)) {
+        setShowReviewerPopup(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showLabelPopup, showReviewerPopup]);
 
   // Copilot as a fixed reviewer option
   const COPILOT_REVIEWER: RepoCollaborator = {
@@ -1398,7 +1414,7 @@ export function TaskDetailPanel({
                 </div>
                 {/* Label Popup */}
                 {showLabelPopup === pr.id && (
-                  <div className="task-detail-panel__pr-popup">
+                  <div className="task-detail-panel__pr-popup" ref={labelPopupRef}>
                     <div className="task-detail-panel__pr-popup-header">
                       <span>Toggle Labels</span>
                       <button onClick={() => setShowLabelPopup(null)}>×</button>
@@ -1440,14 +1456,20 @@ export function TaskDetailPanel({
                 <span className="task-detail-panel__pr-row-label">Reviewers:</span>
                 <div className="task-detail-panel__pr-row-items">
                   {reviewers.map((r, i) => {
-                    const isCopilot = r === "copilot-pull-request-reviewer[bot]" || r === "copilot";
-                    const displayName = isCopilot ? "Copilot" : r;
-                    const avatarUrl = isCopilot
-                      ? COPILOT_REVIEWER.avatarUrl
-                      : `https://github.com/${r}.png?size=32`;
+                    const isCopilot = r === "copilot-pull-request-reviewer[bot]" || r === "copilot" || r === "Copilot";
+                    const isTeam = r.startsWith("team/");
+                    const displayName = isCopilot ? "Copilot" : isTeam ? r.replace("team/", "@") : r;
                     return (
                       <span key={i} className="task-detail-panel__pr-reviewer-chip">
-                        <img src={avatarUrl} alt={displayName} className="task-detail-panel__pr-reviewer-avatar" />
+                        {isTeam ? (
+                          <span className="task-detail-panel__pr-reviewer-team-icon">👥</span>
+                        ) : (
+                          <img
+                            src={isCopilot ? COPILOT_REVIEWER.avatarUrl : `https://github.com/${r}.png?size=32`}
+                            alt={displayName}
+                            className="task-detail-panel__pr-reviewer-avatar"
+                          />
+                        )}
                         {displayName}
                       </span>
                     );
@@ -1462,7 +1484,7 @@ export function TaskDetailPanel({
                 </div>
                 {/* Reviewer Popup */}
                 {showReviewerPopup === pr.id && (
-                  <div className="task-detail-panel__pr-popup">
+                  <div className="task-detail-panel__pr-popup" ref={reviewerPopupRef}>
                     <div className="task-detail-panel__pr-popup-header">
                       <span>Toggle Reviewers</span>
                       <button onClick={() => setShowReviewerPopup(null)}>×</button>
@@ -1494,9 +1516,11 @@ export function TaskDetailPanel({
                       {prQuickReviewers.map((reviewer) => {
                         // Skip copilot if already shown above
                         if (reviewer === "copilot-pull-request-reviewer[bot]" || reviewer === "copilot") return null;
+                        const isTeam = reviewer.startsWith("team/");
+                        const displayName = isTeam ? reviewer.replace("team/", "@") : reviewer;
                         const hasReviewer = reviewers.includes(reviewer);
                         const isToggling = togglingReviewer === reviewer;
-                        const collaborator = repoCollaborators.find((c) => c.login === reviewer);
+                        const collaborator = !isTeam ? repoCollaborators.find((c) => c.login === reviewer) : null;
                         return (
                           <button
                             key={reviewer}
@@ -1504,13 +1528,17 @@ export function TaskDetailPanel({
                             onClick={() => handleToggleReviewer(pr.id, reviewer, reviewers)}
                             disabled={isToggling}
                           >
-                            <img
-                              src={collaborator?.avatarUrl || `https://github.com/${reviewer}.png?size=32`}
-                              alt={reviewer}
-                              className="task-detail-panel__pr-popup-avatar"
-                            />
+                            {isTeam ? (
+                              <span className="task-detail-panel__pr-popup-team-icon">👥</span>
+                            ) : (
+                              <img
+                                src={collaborator?.avatarUrl || `https://github.com/${reviewer}.png?size=32`}
+                                alt={reviewer}
+                                className="task-detail-panel__pr-popup-avatar"
+                              />
+                            )}
                             <span className="task-detail-panel__pr-popup-name">
-                              {collaborator?.name || reviewer}
+                              {isTeam ? displayName : (collaborator?.name || reviewer)}
                             </span>
                             {hasReviewer && <span className="task-detail-panel__pr-popup-check">✓</span>}
                             {isToggling && <span className="task-detail-panel__pr-popup-loading">...</span>}

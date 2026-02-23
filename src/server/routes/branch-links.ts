@@ -122,23 +122,35 @@ async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<GitH
     }
     const checks = Array.from(checksMap.values());
 
-    // Extract reviewers (filter out bots like GitHub Copilot)
-    // Only include reviewRequests (pending reviewers), not reviews (COMMENTED doesn't count)
-    const isBot = (login: string) =>
-      login.toLowerCase().includes("copilot") || login.endsWith("[bot]");
+    // Extract reviewers
+    // Include Copilot in the list, but filter out other bots
+    const isOtherBot = (login: string) =>
+      login.endsWith("[bot]") && !login.toLowerCase().includes("copilot");
     const reviewers: string[] = [];
     if (data.reviewRequests) {
       for (const r of data.reviewRequests) {
-        if (r.login && !isBot(r.login)) reviewers.push(r.login);
+        if (r.login && !isOtherBot(r.login)) reviewers.push(r.login);
       }
     }
-    // Only add reviewers who have APPROVED or CHANGES_REQUESTED (not just COMMENTED)
+    // Add reviewers from reviews
+    // Include Copilot if it has reviewed (any state including COMMENTED)
+    // For regular users, only include if APPROVED or CHANGES_REQUESTED
     if (data.reviews) {
       for (const r of data.reviews) {
         const state = r.state;
-        if (r.author?.login && !isBot(r.author.login) && !reviewers.includes(r.author.login) &&
-            (state === "APPROVED" || state === "CHANGES_REQUESTED")) {
-          reviewers.push(r.author.login);
+        const login = r.author?.login;
+        if (!login || reviewers.includes(login)) continue;
+
+        // Include Copilot if it has reviewed (any state)
+        // Note: Copilot login can be "copilot-pull-request-reviewer" or "copilot-pull-request-reviewer[bot]"
+        if (login.toLowerCase().includes("copilot")) {
+          reviewers.push(login);
+          continue;
+        }
+
+        // For regular users, only include if APPROVED or CHANGES_REQUESTED
+        if (!login.endsWith("[bot]") && (state === "APPROVED" || state === "CHANGES_REQUESTED")) {
+          reviewers.push(login);
         }
       }
     }
@@ -677,19 +689,31 @@ branchLinksRouter.post("/detect", async (c) => {
     }
     const checks = Array.from(checksMap.values());
 
-    // Extract reviewers (filter out bots)
-    const isBot = (login: string) =>
-      login.toLowerCase().includes("copilot") || login.endsWith("[bot]");
+    // Extract reviewers (include Copilot, filter out other bots)
+    const isOtherBot = (login: string) =>
+      login.endsWith("[bot]") && !login.toLowerCase().includes("copilot");
     const reviewers: string[] = [];
     if (data.reviewRequests) {
       for (const r of data.reviewRequests) {
-        if (r.login && !isBot(r.login)) reviewers.push(r.login);
+        if (r.login && !isOtherBot(r.login)) reviewers.push(r.login);
       }
     }
     if (data.reviews) {
       for (const r of data.reviews) {
-        if (r.author?.login && !isBot(r.author.login) && !reviewers.includes(r.author.login)) {
-          reviewers.push(r.author.login);
+        const state = r.state;
+        const login = r.author?.login;
+        if (!login || reviewers.includes(login)) continue;
+
+        // Include Copilot if it has reviewed (any state)
+        // Note: Copilot login can be "copilot-pull-request-reviewer" or "copilot-pull-request-reviewer[bot]"
+        if (login.toLowerCase().includes("copilot")) {
+          reviewers.push(login);
+          continue;
+        }
+
+        // For regular users, only include if APPROVED or CHANGES_REQUESTED
+        if (!login.endsWith("[bot]") && (state === "APPROVED" || state === "CHANGES_REQUESTED")) {
+          reviewers.push(login);
         }
       }
     }

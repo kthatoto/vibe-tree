@@ -3187,15 +3187,49 @@ export default function TreeDashboard() {
               <button
                 className="btn-primary"
                 onClick={async () => {
-                  const { worktreePath, toBranch } = pendingWorktreeMove;
+                  const { worktreePath, fromBranch, toBranch } = pendingWorktreeMove;
                   setPendingWorktreeMove(null);
+
+                  // Save previous snapshot for rollback
+                  const previousSnapshot = snapshot;
+
+                  // Optimistic update: immediately update UI
+                  setSnapshot((prev) => {
+                    if (!prev) return prev;
+                    // Find the worktree being moved
+                    const worktree = prev.worktrees.find((w) => w.path === worktreePath);
+                    if (!worktree) return prev;
+
+                    return {
+                      ...prev,
+                      // Update worktrees array
+                      worktrees: prev.worktrees.map((w) =>
+                        w.path === worktreePath ? { ...w, branch: toBranch } : w
+                      ),
+                      // Update nodes: remove worktree from fromBranch, add to toBranch
+                      nodes: prev.nodes.map((node) => {
+                        if (node.branchName === fromBranch) {
+                          return { ...node, worktree: undefined };
+                        }
+                        if (node.branchName === toBranch) {
+                          return { ...node, worktree: { ...worktree, branch: toBranch } };
+                        }
+                        return node;
+                      }),
+                    };
+                  });
+
+                  // API request in background
                   try {
                     await api.checkout(worktreePath, toBranch);
+                    // Success: trigger scan to get accurate state
                     if (selectedPin) {
                       triggerScan(selectedPin.localPath);
                     }
                   } catch (err) {
+                    // Rollback on failure
                     console.error("Failed to move worktree:", err);
+                    setSnapshot(previousSnapshot);
                     setError((err as Error).message);
                   }
                 }}

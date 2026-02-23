@@ -154,6 +154,12 @@ function RenderToolUseContent({ toolName, input }: { toolName: string; input: Re
   return <pre className="task-detail-panel__tool-input">{JSON.stringify(input, null, 2)}</pre>;
 }
 
+// Type for ahead/behind status update
+interface BranchStatusUpdate {
+  aheadBehind?: { ahead: number; behind: number };
+  remoteAheadBehind?: { ahead: number; behind: number };
+}
+
 interface TaskDetailPanelProps {
   repoId: string;
   localPath: string;
@@ -177,6 +183,9 @@ interface TaskDetailPanelProps {
   onBranchLinksChange?: (branchName: string, links: BranchLink[]) => void;
   // Callback when branch is deleted (for immediate UI update)
   onBranchDeleted?: (branchName: string) => void;
+  // For partial status refresh (instead of full scan)
+  edges?: { parent: string; child: string }[];
+  onBranchStatusRefresh?: (updates: Record<string, BranchStatusUpdate>) => void;
 }
 
 export function TaskDetailPanel({
@@ -198,6 +207,8 @@ export function TaskDetailPanel({
   branchLinksFromParent,
   onBranchLinksChange,
   onBranchDeleted,
+  edges,
+  onBranchStatusRefresh,
 }: TaskDetailPanelProps) {
   const isDefaultBranch = branchName === defaultBranch;
 
@@ -577,12 +588,54 @@ export function TaskDetailPanel({
   const [pulling, setPulling] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Helper to get affected branches (current branch + descendants)
+  const getAffectedBranches = useCallback((targetBranch: string): string[] => {
+    const affected = new Set<string>([targetBranch]);
+    if (!edges) return [targetBranch];
+
+    // Find all descendants
+    const findDescendants = (branch: string) => {
+      for (const edge of edges) {
+        if (edge.parent === branch && !affected.has(edge.child)) {
+          affected.add(edge.child);
+          findDescendants(edge.child);
+        }
+      }
+    };
+    findDescendants(targetBranch);
+
+    return Array.from(affected);
+  }, [edges]);
+
+  // Helper to refresh status for affected branches
+  const refreshAffectedBranches = useCallback(async (targetBranch: string) => {
+    if (!onBranchStatusRefresh || !edges || !defaultBranch) return;
+
+    const branches = getAffectedBranches(targetBranch);
+    try {
+      const updates = await api.refreshBranchStatus({
+        localPath,
+        branches,
+        edges,
+        defaultBranch,
+      });
+      onBranchStatusRefresh(updates);
+    } catch (err) {
+      console.error("Failed to refresh branch status:", err);
+    }
+  }, [localPath, edges, defaultBranch, getAffectedBranches, onBranchStatusRefresh]);
+
   const handlePull = async () => {
     setPulling(true);
     setError(null);
     try {
       await api.pull(localPath, branchName, worktreePath);
-      await onWorktreeCreated?.(); // Wait for rescan to complete
+      // Refresh status for affected branches instead of full scan
+      if (onBranchStatusRefresh && edges && defaultBranch) {
+        await refreshAffectedBranches(branchName);
+      } else {
+        await onWorktreeCreated?.();
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -635,7 +688,12 @@ export function TaskDetailPanel({
     // API request in background
     try {
       await api.checkout(targetPath, branchName);
-      onWorktreeCreated?.();
+      // Refresh status for this branch instead of full scan
+      if (onBranchStatusRefresh && edges && defaultBranch) {
+        await refreshAffectedBranches(branchName);
+      } else {
+        onWorktreeCreated?.();
+      }
     } catch (err) {
       // Rollback on failure
       setCheckedOut(false);
@@ -650,7 +708,12 @@ export function TaskDetailPanel({
     setError(null);
     try {
       await api.rebase(localPath, branchName, parentBranch, worktreePath);
-      await onWorktreeCreated?.(); // Wait for rescan to complete
+      // Refresh status for affected branches instead of full scan
+      if (onBranchStatusRefresh && edges && defaultBranch) {
+        await refreshAffectedBranches(branchName);
+      } else {
+        await onWorktreeCreated?.();
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -665,7 +728,12 @@ export function TaskDetailPanel({
     setError(null);
     try {
       await api.mergeParent(localPath, branchName, parentBranch, worktreePath);
-      await onWorktreeCreated?.(); // Wait for rescan to complete
+      // Refresh status for affected branches instead of full scan
+      if (onBranchStatusRefresh && edges && defaultBranch) {
+        await refreshAffectedBranches(branchName);
+      } else {
+        await onWorktreeCreated?.();
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -679,7 +747,12 @@ export function TaskDetailPanel({
     setError(null);
     try {
       await api.push(localPath, branchName, worktreePath, force);
-      await onWorktreeCreated?.(); // Wait for rescan to complete
+      // Refresh status for this branch (push only affects remote ahead/behind)
+      if (onBranchStatusRefresh && edges && defaultBranch) {
+        await refreshAffectedBranches(branchName);
+      } else {
+        await onWorktreeCreated?.();
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {

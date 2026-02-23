@@ -1336,4 +1336,19 @@ export const api = {
       method: "DELETE",
     }),
   getBranchFileUrl: (id: number) => `${API_BASE}/branch-resources/files/${id}/download`,
+
+  // Refresh ahead/behind status for specific branches (without full scan)
+  refreshBranchStatus: (data: {
+    localPath: string;
+    branches: string[];
+    edges: { parent: string; child: string }[];
+    defaultBranch: string;
+  }) =>
+    fetchJson<Record<string, {
+      aheadBehind?: { ahead: number; behind: number };
+      remoteAheadBehind?: { ahead: number; behind: number };
+    }>>(`${API_BASE}/branch/refresh-status`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };

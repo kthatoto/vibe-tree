@@ -2579,6 +2579,25 @@ export default function TreeDashboard() {
                         };
                       }
                     }}
+                    edges={snapshot.edges}
+                    onBranchStatusRefresh={(updates) => {
+                      // Partial update: only update ahead/behind for specified branches
+                      setSnapshot((prev) => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          nodes: prev.nodes.map((node) => {
+                            const update = updates[node.branchName];
+                            if (!update) return node;
+                            return {
+                              ...node,
+                              aheadBehind: update.aheadBehind ?? node.aheadBehind,
+                              remoteAheadBehind: update.remoteAheadBehind,
+                            };
+                          }),
+                        };
+                      });
+                    }}
                   />
                 ) : (
                   <div className="panel">

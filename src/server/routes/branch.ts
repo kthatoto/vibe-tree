@@ -1488,3 +1488,79 @@ branchRouter.post("/delete-worktree", async (c) => {
     branchName,
   });
 });
+
+// POST /api/branch/refresh-status - Get ahead/behind for specific branches
+// Used after operations (pull, push, rebase, merge) to update UI without full scan
+branchRouter.post("/refresh-status", async (c) => {
+  const body = await c.req.json();
+  const { localPath, branches, edges, defaultBranch } = body as {
+    localPath: string;
+    branches: string[];
+    edges: { parent: string; child: string }[];
+    defaultBranch: string;
+  };
+
+  if (!localPath || !branches || !Array.isArray(branches)) {
+    throw new BadRequestError("localPath and branches array are required");
+  }
+
+  const expandedPath = expandTilde(localPath);
+  if (!existsSync(expandedPath)) {
+    throw new BadRequestError(`Path does not exist: ${expandedPath}`);
+  }
+
+  // Build parent map from edges
+  const parentMap = new Map<string, string>();
+  for (const edge of edges || []) {
+    parentMap.set(edge.child, edge.parent);
+  }
+
+  // Calculate ahead/behind for each branch in parallel
+  const results: Record<string, {
+    aheadBehind?: { ahead: number; behind: number };
+    remoteAheadBehind?: { ahead: number; behind: number };
+  }> = {};
+
+  await Promise.all(branches.map(async (branchName) => {
+    results[branchName] = {};
+
+    // Calculate ahead/behind relative to parent
+    if (branchName !== defaultBranch) {
+      const parentBranch = parentMap.get(branchName) || defaultBranch;
+      try {
+        const output = await execAsync(
+          `cd "${expandedPath}" && git rev-list --left-right --count "${parentBranch}"..."${branchName}"`
+        );
+        const parts = output.trim().split(/\s+/);
+        const behind = parseInt(parts[0] ?? "0", 10);
+        const ahead = parseInt(parts[1] ?? "0", 10);
+        results[branchName].aheadBehind = { ahead, behind };
+      } catch {
+        // Ignore errors
+      }
+    }
+
+    // Calculate ahead/behind relative to remote
+    try {
+      const upstream = (await execAsync(
+        `cd "${expandedPath}" && git rev-parse --abbrev-ref "${branchName}@{upstream}" 2>/dev/null`
+      )).trim();
+
+      if (upstream) {
+        const output = await execAsync(
+          `cd "${expandedPath}" && git rev-list --left-right --count "${upstream}"..."${branchName}"`
+        );
+        const parts = output.trim().split(/\s+/);
+        const behind = parseInt(parts[0] ?? "0", 10);
+        const ahead = parseInt(parts[1] ?? "0", 10);
+        if (ahead > 0 || behind > 0) {
+          results[branchName].remoteAheadBehind = { ahead, behind };
+        }
+      }
+    } catch {
+      // No upstream or error - skip
+    }
+  }));
+
+  return c.json(results);
+});

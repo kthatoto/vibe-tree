@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, type TaskInstruction, type ChatMessage, type TreeNode, type BranchLink, type GitHubCheck, type GitHubLabel, type BranchDescription } from "../lib/api";
+import { api, type TaskInstruction, type ChatMessage, type TreeNode, type BranchLink, type GitHubCheck, type GitHubLabel, type BranchDescription, type RepoCollaborator } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import { computeSimpleDiff, type DiffLine } from "../lib/diff";
 import { linkifyPreContent } from "../lib/linkify";
@@ -192,7 +192,7 @@ interface TaskDetailPanelProps {
   prQuickLabels?: string[];
   prQuickReviewers?: string[];
   allRepoLabels?: Array<{ name: string; color: string; description: string }>;
-  repoCollaborators?: string[];
+  repoCollaborators?: RepoCollaborator[];
 }
 
 export function TaskDetailPanel({
@@ -235,6 +235,18 @@ export function TaskDetailPanel({
   // Label/reviewer toggle state
   const [togglingLabel, setTogglingLabel] = useState<string | null>(null);
   const [togglingReviewer, setTogglingReviewer] = useState<string | null>(null);
+
+  // Popup state for Labels/Reviewers
+  const [showLabelPopup, setShowLabelPopup] = useState<number | null>(null); // PR id
+  const [showReviewerPopup, setShowReviewerPopup] = useState<number | null>(null); // PR id
+
+  // Copilot as a fixed reviewer option
+  const COPILOT_REVIEWER: RepoCollaborator = {
+    login: "copilot-pull-request-reviewer[bot]",
+    name: "Copilot",
+    avatarUrl: "https://avatars.githubusercontent.com/in/946600?v=4",
+    role: "bot",
+  };
 
   // Chat state
   const [chatSessionId, setChatSessionId] = useState<string | null>(null);
@@ -1362,18 +1374,11 @@ export function TaskDetailPanel({
                 {pr.projectStatus && (
                   <span className="task-detail-panel__link-project">{pr.projectStatus}</span>
                 )}
-                <span className="task-detail-panel__link-reviewers">
-                  {reviewers.length > 0 ? (
-                    reviewers.map((r, i) => (
-                      <span key={i} className="task-detail-panel__link-reviewer">@{r}</span>
-                    ))
-                  ) : (
-                    <span className="task-detail-panel__link-reviewer task-detail-panel__link-reviewer--none">No Reviewers</span>
-                  )}
-                </span>
               </div>
-              {labels.length > 0 && (
-                <div className="task-detail-panel__pr-labels">
+              {/* Labels Row */}
+              <div className="task-detail-panel__pr-row">
+                <span className="task-detail-panel__pr-row-label">Labels:</span>
+                <div className="task-detail-panel__pr-row-items">
                   {labels.map((l, i) => (
                     <span
                       key={i}
@@ -1383,69 +1388,144 @@ export function TaskDetailPanel({
                       {l.name}
                     </span>
                   ))}
+                  <button
+                    className="task-detail-panel__pr-add-btn"
+                    onClick={() => setShowLabelPopup(showLabelPopup === pr.id ? null : pr.id)}
+                    title="Add/remove labels"
+                  >
+                    + Add
+                  </button>
                 </div>
-              )}
-              {/* Quick Label Toggles */}
-              {prQuickLabels.length > 0 && (
-                <div className="task-detail-panel__pr-quick-actions">
-                  <span className="task-detail-panel__pr-quick-label">Labels:</span>
-                  {prQuickLabels.map((labelName) => {
-                    const hasLabel = labels.some((l) => l.name === labelName);
-                    const labelInfo = allRepoLabels.find((l) => l.name === labelName);
-                    const color = labelInfo?.color || "374151";
-                    const isToggling = togglingLabel === labelName;
+                {/* Label Popup */}
+                {showLabelPopup === pr.id && (
+                  <div className="task-detail-panel__pr-popup">
+                    <div className="task-detail-panel__pr-popup-header">
+                      <span>Toggle Labels</span>
+                      <button onClick={() => setShowLabelPopup(null)}>×</button>
+                    </div>
+                    <div className="task-detail-panel__pr-popup-items">
+                      {prQuickLabels.map((labelName) => {
+                        const hasLabel = labels.some((l) => l.name === labelName);
+                        const labelInfo = allRepoLabels.find((l) => l.name === labelName);
+                        const color = labelInfo?.color || "374151";
+                        const isToggling = togglingLabel === labelName;
+                        return (
+                          <button
+                            key={labelName}
+                            className={`task-detail-panel__pr-popup-item ${hasLabel ? "task-detail-panel__pr-popup-item--active" : ""}`}
+                            onClick={() => handleToggleLabel(pr.id, labelName, labels)}
+                            disabled={isToggling}
+                          >
+                            <span
+                              className="task-detail-panel__pr-popup-color"
+                              style={{ backgroundColor: `#${color}` }}
+                            />
+                            <span className="task-detail-panel__pr-popup-name">{labelName}</span>
+                            {hasLabel && <span className="task-detail-panel__pr-popup-check">✓</span>}
+                            {isToggling && <span className="task-detail-panel__pr-popup-loading">...</span>}
+                          </button>
+                        );
+                      })}
+                      {prQuickLabels.length === 0 && (
+                        <div className="task-detail-panel__pr-popup-empty">
+                          No labels configured. Add labels in Settings &gt; PR &gt; Labels.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Reviewers Row */}
+              <div className="task-detail-panel__pr-row">
+                <span className="task-detail-panel__pr-row-label">Reviewers:</span>
+                <div className="task-detail-panel__pr-row-items">
+                  {reviewers.map((r, i) => {
+                    const isCopilot = r === "copilot-pull-request-reviewer[bot]" || r === "copilot";
+                    const displayName = isCopilot ? "Copilot" : r;
+                    const avatarUrl = isCopilot
+                      ? COPILOT_REVIEWER.avatarUrl
+                      : `https://github.com/${r}.png?size=32`;
                     return (
-                      <button
-                        key={labelName}
-                        className={`task-detail-panel__pr-quick-btn ${hasLabel ? "task-detail-panel__pr-quick-btn--active" : ""}`}
-                        style={{
-                          borderColor: `#${color}`,
-                          backgroundColor: hasLabel ? `#${color}` : "transparent",
-                          color: hasLabel ? getTextColor(color) : `#${color}`,
-                          opacity: isToggling ? 0.5 : 1,
-                        }}
-                        onClick={() => handleToggleLabel(pr.id, labelName, labels)}
-                        disabled={isToggling}
-                        title={hasLabel ? `Remove ${labelName}` : `Add ${labelName}`}
-                      >
-                        {isToggling ? "..." : labelName}
-                      </button>
+                      <span key={i} className="task-detail-panel__pr-reviewer-chip">
+                        <img src={avatarUrl} alt={displayName} className="task-detail-panel__pr-reviewer-avatar" />
+                        {displayName}
+                      </span>
                     );
                   })}
+                  <button
+                    className="task-detail-panel__pr-add-btn"
+                    onClick={() => setShowReviewerPopup(showReviewerPopup === pr.id ? null : pr.id)}
+                    title="Add/remove reviewers"
+                  >
+                    + Add
+                  </button>
                 </div>
-              )}
-              {/* Quick Reviewer Toggles */}
-              {prQuickReviewers.length > 0 && (
-                <div className="task-detail-panel__pr-quick-actions">
-                  <span className="task-detail-panel__pr-quick-label">Reviewers:</span>
-                  {prQuickReviewers.map((reviewer) => {
-                    const hasReviewer = reviewers.includes(reviewer);
-                    const isToggling = togglingReviewer === reviewer;
-                    return (
-                      <button
-                        key={reviewer}
-                        className={`task-detail-panel__pr-quick-btn task-detail-panel__pr-quick-btn--reviewer ${hasReviewer ? "task-detail-panel__pr-quick-btn--active" : ""}`}
-                        style={{
-                          borderColor: "#60a5fa",
-                          backgroundColor: hasReviewer ? "#60a5fa30" : "transparent",
-                          color: hasReviewer ? "#60a5fa" : "#9ca3af",
-                          opacity: isToggling ? 0.5 : 1,
-                        }}
-                        onClick={() => handleToggleReviewer(pr.id, reviewer, reviewers)}
-                        disabled={isToggling}
-                        title={hasReviewer ? `Remove @${reviewer}` : `Add @${reviewer}`}
-                      >
-                        <img
-                          src={`https://github.com/${reviewer}.png?size=32`}
-                          alt={reviewer}
-                          className="task-detail-panel__pr-quick-avatar"
-                        />
-                        {isToggling ? "..." : reviewer}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+                {/* Reviewer Popup */}
+                {showReviewerPopup === pr.id && (
+                  <div className="task-detail-panel__pr-popup">
+                    <div className="task-detail-panel__pr-popup-header">
+                      <span>Toggle Reviewers</span>
+                      <button onClick={() => setShowReviewerPopup(null)}>×</button>
+                    </div>
+                    <div className="task-detail-panel__pr-popup-items">
+                      {/* Copilot - always first */}
+                      {(() => {
+                        const hasCopilot = reviewers.includes("copilot-pull-request-reviewer[bot]") || reviewers.includes("copilot");
+                        const isToggling = togglingReviewer === COPILOT_REVIEWER.login;
+                        return (
+                          <button
+                            key="copilot"
+                            className={`task-detail-panel__pr-popup-item ${hasCopilot ? "task-detail-panel__pr-popup-item--active" : ""}`}
+                            onClick={() => handleToggleReviewer(pr.id, COPILOT_REVIEWER.login, reviewers)}
+                            disabled={isToggling}
+                          >
+                            <img
+                              src={COPILOT_REVIEWER.avatarUrl || ""}
+                              alt="Copilot"
+                              className="task-detail-panel__pr-popup-avatar"
+                            />
+                            <span className="task-detail-panel__pr-popup-name">Copilot</span>
+                            {hasCopilot && <span className="task-detail-panel__pr-popup-check">✓</span>}
+                            {isToggling && <span className="task-detail-panel__pr-popup-loading">...</span>}
+                          </button>
+                        );
+                      })()}
+                      {/* Quick Reviewers from settings */}
+                      {prQuickReviewers.map((reviewer) => {
+                        // Skip copilot if already shown above
+                        if (reviewer === "copilot-pull-request-reviewer[bot]" || reviewer === "copilot") return null;
+                        const hasReviewer = reviewers.includes(reviewer);
+                        const isToggling = togglingReviewer === reviewer;
+                        const collaborator = repoCollaborators.find((c) => c.login === reviewer);
+                        return (
+                          <button
+                            key={reviewer}
+                            className={`task-detail-panel__pr-popup-item ${hasReviewer ? "task-detail-panel__pr-popup-item--active" : ""}`}
+                            onClick={() => handleToggleReviewer(pr.id, reviewer, reviewers)}
+                            disabled={isToggling}
+                          >
+                            <img
+                              src={collaborator?.avatarUrl || `https://github.com/${reviewer}.png?size=32`}
+                              alt={reviewer}
+                              className="task-detail-panel__pr-popup-avatar"
+                            />
+                            <span className="task-detail-panel__pr-popup-name">
+                              {collaborator?.name || reviewer}
+                            </span>
+                            {hasReviewer && <span className="task-detail-panel__pr-popup-check">✓</span>}
+                            {isToggling && <span className="task-detail-panel__pr-popup-loading">...</span>}
+                          </button>
+                        );
+                      })}
+                      {prQuickReviewers.length === 0 && (
+                        <div className="task-detail-panel__pr-popup-empty">
+                          No reviewers configured. Add reviewers in Settings &gt; PR &gt; Reviewers.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           );
         })()}

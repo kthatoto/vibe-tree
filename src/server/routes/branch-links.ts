@@ -986,8 +986,13 @@ branchLinksRouter.post("/:id/reviewers/add", async (c) => {
   }
 
   try {
-    // Add reviewer via gh API (more reliable than gh pr edit)
-    await execAsync(`gh api repos/${link.repoId}/pulls/${link.number}/requested_reviewers --method POST -f "reviewers[]=${reviewer}"`);
+    // Add reviewer via gh CLI
+    // For Copilot bot, use gh pr edit; for regular users, use gh api
+    if (reviewer === "copilot-pull-request-reviewer[bot]") {
+      await execAsync(`gh pr edit ${link.number} --repo ${link.repoId} --add-reviewer "${reviewer}"`);
+    } else {
+      await execAsync(`gh api repos/${link.repoId}/pulls/${link.number}/requested_reviewers --method POST -f "reviewers[]=${reviewer}"`);
+    }
 
     // Update local cache
     const currentReviewers: string[] = link.reviewers ? JSON.parse(link.reviewers) : [];
@@ -1030,8 +1035,13 @@ branchLinksRouter.post("/:id/reviewers/remove", async (c) => {
   }
 
   try {
-    // Remove reviewer via gh API (more reliable than gh pr edit)
-    await execAsync(`gh api repos/${link.repoId}/pulls/${link.number}/requested_reviewers --method DELETE -f "reviewers[]=${reviewer}"`);
+    // Remove reviewer via gh CLI
+    // For Copilot bot, use gh pr edit; for regular users, use gh api
+    if (reviewer === "copilot-pull-request-reviewer[bot]") {
+      await execAsync(`gh pr edit ${link.number} --repo ${link.repoId} --remove-reviewer "${reviewer}"`);
+    } else {
+      await execAsync(`gh api repos/${link.repoId}/pulls/${link.number}/requested_reviewers --method DELETE -f "reviewers[]=${reviewer}"`);
+    }
 
     // Update local cache
     const currentReviewers: string[] = link.reviewers ? JSON.parse(link.reviewers) : [];

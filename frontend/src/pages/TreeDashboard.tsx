@@ -516,17 +516,51 @@ export default function TreeDashboard() {
   }, []);
   // Expanded scan session IDs for grouping
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
+  // Manually toggled sessions (dirty flag) - these won't be auto-opened/closed
+  const [manuallyToggledSessions, setManuallyToggledSessions] = useState<Set<string>>(new Set());
 
   // Hovered log branch (for graph highlight) and hovered log id (for single log highlight)
   const [hoveredLogBranch, setHoveredLogBranch] = useState<string | null>(null);
   const [hoveredLogId, setHoveredLogId] = useState<number | null>(null);
 
+  // LocalStorage key for log accordion state
+  const getLogAccordionKey = (repoId: string) => `vibe-tree-log-accordion-${repoId}`;
+
+  // Load/save accordion state from LocalStorage
+  const loadAccordionState = (repoId: string): { expanded: Set<string>; manuallyToggled: Set<string> } => {
+    try {
+      const stored = localStorage.getItem(getLogAccordionKey(repoId));
+      if (stored) {
+        const data = JSON.parse(stored);
+        return {
+          expanded: new Set(data.expanded || []),
+          manuallyToggled: new Set(data.manuallyToggled || []),
+        };
+      }
+    } catch { /* ignore */ }
+    return { expanded: new Set(), manuallyToggled: new Set() };
+  };
+
+  const saveAccordionState = (repoId: string, expanded: Set<string>, manuallyToggled: Set<string>, validSessionIds: Set<string>) => {
+    try {
+      // Only save sessions that still exist (cleanup old entries)
+      const filteredExpanded = [...expanded].filter(id => validSessionIds.has(id));
+      const filteredManuallyToggled = [...manuallyToggled].filter(id => validSessionIds.has(id));
+      localStorage.setItem(getLogAccordionKey(repoId), JSON.stringify({
+        expanded: filteredExpanded,
+        manuallyToggled: filteredManuallyToggled,
+      }));
+    } catch { /* ignore */ }
+  };
+
   // Load logs from DB when project changes, clear on project switch
   useEffect(() => {
     setLogs([]); // Clear logs when project changes
     setExpandedSessions(new Set()); // Clear expanded sessions
+    setManuallyToggledSessions(new Set()); // Clear manually toggled
     logIdRef.current = 0;
     if (!snapshot?.repoId) return;
+
     api.getScanLogs(snapshot.repoId, 50).then((result) => {
       const dbLogs = result.logs.map((log) => ({
         id: log.id,
@@ -539,9 +573,39 @@ export default function TreeDashboard() {
       }));
       setLogs(dbLogs.reverse()); // DB returns newest first, we want oldest first
       logIdRef.current = Math.max(0, ...dbLogs.map(l => l.id));
-      // Auto-expand latest 3 scan sessions
-      const sessionIds = [...new Set(result.logs.map(l => l.scanSessionId).filter(Boolean))] as string[];
-      setExpandedSessions(new Set(sessionIds.slice(0, 3)));
+
+      // Get all scan session IDs (exclude manual logs which have no scanSessionId)
+      const allScanSessionIds = [...new Set(result.logs.map(l => l.scanSessionId).filter(Boolean))] as string[];
+      const validSessionIds = new Set(allScanSessionIds);
+
+      // Load saved state from LocalStorage
+      const savedState = loadAccordionState(snapshot.repoId);
+
+      // Apply saved manuallyToggled state
+      const restoredManuallyToggled = new Set([...savedState.manuallyToggled].filter(id => validSessionIds.has(id)));
+      setManuallyToggledSessions(restoredManuallyToggled);
+
+      // Calculate which sessions should be expanded:
+      // - For manuallyToggled sessions: use saved expanded state
+      // - For non-manuallyToggled sessions: auto-expand top 3 scan sessions
+      const top3Sessions = new Set(allScanSessionIds.slice(0, 3));
+      const newExpanded = new Set<string>();
+
+      for (const sessionId of allScanSessionIds) {
+        if (restoredManuallyToggled.has(sessionId)) {
+          // Use saved state for manually toggled sessions
+          if (savedState.expanded.has(sessionId)) {
+            newExpanded.add(sessionId);
+          }
+        } else {
+          // Auto-expand top 3 for non-manually-toggled sessions
+          if (top3Sessions.has(sessionId)) {
+            newExpanded.add(sessionId);
+          }
+        }
+      }
+
+      setExpandedSessions(newExpanded);
     }).catch(console.error);
   }, [snapshot?.repoId]);
 
@@ -1123,9 +1187,29 @@ export default function TreeDashboard() {
 
       const sessionId = data.scanSessionId;
 
-      // Auto-expand new scan session
+      // Auto-expand new scan session (only if not manually toggled)
+      // Also auto-close sessions beyond top 3 (only if not manually toggled)
       if (sessionId) {
-        setExpandedSessions(prev => new Set([...prev, sessionId]));
+        setExpandedSessions(prev => {
+          // Get current scan session IDs from logs (newest first)
+          const currentSessionIds = [...new Set(logs.map(l => l.scanSessionId).filter(Boolean))] as string[];
+          // Add new session at the beginning
+          const allSessionIds = [sessionId, ...currentSessionIds.filter(id => id !== sessionId)];
+          const top3 = new Set(allSessionIds.slice(0, 3));
+
+          const newExpanded = new Set(prev);
+          // Add new session if not manually toggled
+          if (!manuallyToggledSessions.has(sessionId)) {
+            newExpanded.add(sessionId);
+          }
+          // Close sessions beyond top 3 that are not manually toggled
+          for (const id of prev) {
+            if (!top3.has(id) && !manuallyToggledSessions.has(id)) {
+              newExpanded.delete(id);
+            }
+          }
+          return newExpanded;
+        });
       }
 
       // Log each change with structured data (rendered by React components)
@@ -2456,10 +2540,19 @@ export default function TreeDashboard() {
                         background: isExpanded ? "rgba(59, 130, 246, 0.05)" : "transparent",
                       }}
                       onClick={() => {
+                        const sessionId = group.sessionId;
+                        // Mark as manually toggled (dirty)
+                        setManuallyToggledSessions(prev => new Set([...prev, sessionId]));
+                        // Toggle expanded state
                         setExpandedSessions(prev => {
                           const next = new Set(prev);
-                          if (next.has(group.sessionId)) next.delete(group.sessionId);
-                          else next.add(group.sessionId);
+                          if (next.has(sessionId)) next.delete(sessionId);
+                          else next.add(sessionId);
+                          // Save to LocalStorage
+                          if (snapshot?.repoId) {
+                            const allSessionIds = new Set(logs.map(l => l.scanSessionId).filter(Boolean) as string[]);
+                            saveAccordionState(snapshot.repoId, next, new Set([...manuallyToggledSessions, sessionId]), allSessionIds);
+                          }
                           return next;
                         });
                       }}

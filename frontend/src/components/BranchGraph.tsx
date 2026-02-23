@@ -1680,9 +1680,9 @@ export default function BranchGraph({
                     compact
                   />
                 )}
-                {/* PR badge - shows ✓ when approved by human reviewer */}
+                {/* PR badge - shows ✓ when approved (same logic as TaskDetailPanel) */}
                 {hasPR && (() => {
-                  const isApproved = prLink?.reviewDecision === "APPROVED" && hasHumanReviewers;
+                  const isApproved = prLink?.reviewDecision === "APPROVED";
                   return (
                     <span style={{
                       fontSize: 10,
@@ -1774,12 +1774,9 @@ export default function BranchGraph({
                 {computedChecksStatus && (
                   <CIBadge status={computedChecksStatus as "success" | "failure" | "pending" | "unknown"} compact />
                 )}
-                {/* PR indicator - shows ✓ when approved by human reviewer */}
+                {/* PR indicator - shows ✓ when approved (same logic as TaskDetailPanel) */}
                 {(() => {
-                  const isApproved = prLink?.reviewDecision === "APPROVED" && prLink?.reviewers && (() => {
-                    const reviewers = JSON.parse(prLink.reviewers) as string[];
-                    return reviewers.filter(r => !r.toLowerCase().includes("copilot") && !r.endsWith("[bot]")).length > 0;
-                  })();
+                  const isApproved = prLink?.reviewDecision === "APPROVED";
                   return (
                     <span style={{
                       fontSize: 10,

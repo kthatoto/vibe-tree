@@ -483,7 +483,7 @@ export default function TreeDashboard() {
   }, [snapshot?.repoId]);
 
   // Settings modal category
-  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "polling" | "pr" | "cleanup" | "debug">("branch");
+  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "polling" | "pr-labels" | "pr-reviewers" | "cleanup" | "debug">("branch");
   const [debugModeEnabled, setDebugModeEnabled] = useState(() => localStorage.getItem("vibe-tree-debug-mode") === "true");
   const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<{ chatSessions: number; taskInstructions: number; branchLinks: number } | null>(null);
@@ -2823,12 +2823,21 @@ export default function TreeDashboard() {
                 >
                   Polling
                 </button>
-                <button
-                  className={`settings-modal__nav-item ${settingsCategory === "pr" ? "settings-modal__nav-item--active" : ""}`}
-                  onClick={() => setSettingsCategory("pr")}
-                >
-                  PR
-                </button>
+                <div className="settings-modal__nav-group">
+                  <span className="settings-modal__nav-parent">PR</span>
+                  <button
+                    className={`settings-modal__nav-item settings-modal__nav-item--child ${settingsCategory === "pr-labels" ? "settings-modal__nav-item--active" : ""}`}
+                    onClick={() => setSettingsCategory("pr-labels")}
+                  >
+                    Labels
+                  </button>
+                  <button
+                    className={`settings-modal__nav-item settings-modal__nav-item--child ${settingsCategory === "pr-reviewers" ? "settings-modal__nav-item--active" : ""}`}
+                    onClick={() => setSettingsCategory("pr-reviewers")}
+                  >
+                    Reviewers
+                  </button>
+                </div>
                 <button
                   className={`settings-modal__nav-item ${settingsCategory === "cleanup" ? "settings-modal__nav-item--active" : ""}`}
                   onClick={() => setSettingsCategory("cleanup")}
@@ -3144,156 +3153,157 @@ export default function TreeDashboard() {
                       </>
                     )}
 
-                    {/* PR Settings */}
-                    {settingsCategory === "pr" && (
+                    {/* PR Labels Settings */}
+                    {settingsCategory === "pr-labels" && (
                       <>
-                        <h3>PR</h3>
+                        <h3>Labels</h3>
                         <p style={{ color: "#9ca3af", margin: "0 0 16px" }}>
-                          Configure quick actions for Pull Request management.
+                          Quick toggle labels in the PR section of branch details.
                         </p>
-
-                        {/* Labels Subsection */}
-                        <div className="settings-section" style={{ background: "#1f2937", padding: 16, borderRadius: 8, marginBottom: 16 }}>
-                          <h4 style={{ margin: "0 0 8px", color: "#e5e7eb", fontSize: 14 }}>Labels</h4>
-                          <p style={{ color: "#9ca3af", margin: "0 0 12px", fontSize: 13 }}>
-                            Quick toggle labels in the PR section of branch details.
-                          </p>
-                          <input
-                            type="text"
-                            placeholder="Search labels..."
-                            value={labelSearch}
-                            onChange={(e) => setLabelSearch(e.target.value)}
-                            style={{
-                              width: "100%",
-                              padding: "8px 12px",
-                              background: "#111827",
-                              border: "1px solid #374151",
-                              borderRadius: 6,
-                              color: "white",
-                              fontSize: 13,
-                              marginBottom: 12,
-                            }}
-                          />
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, maxHeight: 200, overflowY: "auto" }}>
-                            {repoLabels
-                              .filter((label) => label.name.toLowerCase().includes(labelSearch.toLowerCase()))
-                              .map((label) => {
-                                const isSelected = prQuickLabels.includes(label.name);
-                                return (
-                                  <button
-                                    key={label.name}
-                                    type="button"
-                                    onClick={() => {
-                                      if (isSelected) {
-                                        setPrQuickLabels(prQuickLabels.filter((l) => l !== label.name));
-                                      } else {
-                                        setPrQuickLabels([...prQuickLabels, label.name]);
-                                      }
-                                    }}
-                                    style={{
-                                      padding: "4px 10px",
-                                      borderRadius: 12,
-                                      border: isSelected ? `2px solid #${label.color}` : "1px solid #374151",
-                                      background: isSelected ? `#${label.color}30` : "#111827",
-                                      color: `#${label.color}`,
-                                      cursor: "pointer",
-                                      fontSize: 13,
-                                      fontWeight: 500,
-                                    }}
-                                    title={label.description || label.name}
-                                  >
-                                    {label.name}
-                                  </button>
-                                );
-                              })}
-                            {repoLabels.length === 0 && (
-                              <span style={{ color: "#6b7280", fontStyle: "italic" }}>No labels found in repository</span>
-                            )}
-                            {repoLabels.length > 0 && repoLabels.filter((l) => l.name.toLowerCase().includes(labelSearch.toLowerCase())).length === 0 && (
-                              <span style={{ color: "#6b7280", fontStyle: "italic" }}>No matching labels</span>
-                            )}
-                          </div>
-                          {prQuickLabels.length > 0 && (
-                            <p style={{ color: "#9ca3af", margin: "8px 0 0", fontSize: 12 }}>
-                              Selected: {prQuickLabels.join(", ")}
-                            </p>
+                        <input
+                          type="text"
+                          placeholder="Search labels..."
+                          value={labelSearch}
+                          onChange={(e) => setLabelSearch(e.target.value)}
+                          style={{
+                            width: "100%",
+                            padding: "8px 12px",
+                            background: "#1f2937",
+                            border: "1px solid #374151",
+                            borderRadius: 6,
+                            color: "white",
+                            fontSize: 13,
+                            marginBottom: 12,
+                          }}
+                        />
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, maxHeight: 300, overflowY: "auto" }}>
+                          {repoLabels
+                            .filter((label) => label.name.toLowerCase().includes(labelSearch.toLowerCase()))
+                            .map((label) => {
+                              const isSelected = prQuickLabels.includes(label.name);
+                              // GitHub-style text color based on background luminance
+                              const r = parseInt(label.color.slice(0, 2), 16);
+                              const g = parseInt(label.color.slice(2, 4), 16);
+                              const b = parseInt(label.color.slice(4, 6), 16);
+                              const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+                              const textColor = luminance > 0.5 ? "#000000" : "#ffffff";
+                              return (
+                                <button
+                                  key={label.name}
+                                  type="button"
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      setPrQuickLabels(prQuickLabels.filter((l) => l !== label.name));
+                                    } else {
+                                      setPrQuickLabels([...prQuickLabels, label.name]);
+                                    }
+                                  }}
+                                  style={{
+                                    padding: "4px 10px",
+                                    borderRadius: 12,
+                                    border: isSelected ? "2px solid #fff" : "none",
+                                    background: `#${label.color}`,
+                                    color: textColor,
+                                    cursor: "pointer",
+                                    fontSize: 13,
+                                    fontWeight: 500,
+                                    opacity: isSelected ? 1 : 0.6,
+                                  }}
+                                  title={label.description || label.name}
+                                >
+                                  {isSelected && "✓ "}{label.name}
+                                </button>
+                              );
+                            })}
+                          {repoLabels.length === 0 && (
+                            <span style={{ color: "#6b7280", fontStyle: "italic" }}>No labels found in repository</span>
+                          )}
+                          {repoLabels.length > 0 && repoLabels.filter((l) => l.name.toLowerCase().includes(labelSearch.toLowerCase())).length === 0 && (
+                            <span style={{ color: "#6b7280", fontStyle: "italic" }}>No matching labels</span>
                           )}
                         </div>
-
-                        {/* Reviewers Subsection */}
-                        <div className="settings-section" style={{ background: "#1f2937", padding: 16, borderRadius: 8 }}>
-                          <h4 style={{ margin: "0 0 8px", color: "#e5e7eb", fontSize: 14 }}>Reviewers</h4>
-                          <p style={{ color: "#9ca3af", margin: "0 0 12px", fontSize: 13 }}>
-                            Quick toggle reviewers in the PR section of branch details.
+                        {prQuickLabels.length > 0 && (
+                          <p style={{ color: "#9ca3af", margin: "8px 0 0", fontSize: 12 }}>
+                            Selected: {prQuickLabels.join(", ")}
                           </p>
-                          <input
-                            type="text"
-                            placeholder="Search reviewers..."
-                            value={reviewerSearch}
-                            onChange={(e) => setReviewerSearch(e.target.value)}
-                            style={{
-                              width: "100%",
-                              padding: "8px 12px",
-                              background: "#111827",
-                              border: "1px solid #374151",
-                              borderRadius: 6,
-                              color: "white",
-                              fontSize: 13,
-                              marginBottom: 12,
-                            }}
-                          />
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, maxHeight: 200, overflowY: "auto" }}>
-                            {repoCollaborators
-                              .filter((c) => c.toLowerCase().includes(reviewerSearch.toLowerCase()))
-                              .map((collaborator) => {
-                                const isSelected = prQuickReviewers.includes(collaborator);
-                                return (
-                                  <button
-                                    key={collaborator}
-                                    type="button"
-                                    onClick={() => {
-                                      if (isSelected) {
-                                        setPrQuickReviewers(prQuickReviewers.filter((r) => r !== collaborator));
-                                      } else {
-                                        setPrQuickReviewers([...prQuickReviewers, collaborator]);
-                                      }
-                                    }}
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: 6,
-                                      padding: "4px 10px",
-                                      borderRadius: 12,
-                                      border: isSelected ? "2px solid #60a5fa" : "1px solid #374151",
-                                      background: isSelected ? "#60a5fa30" : "#111827",
-                                      color: isSelected ? "#60a5fa" : "#d1d5db",
-                                      cursor: "pointer",
-                                      fontSize: 13,
-                                      fontWeight: 500,
-                                    }}
-                                  >
-                                    <img
-                                      src={`https://github.com/${collaborator}.png?size=32`}
-                                      alt={collaborator}
-                                      style={{ width: 18, height: 18, borderRadius: "50%" }}
-                                    />
-                                    {collaborator}
-                                  </button>
-                                );
-                              })}
-                            {repoCollaborators.length === 0 && (
-                              <span style={{ color: "#6b7280", fontStyle: "italic" }}>No collaborators found</span>
-                            )}
-                            {repoCollaborators.length > 0 && repoCollaborators.filter((c) => c.toLowerCase().includes(reviewerSearch.toLowerCase())).length === 0 && (
-                              <span style={{ color: "#6b7280", fontStyle: "italic" }}>No matching reviewers</span>
-                            )}
-                          </div>
-                          {prQuickReviewers.length > 0 && (
-                            <p style={{ color: "#9ca3af", margin: "8px 0 0", fontSize: 12 }}>
-                              Selected: {prQuickReviewers.map((r) => `@${r}`).join(", ")}
-                            </p>
+                        )}
+                      </>
+                    )}
+
+                    {/* PR Reviewers Settings */}
+                    {settingsCategory === "pr-reviewers" && (
+                      <>
+                        <h3>Reviewers</h3>
+                        <p style={{ color: "#9ca3af", margin: "0 0 16px" }}>
+                          Quick toggle reviewers in the PR section of branch details.
+                        </p>
+                        <input
+                          type="text"
+                          placeholder="Search reviewers..."
+                          value={reviewerSearch}
+                          onChange={(e) => setReviewerSearch(e.target.value)}
+                          style={{
+                            width: "100%",
+                            padding: "8px 12px",
+                            background: "#1f2937",
+                            border: "1px solid #374151",
+                            borderRadius: 6,
+                            color: "white",
+                            fontSize: 13,
+                            marginBottom: 12,
+                          }}
+                        />
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, maxHeight: 300, overflowY: "auto" }}>
+                          {repoCollaborators
+                            .filter((c) => c.toLowerCase().includes(reviewerSearch.toLowerCase()))
+                            .map((collaborator) => {
+                              const isSelected = prQuickReviewers.includes(collaborator);
+                              return (
+                                <button
+                                  key={collaborator}
+                                  type="button"
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      setPrQuickReviewers(prQuickReviewers.filter((r) => r !== collaborator));
+                                    } else {
+                                      setPrQuickReviewers([...prQuickReviewers, collaborator]);
+                                    }
+                                  }}
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 6,
+                                    padding: "4px 10px",
+                                    borderRadius: 12,
+                                    border: isSelected ? "2px solid #60a5fa" : "1px solid #374151",
+                                    background: isSelected ? "#60a5fa30" : "#1f2937",
+                                    color: isSelected ? "#60a5fa" : "#d1d5db",
+                                    cursor: "pointer",
+                                    fontSize: 13,
+                                    fontWeight: 500,
+                                  }}
+                                >
+                                  <img
+                                    src={`https://github.com/${collaborator}.png?size=32`}
+                                    alt={collaborator}
+                                    style={{ width: 18, height: 18, borderRadius: "50%" }}
+                                  />
+                                  {isSelected && "✓ "}{collaborator}
+                                </button>
+                              );
+                            })}
+                          {repoCollaborators.length === 0 && (
+                            <span style={{ color: "#6b7280", fontStyle: "italic" }}>No collaborators found</span>
+                          )}
+                          {repoCollaborators.length > 0 && repoCollaborators.filter((c) => c.toLowerCase().includes(reviewerSearch.toLowerCase())).length === 0 && (
+                            <span style={{ color: "#6b7280", fontStyle: "italic" }}>No matching reviewers</span>
                           )}
                         </div>
+                        {prQuickReviewers.length > 0 && (
+                          <p style={{ color: "#9ca3af", margin: "8px 0 0", fontSize: 12 }}>
+                            Selected: {prQuickReviewers.map((r) => `@${r}`).join(", ")}
+                          </p>
+                        )}
                       </>
                     )}
 

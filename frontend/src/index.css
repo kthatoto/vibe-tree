@@ -321,6 +321,26 @@ pre {
   color: #60a5fa;
 }
 
+.settings-modal__nav-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-modal__nav-parent {
+  display: block;
+  padding: 10px 16px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.settings-modal__nav-item--child {
+  padding-left: 28px;
+  font-size: 13px;
+}
+
 .settings-modal__content {
   flex: 1;
   padding: 20px;

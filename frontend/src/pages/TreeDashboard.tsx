@@ -3366,57 +3366,36 @@ export default function TreeDashboard() {
                             <label style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8, display: "block" }}>Selected ({prQuickReviewers.length})</label>
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                               {prQuickReviewers.map((reviewerName) => {
-                                // Check if it's a team (starts with team/) or a user
                                 const isTeam = reviewerName.startsWith("team/");
-                                const collaborator = !isTeam ? repoCollaborators.find((c) => c.login === reviewerName) : null;
-                                const team = isTeam ? repoTeams.find((t) => `team/${t.slug}` === reviewerName) : null;
-                                return (
-                                  <span
-                                    key={reviewerName}
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: 6,
-                                      padding: "4px 10px",
-                                      borderRadius: 12,
-                                      background: isTeam ? "#4f46e530" : "#60a5fa30",
-                                      color: isTeam ? "#a78bfa" : "#60a5fa",
-                                      fontSize: 13,
-                                      fontWeight: 500,
-                                    }}
-                                  >
-                                    {isTeam ? (
-                                      <>
-                                        <span style={{ fontSize: 12 }}>👥</span>
-                                        {team?.name || reviewerName.replace("team/", "")}
-                                      </>
-                                    ) : (
-                                      <>
-                                        <img
-                                          src={collaborator?.avatarUrl || `https://github.com/${reviewerName}.png?size=32`}
-                                          alt={reviewerName}
-                                          style={{ width: 18, height: 18, borderRadius: "50%" }}
-                                        />
-                                        {reviewerName}
-                                      </>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={() => setPrQuickReviewers(prQuickReviewers.filter((r) => r !== reviewerName))}
-                                      style={{
-                                        background: "none",
-                                        border: "none",
-                                        color: isTeam ? "#a78bfa" : "#60a5fa",
-                                        cursor: "pointer",
-                                        padding: "0 2px",
-                                        fontSize: 14,
-                                        lineHeight: 1,
-                                        opacity: 0.8,
-                                      }}
+                                if (isTeam) {
+                                  const team = repoTeams.find((t) => `team/${t.slug}` === reviewerName);
+                                  return (
+                                    <span
+                                      key={reviewerName}
+                                      className="chip chip--user"
+                                      style={{ background: "#4f46e530", color: "#a78bfa" }}
                                     >
-                                      ×
-                                    </button>
-                                  </span>
+                                      <span style={{ fontSize: 12 }}>👥</span>
+                                      <span className="chip__text">{team?.name || reviewerName.replace("team/", "")}</span>
+                                      <button
+                                        className="chip__remove"
+                                        onClick={() => setPrQuickReviewers(prQuickReviewers.filter((r) => r !== reviewerName))}
+                                        type="button"
+                                      >
+                                        ×
+                                      </button>
+                                    </span>
+                                  );
+                                }
+                                const collaborator = repoCollaborators.find((c) => c.login === reviewerName);
+                                return (
+                                  <UserChip
+                                    key={reviewerName}
+                                    login={reviewerName}
+                                    name={collaborator?.name}
+                                    avatarUrl={collaborator?.avatarUrl}
+                                    onRemove={() => setPrQuickReviewers(prQuickReviewers.filter((r) => r !== reviewerName))}
+                                  />
                                 );
                               })}
                             </div>
@@ -3454,28 +3433,15 @@ export default function TreeDashboard() {
                                   return team.name.toLowerCase().includes(search) || team.slug.toLowerCase().includes(search);
                                 })
                                 .map((team) => (
-                                  <button
+                                  <span
                                     key={team.slug}
-                                    type="button"
+                                    className="chip chip--user chip--clickable"
                                     onClick={() => setPrQuickReviewers([...prQuickReviewers, `team/${team.slug}`])}
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: 6,
-                                      padding: "4px 10px",
-                                      borderRadius: 12,
-                                      border: "1px solid #374151",
-                                      background: "#1f2937",
-                                      color: "#a78bfa",
-                                      cursor: "pointer",
-                                      fontSize: 13,
-                                      fontWeight: 500,
-                                    }}
                                     title={team.description || team.name}
                                   >
                                     <span style={{ fontSize: 12 }}>👥</span>
-                                    + {team.name}
-                                  </button>
+                                    <span className="chip__text">{team.name}</span>
+                                  </span>
                                 ))}
                             </div>
                           </div>
@@ -3491,33 +3457,13 @@ export default function TreeDashboard() {
                               return c.login.toLowerCase().includes(search) || (c.name && c.name.toLowerCase().includes(search));
                             })
                             .map((collaborator) => (
-                              <button
+                              <UserChip
                                 key={collaborator.login}
-                                type="button"
+                                login={collaborator.login}
+                                name={collaborator.name}
+                                avatarUrl={collaborator.avatarUrl}
                                 onClick={() => setPrQuickReviewers([...prQuickReviewers, collaborator.login])}
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 6,
-                                  padding: "4px 10px",
-                                  borderRadius: 12,
-                                  border: "1px solid #374151",
-                                  background: "#1f2937",
-                                  color: "#d1d5db",
-                                  cursor: "pointer",
-                                  fontSize: 13,
-                                  fontWeight: 500,
-                                }}
-                                title={collaborator.name ? `${collaborator.name} (@${collaborator.login})` : `@${collaborator.login}`}
-                              >
-                                <img
-                                  src={collaborator.avatarUrl || `https://github.com/${collaborator.login}.png?size=32`}
-                                  alt={collaborator.login}
-                                  style={{ width: 18, height: 18, borderRadius: "50%" }}
-                                />
-                                + {collaborator.login}
-                                {collaborator.name && <span style={{ color: "#6b7280", marginLeft: 4, fontSize: 11 }}>({collaborator.name})</span>}
-                              </button>
+                              />
                             ))}
                           {repoCollaborators.length === 0 && (
                             <span style={{ color: "#6b7280", fontStyle: "italic" }}>No collaborators found</span>

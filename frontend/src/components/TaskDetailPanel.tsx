@@ -627,16 +627,19 @@ export function TaskDetailPanel({
 
   const handleCheckoutTo = async (targetPath: string) => {
     setShowCheckoutModal(false);
-    setCheckingOut(true);
     setError(null);
+
+    // Optimistic update: immediately show as checked out
+    setCheckedOut(true);
+
+    // API request in background
     try {
       await api.checkout(targetPath, branchName);
-      setCheckedOut(true);
       onWorktreeCreated?.();
     } catch (err) {
+      // Rollback on failure
+      setCheckedOut(false);
       setError((err as Error).message);
-    } finally {
-      setCheckingOut(false);
     }
   };
 

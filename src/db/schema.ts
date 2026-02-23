@@ -378,7 +378,30 @@ export const repoLabels = sqliteTable("repo_labels", {
   repoId: text("repo_id").notNull(),
   name: text("name").notNull(),
   color: text("color").notNull(),
+  description: text("description"),
+  syncedAt: text("synced_at"),
   updatedAt: text("updated_at").notNull(),
+});
+
+// Repo collaborators (リポジトリのコラボレーターキャッシュ)
+export const repoCollaborators = sqliteTable("repo_collaborators", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  repoId: text("repo_id").notNull(),
+  login: text("login").notNull(),
+  name: text("name"),
+  avatarUrl: text("avatar_url"),
+  role: text("role"), // admin/maintain/push/triage/pull
+  syncedAt: text("synced_at").notNull(),
+});
+
+// Repo teams (リポジトリのチームキャッシュ - Organization用)
+export const repoTeams = sqliteTable("repo_teams", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  repoId: text("repo_id").notNull(),
+  slug: text("slug").notNull(), // team slug (@org/team-slug形式で使用)
+  name: text("name").notNull(), // 表示名
+  description: text("description"),
+  syncedAt: text("synced_at").notNull(),
 });
 
 // Branch files (ブランチに紐づくファイル - 画像、スクリーンショット等)

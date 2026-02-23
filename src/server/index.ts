@@ -21,6 +21,7 @@ import { todosRouter } from "./routes/todos";
 import { questionsRouter } from "./routes/questions";
 import { branchResourcesRouter } from "./routes/branch-resources";
 import { worktreesRouter } from "./routes/worktrees";
+import { repoCacheRouter } from "./routes/repo-cache";
 import { errorHandler } from "./middleware/error-handler";
 import { ptyManager } from "./pty-manager";
 import { handleWsMessage, addClient, removeClient, broadcast, type WSClient } from "./ws";
@@ -72,6 +73,7 @@ app.route("/api/todos", todosRouter);
 app.route("/api/questions", questionsRouter);
 app.route("/api/branch-resources", branchResourcesRouter);
 app.route("/api/worktrees", worktreesRouter);
+app.route("/api/repo-cache", repoCacheRouter);
 
 // Internal broadcast endpoint for MCP server
 app.post("/api/internal/broadcast", async (c) => {

@@ -777,51 +777,102 @@ branchLinksRouter.post("/detect", async (c) => {
   }
 });
 
-// GET /repo-labels-full - Get all labels for a repository (with descriptions, fetches from GitHub)
+// GET /repo-labels-full - Get all labels for a repository (from cache)
+// Note: Use /api/repo-cache/sync to refresh data, then this endpoint returns cached data
 branchLinksRouter.get("/repo-labels-full", async (c) => {
   const repoId = c.req.query("repoId");
   if (!repoId) {
     throw new BadRequestError("repoId is required");
   }
 
-  try {
-    // Fetch labels from GitHub
-    const result = (await execAsync(
-      `gh label list --repo "${repoId}" --json name,color,description --limit 100`
-    )).trim();
-    const labels = JSON.parse(result) as Array<{ name: string; color: string; description: string }>;
+  // Return cached labels
+  const cached = await db.select().from(schema.repoLabels).where(eq(schema.repoLabels.repoId, repoId));
 
-    // Cache labels
-    await cacheRepoLabels(repoId, labels);
+  // If no cached data, try to fetch from GitHub
+  if (cached.length === 0) {
+    try {
+      const result = (await execAsync(
+        `gh label list --repo "${repoId}" --json name,color,description --limit 1000`
+      )).trim();
+      const labels = JSON.parse(result) as Array<{ name: string; color: string; description: string }>;
 
-    return c.json(labels);
-  } catch (err) {
-    console.error("Failed to fetch repo labels:", err);
-    // Fallback to cached labels
-    const cached = await db.select().from(schema.repoLabels).where(eq(schema.repoLabels.repoId, repoId));
-    return c.json(cached.map((l) => ({ name: l.name, color: l.color, description: "" })));
+      // Cache labels
+      await cacheRepoLabels(repoId, labels);
+
+      return c.json(labels);
+    } catch (err) {
+      console.error("Failed to fetch repo labels:", err);
+      return c.json([]);
+    }
   }
+
+  return c.json(cached.map((l) => ({ name: l.name, color: l.color, description: l.description || "" })));
 });
 
-// GET /repo-collaborators - Get collaborators for a repository (potential reviewers)
+// GET /repo-collaborators - Get collaborators for a repository (from cache)
+// Note: Use /api/repo-cache/sync to refresh data, then this endpoint returns cached data
 branchLinksRouter.get("/repo-collaborators", async (c) => {
   const repoId = c.req.query("repoId");
   if (!repoId) {
     throw new BadRequestError("repoId is required");
   }
 
-  try {
-    // Fetch collaborators from GitHub
-    const result = (await execAsync(
-      `gh api repos/${repoId}/collaborators --jq '.[].login'`
-    )).trim();
-    const collaborators = result.split("\n").filter(Boolean);
+  // Return cached collaborators
+  const cached = await db.select().from(schema.repoCollaborators).where(eq(schema.repoCollaborators.repoId, repoId));
 
-    return c.json(collaborators);
-  } catch (err) {
-    console.error("Failed to fetch repo collaborators:", err);
-    return c.json([]);
+  // If no cached data, fetch from GitHub and cache
+  if (cached.length === 0) {
+    try {
+      const result = (await execAsync(
+        `gh api repos/${repoId}/collaborators --paginate --jq '.[] | {login, avatar_url, role_name: .role_name}'`
+      )).trim();
+
+      const lines = result.split('\n').filter(Boolean);
+      const collaborators = lines.map(line => JSON.parse(line));
+
+      // Fetch names in parallel
+      const now = new Date().toISOString();
+      const collaboratorsWithNames = await Promise.all(
+        collaborators.map(async (c) => {
+          try {
+            const userResult = (await execAsync(`gh api users/${c.login} --jq '.name'`)).trim();
+            return { ...c, name: userResult || null };
+          } catch {
+            return { ...c, name: null };
+          }
+        })
+      );
+
+      // Cache collaborators
+      for (const collab of collaboratorsWithNames) {
+        await db.insert(schema.repoCollaborators).values({
+          repoId,
+          login: collab.login,
+          name: collab.name,
+          avatarUrl: collab.avatar_url,
+          role: collab.role_name,
+          syncedAt: now,
+        });
+      }
+
+      return c.json(collaboratorsWithNames.map(c => ({
+        login: c.login,
+        name: c.name,
+        avatarUrl: c.avatar_url,
+        role: c.role_name,
+      })));
+    } catch (err) {
+      console.error("Failed to fetch repo collaborators:", err);
+      return c.json([]);
+    }
   }
+
+  return c.json(cached.map(c => ({
+    login: c.login,
+    name: c.name,
+    avatarUrl: c.avatarUrl,
+    role: c.role,
+  })));
 });
 
 // POST /branch-links/:id/labels/add - Add a label to a PR

@@ -233,10 +233,6 @@ export function TaskDetailPanel({
   const [instructionDraft, setInstructionDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Label/reviewer toggle state
-  const [togglingLabel, setTogglingLabel] = useState<string | null>(null);
-  const [togglingReviewer, setTogglingReviewer] = useState<string | null>(null);
-
   // Popup state for Labels/Reviewers
   const [showLabelPopup, setShowLabelPopup] = useState<number | null>(null); // PR id
   const [showReviewerPopup, setShowReviewerPopup] = useState<number | null>(null); // PR id
@@ -876,43 +872,71 @@ export function TaskDetailPanel({
     }
   };
 
-  // Toggle a label on/off for a PR
+  // Toggle a label on/off for a PR (optimistic update)
   const handleToggleLabel = async (linkId: number, labelName: string, currentLabels: Array<{ name: string; color: string }>) => {
-    setTogglingLabel(labelName);
+    const hasLabel = currentLabels.some((l) => l.name === labelName);
+    const labelInfo = allRepoLabels.find((l) => l.name === labelName);
+    const labelColor = labelInfo?.color || "6b7280";
+
+    // Optimistically update UI immediately
+    const optimisticLabels = hasLabel
+      ? currentLabels.filter((l) => l.name !== labelName)
+      : [...currentLabels, { name: labelName, color: labelColor }];
+    const optimisticLink = branchLinks.find((l) => l.id === linkId);
+    if (optimisticLink) {
+      const updatedLink = { ...optimisticLink, labels: JSON.stringify(optimisticLabels) };
+      onBranchLinksChange?.(branchName, branchLinks.map((l) => (l.id === linkId ? updatedLink : l)));
+    }
+
+    // Call API in background
     try {
-      const hasLabel = currentLabels.some((l) => l.name === labelName);
       if (hasLabel) {
         await api.removePrLabel(linkId, labelName);
       } else {
         await api.addPrLabel(linkId, labelName);
       }
-      // Refresh the link to get updated labels
+      // Refresh to sync with server state
       const refreshed = await api.refreshBranchLink(linkId);
       onBranchLinksChange?.(branchName, branchLinks.map((l) => (l.id === refreshed.id ? refreshed : l)));
     } catch (err) {
+      // Revert on error
+      if (optimisticLink) {
+        onBranchLinksChange?.(branchName, branchLinks.map((l) => (l.id === linkId ? optimisticLink : l)));
+      }
       setError((err as Error).message);
-    } finally {
-      setTogglingLabel(null);
     }
   };
 
-  // Toggle a reviewer on/off for a PR
+  // Toggle a reviewer on/off for a PR (optimistic update)
   const handleToggleReviewer = async (linkId: number, reviewer: string, currentReviewers: string[]) => {
-    setTogglingReviewer(reviewer);
+    const hasReviewer = currentReviewers.includes(reviewer);
+
+    // Optimistically update UI immediately
+    const optimisticReviewers = hasReviewer
+      ? currentReviewers.filter((r) => r !== reviewer)
+      : [...currentReviewers, reviewer];
+    const optimisticLink = branchLinks.find((l) => l.id === linkId);
+    if (optimisticLink) {
+      const updatedLink = { ...optimisticLink, reviewers: JSON.stringify(optimisticReviewers) };
+      onBranchLinksChange?.(branchName, branchLinks.map((l) => (l.id === linkId ? updatedLink : l)));
+    }
+
+    // Call API in background
     try {
-      const hasReviewer = currentReviewers.includes(reviewer);
       if (hasReviewer) {
         await api.removePrReviewer(linkId, reviewer);
       } else {
         await api.addPrReviewer(linkId, reviewer);
       }
-      // Refresh the link to get updated reviewers
+      // Refresh to sync with server state
       const refreshed = await api.refreshBranchLink(linkId);
       onBranchLinksChange?.(branchName, branchLinks.map((l) => (l.id === refreshed.id ? refreshed : l)));
     } catch (err) {
+      // Revert on error
+      if (optimisticLink) {
+        onBranchLinksChange?.(branchName, branchLinks.map((l) => (l.id === linkId ? optimisticLink : l)));
+      }
       setError((err as Error).message);
-    } finally {
-      setTogglingReviewer(null);
     }
   };
 
@@ -1414,13 +1438,11 @@ export function TaskDetailPanel({
                         const hasLabel = labels.some((l) => l.name === labelName);
                         const labelInfo = allRepoLabels.find((l) => l.name === labelName);
                         const color = labelInfo?.color || "374151";
-                        const isToggling = togglingLabel === labelName;
                         return (
                           <button
                             key={labelName}
                             className={`task-detail-panel__pr-popup-item ${hasLabel ? "task-detail-panel__pr-popup-item--active" : ""}`}
                             onClick={() => handleToggleLabel(pr.id, labelName, labels)}
-                            disabled={isToggling}
                           >
                             <span
                               className="task-detail-panel__pr-popup-color"
@@ -1428,7 +1450,6 @@ export function TaskDetailPanel({
                             />
                             <span className="task-detail-panel__pr-popup-name">{labelName}</span>
                             {hasLabel && <span className="task-detail-panel__pr-popup-check">✓</span>}
-                            {isToggling && <span className="task-detail-panel__pr-popup-loading">...</span>}
                           </button>
                         );
                       })}
@@ -1476,13 +1497,11 @@ export function TaskDetailPanel({
                       {/* Copilot - always first */}
                       {(() => {
                         const hasCopilot = reviewers.some((r) => r.toLowerCase().includes("copilot"));
-                        const isToggling = togglingReviewer === COPILOT_REVIEWER.login;
                         return (
                           <button
                             key="copilot"
                             className={`task-detail-panel__pr-popup-item ${hasCopilot ? "task-detail-panel__pr-popup-item--active" : ""}`}
                             onClick={() => handleToggleReviewer(pr.id, COPILOT_REVIEWER.login, reviewers)}
-                            disabled={isToggling}
                           >
                             <img
                               src={COPILOT_REVIEWER.avatarUrl || ""}
@@ -1491,7 +1510,6 @@ export function TaskDetailPanel({
                             />
                             <span className="task-detail-panel__pr-popup-name">Copilot</span>
                             {hasCopilot && <span className="task-detail-panel__pr-popup-check">✓</span>}
-                            {isToggling && <span className="task-detail-panel__pr-popup-loading">...</span>}
                           </button>
                         );
                       })()}
@@ -1502,14 +1520,12 @@ export function TaskDetailPanel({
                         const isTeam = reviewer.startsWith("team/");
                         const displayName = isTeam ? reviewer.replace("team/", "@") : reviewer;
                         const hasReviewer = reviewers.includes(reviewer);
-                        const isToggling = togglingReviewer === reviewer;
                         const collaborator = !isTeam ? repoCollaborators.find((c) => c.login === reviewer) : null;
                         return (
                           <button
                             key={reviewer}
                             className={`task-detail-panel__pr-popup-item ${hasReviewer ? "task-detail-panel__pr-popup-item--active" : ""}`}
                             onClick={() => handleToggleReviewer(pr.id, reviewer, reviewers)}
-                            disabled={isToggling}
                           >
                             {isTeam ? (
                               <span className="task-detail-panel__pr-popup-team-icon">👥</span>
@@ -1532,7 +1548,6 @@ export function TaskDetailPanel({
                               {isTeam ? displayName : (collaborator?.name || reviewer)}
                             </span>
                             {hasReviewer && <span className="task-detail-panel__pr-popup-check">✓</span>}
-                            {isToggling && <span className="task-detail-panel__pr-popup-loading">...</span>}
                           </button>
                         );
                       })}

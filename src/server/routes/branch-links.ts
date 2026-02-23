@@ -127,10 +127,28 @@ async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<GitH
     const isOtherBot = (login: string) =>
       login.endsWith("[bot]") && !login.toLowerCase().includes("copilot");
     const reviewers: string[] = [];
+
+    // gh CLI doesn't include Copilot in reviewRequests, so we also fetch via REST API
     if (data.reviewRequests) {
       for (const r of data.reviewRequests) {
         if (r.login && !isOtherBot(r.login)) reviewers.push(r.login);
       }
+    }
+
+    // Fetch requested_reviewers via REST API to include Copilot
+    try {
+      const requestedResult = (await execAsync(
+        `gh api repos/${repoId}/pulls/${prNumber}/requested_reviewers --jq '.users[].login'`
+      )).trim();
+      if (requestedResult) {
+        for (const login of requestedResult.split('\n')) {
+          if (login && !reviewers.includes(login) && !isOtherBot(login)) {
+            reviewers.push(login);
+          }
+        }
+      }
+    } catch {
+      // Ignore errors from REST API
     }
     // Add reviewers from reviews
     // Include Copilot if it has reviewed (any state including COMMENTED)
@@ -698,6 +716,23 @@ branchLinksRouter.post("/detect", async (c) => {
         if (r.login && !isOtherBot(r.login)) reviewers.push(r.login);
       }
     }
+
+    // Fetch requested_reviewers via REST API to include Copilot
+    try {
+      const requestedResult = (await execAsync(
+        `gh api repos/${input.repoId}/pulls/${data.number}/requested_reviewers --jq '.users[].login'`
+      )).trim();
+      if (requestedResult) {
+        for (const login of requestedResult.split('\n')) {
+          if (login && !reviewers.includes(login) && !isOtherBot(login)) {
+            reviewers.push(login);
+          }
+        }
+      }
+    } catch {
+      // Ignore errors from REST API
+    }
+
     if (data.reviews) {
       for (const r of data.reviews) {
         const state = r.state;

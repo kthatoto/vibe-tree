@@ -777,6 +777,33 @@ export default function BranchGraph({
     return { left: minX, right: maxX, width: maxX - minX, centerX: (minX + maxX) / 2 };
   }, [layoutNodes, edges]);
 
+  // Calculate preview selection during rectangle drag (real-time feedback)
+  const previewSelection = useMemo(() => {
+    if (!rectangleSelectState) return new Set<string>();
+
+    const minX = Math.min(rectangleSelectState.startX, rectangleSelectState.currentX);
+    const maxX = Math.max(rectangleSelectState.startX, rectangleSelectState.currentX);
+    const minY = Math.min(rectangleSelectState.startY, rectangleSelectState.currentY);
+    const maxY = Math.max(rectangleSelectState.startY, rectangleSelectState.currentY);
+
+    const nodesInRect = layoutNodes.filter(node => {
+      if (node.id === defaultBranch || node.isTentative) return false;
+      const nodeX = node.x;
+      const nodeY = node.y;
+      const nodeRight = nodeX + node.width;
+      const nodeBottom = nodeY + node.height;
+      return !(nodeRight < minX || nodeX > maxX || nodeBottom < minY || nodeY > maxY);
+    }).map(n => n.id);
+
+    if (rectangleSelectState.addToSelection) {
+      return new Set([...selectedBranches, ...nodesInRect]);
+    }
+    return new Set(nodesInRect);
+  }, [rectangleSelectState, layoutNodes, defaultBranch, selectedBranches]);
+
+  // Effective selection: use preview during drag, otherwise use actual selection
+  const effectiveSelection = rectangleSelectState ? previewSelection : selectedBranches;
+
   // Handle column drag movement and drop (must be after layoutNodes is defined)
   // Use ref to avoid re-running effect on every state update during drag
   useEffect(() => {
@@ -1404,7 +1431,7 @@ export default function BranchGraph({
     const nodeOffset = getNodeOffset(id);
     const x = originalX + nodeOffset;
 
-    const isSelected = selectedBranches.has(id);
+    const isSelected = effectiveSelection.has(id);
     const isDefault = id === defaultBranch;
     const hasWorktree = !!node.worktree;
     // Use branchLinks as single source of truth for PR info
@@ -1431,6 +1458,7 @@ export default function BranchGraph({
     let fillColor = "#1f2937";
     let strokeColor = "#4b5563";
     let strokeDash: string | undefined;
+    let strokeWidth = 1.5;
 
     if (isTentative) {
       // Tentative nodes have dashed purple border
@@ -1452,8 +1480,11 @@ export default function BranchGraph({
       }
     }
 
+    // Selected state - strong visual feedback
     if (isSelected) {
+      fillColor = "#1e3a5f"; // Slightly blue-tinted background
       strokeColor = "#3b82f6";
+      strokeWidth = 2.5;
       strokeDash = undefined; // Solid border when selected
     }
 
@@ -1533,6 +1564,22 @@ export default function BranchGraph({
         }}
         onMouseDown={handleNodeMouseDown}
       >
+        {/* Selection glow effect */}
+        {isSelected && (
+          <rect
+            x={x - 3}
+            y={y - 3}
+            width={nodeWidth + 6}
+            height={nodeHeight + 6}
+            rx={9}
+            ry={9}
+            fill="none"
+            stroke="#3b82f6"
+            strokeWidth={1}
+            opacity={0.4}
+            pointerEvents="none"
+          />
+        )}
         {/* Node rectangle */}
         <rect
           x={x}
@@ -1543,7 +1590,7 @@ export default function BranchGraph({
           ry={6}
           fill={fillColor}
           stroke={strokeColor}
-          strokeWidth={isSelected || isDropTarget ? 2 : 1.5}
+          strokeWidth={isDropTarget ? 2 : strokeWidth}
           strokeDasharray={strokeDash}
           onClick={(e) => {
             if (isTentative || dragState || isDefault) return;

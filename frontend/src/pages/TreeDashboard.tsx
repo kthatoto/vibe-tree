@@ -3011,11 +3011,12 @@ export default function TreeDashboard() {
                       setSelectedBranches(new Set());
                       setSelectionAnchor(null);
                     }}
-                    repoId={snapshot.repoId}
                     localPath={selectedPin.localPath}
                     branchLinks={branchLinks}
                     edges={snapshot.edges}
-                    allRepoLabels={repoLabels}
+                    quickLabels={prQuickLabels}
+                    quickReviewers={prQuickReviewers}
+                    repoLabels={repoLabels}
                     repoCollaborators={repoCollaborators}
                     onRefreshBranches={() => triggerScan(selectedPin.localPath)}
                   />

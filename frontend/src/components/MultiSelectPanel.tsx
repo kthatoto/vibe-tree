@@ -1,5 +1,7 @@
 import { useMemo, useState, useCallback } from "react";
-import { api, type BranchLink, type TreeEdge, type RepoCollaborator, type RepoLabel } from "../lib/api";
+import { api, type BranchLink, type TreeEdge, type RepoLabel, type RepoCollaborator } from "../lib/api";
+import { Dropdown, DropdownItem, DropdownEmpty } from "./atoms/Dropdown";
+import { LabelChip, UserChip } from "./atoms/Chips";
 
 interface BulkOperationProgress {
   total: number;
@@ -16,13 +18,16 @@ interface MultiSelectPanelProps {
   onUncheckAll: () => void;
   onClearSelection: () => void;
   // For bulk operations
-  repoId: string;
   localPath: string;
   branchLinks: Map<string, BranchLink[]>;
   edges: TreeEdge[];
-  allRepoLabels: RepoLabel[];
+  // Quick labels/reviewers (pre-selected in settings)
+  quickLabels: string[];
+  quickReviewers: string[];
+  // For resolving label colors
+  repoLabels: RepoLabel[];
   repoCollaborators: RepoCollaborator[];
-  onRefreshBranches?: (branches: string[]) => void;
+  onRefreshBranches?: () => void;
 }
 
 export default function MultiSelectPanel({
@@ -31,11 +36,12 @@ export default function MultiSelectPanel({
   onCheckAll,
   onUncheckAll,
   onClearSelection,
-  repoId,
   localPath,
   branchLinks,
   edges,
-  allRepoLabels,
+  quickLabels,
+  quickReviewers,
+  repoLabels,
   repoCollaborators,
   onRefreshBranches,
 }: MultiSelectPanelProps) {
@@ -93,7 +99,6 @@ export default function MultiSelectPanel({
 
   // Sort branches by dependency order for serial rebase
   const sortedBranchesForRebase = useMemo(() => {
-    // Get depth of each branch
     const getDepth = (branch: string): number => {
       let depth = 0;
       let current = branch;
@@ -103,10 +108,26 @@ export default function MultiSelectPanel({
       }
       return depth;
     };
-
-    // Sort by depth (parents first)
     return [...selectedList].sort((a, b) => getDepth(a) - getDepth(b));
   }, [selectedList, parentMap]);
+
+  // Resolve label info from name
+  const getLabelInfo = useCallback(
+    (name: string) => repoLabels.find((l) => l.name === name),
+    [repoLabels]
+  );
+
+  // Resolve reviewer info from login
+  const getReviewerInfo = useCallback(
+    (login: string) => {
+      if (login.startsWith("team/")) {
+        return { login, isTeam: true };
+      }
+      const collab = repoCollaborators.find((c) => c.login === login);
+      return collab ? { ...collab, isTeam: false } : { login, isTeam: false };
+    },
+    [repoCollaborators]
+  );
 
   // Bulk add label
   const handleBulkAddLabel = async (labelName: string) => {
@@ -143,7 +164,7 @@ export default function MultiSelectPanel({
     }
 
     setProgress((p) => ({ ...p, current: null, status: "done" }));
-    onRefreshBranches?.(targetBranches);
+    onRefreshBranches?.();
   };
 
   // Bulk add reviewer
@@ -181,7 +202,7 @@ export default function MultiSelectPanel({
     }
 
     setProgress((p) => ({ ...p, current: null, status: "done" }));
-    onRefreshBranches?.(targetBranches);
+    onRefreshBranches?.();
   };
 
   // Serial rebase
@@ -229,7 +250,7 @@ export default function MultiSelectPanel({
     }
 
     setProgress((p) => ({ ...p, current: null, status: "done" }));
-    onRefreshBranches?.(targetBranches);
+    onRefreshBranches?.();
   };
 
   // Reset progress
@@ -387,153 +408,102 @@ export default function MultiSelectPanel({
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {/* Add Label */}
-              <div style={{ position: "relative" }}>
-                <button
-                  onClick={() => setShowLabelDropdown(!showLabelDropdown)}
-                  disabled={isOperationRunning}
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    background: "#1f2937",
-                    border: "1px solid #374151",
-                    borderRadius: 6,
-                    color: "#e5e7eb",
-                    cursor: isOperationRunning ? "not-allowed" : "pointer",
-                    fontSize: 13,
-                    textAlign: "left",
-                    opacity: isOperationRunning ? 0.5 : 1,
-                  }}
-                >
-                  + Add Label to All PRs
-                </button>
-                {showLabelDropdown && (
-                  <div
+              <Dropdown
+                isOpen={showLabelDropdown}
+                onClose={() => setShowLabelDropdown(false)}
+                trigger={
+                  <button
+                    onClick={() => setShowLabelDropdown(!showLabelDropdown)}
+                    disabled={isOperationRunning || quickLabels.length === 0}
                     style={{
-                      position: "absolute",
-                      top: "100%",
-                      left: 0,
-                      right: 0,
+                      width: "100%",
+                      padding: "8px 12px",
                       background: "#1f2937",
                       border: "1px solid #374151",
                       borderRadius: 6,
-                      marginTop: 4,
-                      maxHeight: 200,
-                      overflowY: "auto",
-                      zIndex: 10,
+                      color: isOperationRunning || quickLabels.length === 0 ? "#6b7280" : "#e5e7eb",
+                      cursor: isOperationRunning || quickLabels.length === 0 ? "not-allowed" : "pointer",
+                      fontSize: 13,
+                      textAlign: "left",
+                      opacity: isOperationRunning ? 0.5 : 1,
                     }}
                   >
-                    {allRepoLabels.map((label) => (
-                      <button
-                        key={label.name}
-                        onClick={() => handleBulkAddLabel(label.name)}
-                        style={{
-                          display: "block",
-                          width: "100%",
-                          padding: "8px 12px",
-                          background: "transparent",
-                          border: "none",
-                          color: "#e5e7eb",
-                          fontSize: 12,
-                          textAlign: "left",
-                          cursor: "pointer",
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "#374151")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      >
-                        <span
-                          style={{
-                            display: "inline-block",
-                            width: 10,
-                            height: 10,
-                            borderRadius: "50%",
-                            background: `#${label.color}`,
-                            marginRight: 8,
-                          }}
-                        />
-                        {label.name}
-                      </button>
-                    ))}
-                    {allRepoLabels.length === 0 && (
-                      <div style={{ padding: "8px 12px", color: "#6b7280", fontSize: 12 }}>No labels available</div>
+                    + Add Label to All PRs
+                    {quickLabels.length === 0 && (
+                      <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>(no quick labels)</span>
                     )}
-                  </div>
+                  </button>
+                }
+              >
+                {quickLabels.length === 0 ? (
+                  <DropdownEmpty>No quick labels configured</DropdownEmpty>
+                ) : (
+                  quickLabels.map((labelName) => {
+                    const label = getLabelInfo(labelName);
+                    return (
+                      <DropdownItem key={labelName} onClick={() => handleBulkAddLabel(labelName)}>
+                        <LabelChip name={labelName} color={label?.color || "6b7280"} />
+                      </DropdownItem>
+                    );
+                  })
                 )}
-              </div>
+              </Dropdown>
 
               {/* Add Reviewer */}
-              <div style={{ position: "relative" }}>
-                <button
-                  onClick={() => setShowReviewerDropdown(!showReviewerDropdown)}
-                  disabled={isOperationRunning}
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    background: "#1f2937",
-                    border: "1px solid #374151",
-                    borderRadius: 6,
-                    color: "#e5e7eb",
-                    cursor: isOperationRunning ? "not-allowed" : "pointer",
-                    fontSize: 13,
-                    textAlign: "left",
-                    opacity: isOperationRunning ? 0.5 : 1,
-                  }}
-                >
-                  + Add Reviewer to All PRs
-                </button>
-                {showReviewerDropdown && (
-                  <div
+              <Dropdown
+                isOpen={showReviewerDropdown}
+                onClose={() => setShowReviewerDropdown(false)}
+                trigger={
+                  <button
+                    onClick={() => setShowReviewerDropdown(!showReviewerDropdown)}
+                    disabled={isOperationRunning || quickReviewers.length === 0}
                     style={{
-                      position: "absolute",
-                      top: "100%",
-                      left: 0,
-                      right: 0,
+                      width: "100%",
+                      padding: "8px 12px",
                       background: "#1f2937",
                       border: "1px solid #374151",
                       borderRadius: 6,
-                      marginTop: 4,
-                      maxHeight: 200,
-                      overflowY: "auto",
-                      zIndex: 10,
+                      color: isOperationRunning || quickReviewers.length === 0 ? "#6b7280" : "#e5e7eb",
+                      cursor: isOperationRunning || quickReviewers.length === 0 ? "not-allowed" : "pointer",
+                      fontSize: 13,
+                      textAlign: "left",
+                      opacity: isOperationRunning ? 0.5 : 1,
                     }}
                   >
-                    {repoCollaborators.map((collab) => (
-                      <button
-                        key={collab.login}
-                        onClick={() => handleBulkAddReviewer(collab.login)}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          width: "100%",
-                          padding: "8px 12px",
-                          background: "transparent",
-                          border: "none",
-                          color: "#e5e7eb",
-                          fontSize: 12,
-                          textAlign: "left",
-                          cursor: "pointer",
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "#374151")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      >
-                        {collab.avatarUrl && (
-                          <img
-                            src={collab.avatarUrl}
-                            alt={collab.login}
-                            style={{ width: 20, height: 20, borderRadius: "50%" }}
-                          />
-                        )}
-                        {collab.login}
-                      </button>
-                    ))}
-                    {repoCollaborators.length === 0 && (
-                      <div style={{ padding: "8px 12px", color: "#6b7280", fontSize: 12 }}>
-                        No collaborators available
-                      </div>
+                    + Add Reviewer to All PRs
+                    {quickReviewers.length === 0 && (
+                      <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>(no quick reviewers)</span>
                     )}
-                  </div>
+                  </button>
+                }
+              >
+                {quickReviewers.length === 0 ? (
+                  <DropdownEmpty>No quick reviewers configured</DropdownEmpty>
+                ) : (
+                  quickReviewers.map((reviewerName) => {
+                    const info = getReviewerInfo(reviewerName);
+                    if (info.isTeam) {
+                      const teamSlug = reviewerName.replace("team/", "");
+                      return (
+                        <DropdownItem key={reviewerName} onClick={() => handleBulkAddReviewer(reviewerName)}>
+                          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontSize: 14 }}>👥</span>
+                            <span>{teamSlug}</span>
+                          </span>
+                        </DropdownItem>
+                      );
+                    }
+                    return (
+                      <DropdownItem key={reviewerName} onClick={() => handleBulkAddReviewer(reviewerName)}>
+                        <UserChip
+                          login={info.login}
+                          avatarUrl={"avatarUrl" in info ? info.avatarUrl : undefined}
+                        />
+                      </DropdownItem>
+                    );
+                  })
                 )}
-              </div>
+              </Dropdown>
             </div>
           </div>
         )}

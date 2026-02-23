@@ -2233,7 +2233,7 @@ export default function TreeDashboard() {
                         }
                       }}
                     >
-                      <span style={{ color: "#6b7280", fontSize: 12 }}>{timeStr}</span>
+                      <span style={{ color: "#6b7280", fontSize: 12, textAlign: "right" }}>{timeStr}</span>
                       <span style={{ color: "#e5e7eb", fontWeight: 500 }}>{prData.branch}</span>
                       <span style={{ color: "#6b7280", fontSize: 11, textAlign: "right" }}>{prData.label}</span>
                       <div

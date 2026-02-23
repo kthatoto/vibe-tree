@@ -2221,7 +2221,7 @@ export default function TreeDashboard() {
                         ...baseStyle,
                         display: "grid",
                         gridTemplateColumns: "52px 1fr",
-                        gap: "2px 4px",
+                        gap: "2px 6px",
                         marginBottom: 4,
                       }}
                       onMouseEnter={() => hasBranch && setHoveredLogBranch(log.branch!)}

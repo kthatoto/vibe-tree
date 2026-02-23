@@ -1117,8 +1117,16 @@ export default function TreeDashboard() {
           state: string;
           changes: Change[];
         }[];
+        scanSessionId?: string;
       };
       if (!data.prs || data.prs.length === 0) return;
+
+      const sessionId = data.scanSessionId;
+
+      // Auto-expand new scan session
+      if (sessionId) {
+        setExpandedSessions(prev => new Set([...prev, sessionId]));
+      }
 
       // Log each change with structured data (rendered by React components)
       for (const pr of data.prs) {
@@ -1131,7 +1139,7 @@ export default function TreeDashboard() {
           };
           const html = JSON.stringify(logData);
           const plainText = `${pr.branch}: ${change.type}`;
-          addLog("pr", plainText, html, pr.branch);
+          addLog("pr", plainText, html, pr.branch, sessionId);
         }
       }
 

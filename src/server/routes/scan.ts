@@ -1019,7 +1019,7 @@ scanRouter.post("/", async (c) => {
             broadcast({
               type: "pr.updated",
               repoId,
-              data: { prs: updatedPrs },
+              data: { prs: updatedPrs, scanSessionId },
             });
           }
         }

@@ -2145,11 +2145,15 @@ export default function TreeDashboard() {
                       case "checks": {
                         const oldStatus = (data.old as string)?.toLowerCase() || "unknown";
                         const newStatus = (data.new as string)?.toLowerCase() || "unknown";
+                        const oldPassed = data.oldPassed as number | undefined;
+                        const oldTotal = data.oldTotal as number | undefined;
+                        const newPassed = data.newPassed as number | undefined;
+                        const newTotal = data.newTotal as number | undefined;
                         return (
                           <>
-                            <CIBadge status={oldStatus as "success" | "failure" | "pending" | "unknown"} />
+                            <CIBadge status={oldStatus as "success" | "failure" | "pending" | "unknown"} passed={oldPassed} total={oldTotal} />
                             <span style={{ color: "#6b7280" }}>→</span>
-                            <CIBadge status={newStatus as "success" | "failure" | "pending" | "unknown"} />
+                            <CIBadge status={newStatus as "success" | "failure" | "pending" | "unknown"} passed={newPassed} total={newTotal} />
                           </>
                         );
                       }

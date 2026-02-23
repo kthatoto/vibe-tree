@@ -858,7 +858,29 @@ scanRouter.post("/", async (c) => {
               const old = existing[0];
 
               if ((old.checksStatus ?? null) !== prData.checksStatus) {
-                changes.push({ type: "checks", old: old.checksStatus, new: prData.checksStatus });
+                // Count passed/total from checks JSON
+                const countChecks = (checksJson: string | null) => {
+                  if (!checksJson) return { passed: 0, total: 0 };
+                  try {
+                    const checks = JSON.parse(checksJson) as { conclusion?: string }[];
+                    const total = checks.length;
+                    const passed = checks.filter(c => c.conclusion === "success").length;
+                    return { passed, total };
+                  } catch {
+                    return { passed: 0, total: 0 };
+                  }
+                };
+                const oldCounts = countChecks(old.checks);
+                const newCounts = countChecks(prData.checks);
+                changes.push({
+                  type: "checks",
+                  old: old.checksStatus,
+                  new: prData.checksStatus,
+                  oldPassed: oldCounts.passed,
+                  oldTotal: oldCounts.total,
+                  newPassed: newCounts.passed,
+                  newTotal: newCounts.total,
+                });
               }
               {
                 // Handle both string[] and {name: string; color: string}[] formats for backwards compatibility

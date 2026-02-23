@@ -5,6 +5,7 @@ import { api, type TaskInstruction, type ChatMessage, type TreeNode, type Branch
 import { wsClient } from "../lib/ws";
 import { computeSimpleDiff, type DiffLine } from "../lib/diff";
 import { linkifyPreContent } from "../lib/linkify";
+import { ReviewBadge, CIBadge, LabelChip, UserChip } from "./atoms/Chips";
 import "./TaskDetailPanel.css";
 
 // Helper to parse saved chunk content
@@ -1357,30 +1358,21 @@ export function TaskDetailPanel({
               </div>
               <div className="task-detail-panel__link-meta">
                 {(totalChecks > 0 || computedChecksStatus) && (
-                  <button
-                    className={`task-detail-panel__ci-badge task-detail-panel__ci-badge--${computedChecksStatus}`}
-                    onClick={() => totalChecks > 0 && setShowCIModal(true)}
-                    title={totalChecks > 0 ? "View CI details" : `CI: ${computedChecksStatus}`}
-                    style={{ cursor: totalChecks > 0 ? "pointer" : "default" }}
-                  >
-                    <span className="task-detail-panel__ci-badge-icon">
-                      {computedChecksStatus === "success" ? "✓" : computedChecksStatus === "failure" ? "✗" : "●"}
-                    </span>
-                    {totalChecks > 0 && (
-                      <span className="task-detail-panel__ci-badge-count">{passedChecks}/{totalChecks}</span>
-                    )}
-                  </button>
+                  <CIBadge
+                    status={computedChecksStatus as "success" | "failure" | "pending" | "unknown"}
+                    passed={totalChecks > 0 ? passedChecks : undefined}
+                    total={totalChecks > 0 ? totalChecks : undefined}
+                    onClick={totalChecks > 0 ? () => setShowCIModal(true) : undefined}
+                  />
                 )}
                 {(pr.reviewDecision || reviewers.length > 0) && (
-                  <span className={`task-detail-panel__review-badge task-detail-panel__review-badge--${
-                    pr.reviewDecision
-                      ? pr.reviewDecision.toLowerCase().replace('_', '-')
-                      : 'review-required'
-                  }`}>
-                    {pr.reviewDecision === "APPROVED" ? "✓ Approved" :
-                     pr.reviewDecision === "CHANGES_REQUESTED" ? "⚠ Changes Requested" :
-                     (pr.reviewDecision === "REVIEW_REQUIRED" || !pr.reviewDecision) ? "Review Required" : pr.reviewDecision}
-                  </span>
+                  <ReviewBadge
+                    status={
+                      pr.reviewDecision === "APPROVED" ? "approved" :
+                      pr.reviewDecision === "CHANGES_REQUESTED" ? "changes_requested" :
+                      "review_required"
+                    }
+                  />
                 )}
                 {pr.status && pr.status !== "open" && (
                   <span className={`task-detail-panel__link-status task-detail-panel__link-status--${pr.status}`}>

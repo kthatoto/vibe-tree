@@ -128,9 +128,9 @@ interface CIBadgeProps {
 
 export function CIBadge({ status, passed, total, onClick }: CIBadgeProps) {
   const config: Record<CIStatus, { icon: string; className: string }> = {
-    success: { icon: "✔", className: "chip--ci-success" },
+    success: { icon: "✓", className: "chip--ci-success" },
     failure: { icon: "✗", className: "chip--ci-failure" },
-    pending: { icon: "⏳", className: "chip--ci-pending" },
+    pending: { icon: "●", className: "chip--ci-pending" },
     unknown: { icon: "?", className: "chip--ci-unknown" },
   };
   const { icon, className } = config[status] || config.unknown;

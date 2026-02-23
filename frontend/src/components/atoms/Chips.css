@@ -60,13 +60,13 @@
 }
 
 .chip--review-approved {
-  background: linear-gradient(135deg, #22c55e, #16a34a);
-  color: #fff;
+  background: #065f46;
+  color: #34d399;
 }
 
 .chip--review-changes {
-  background: #ef4444;
-  color: #fff;
+  background: #7f1d1d;
+  color: #f87171;
 }
 
 .chip--review-required {

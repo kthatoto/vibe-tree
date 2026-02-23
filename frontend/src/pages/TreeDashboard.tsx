@@ -524,6 +524,7 @@ export default function TreeDashboard() {
   // Load logs from DB when project changes, clear on project switch
   useEffect(() => {
     setLogs([]); // Clear logs when project changes
+    setExpandedSessions(new Set()); // Clear expanded sessions
     logIdRef.current = 0;
     if (!snapshot?.repoId) return;
     api.getScanLogs(snapshot.repoId, 50).then((result) => {
@@ -538,6 +539,9 @@ export default function TreeDashboard() {
       }));
       setLogs(dbLogs.reverse()); // DB returns newest first, we want oldest first
       logIdRef.current = Math.max(0, ...dbLogs.map(l => l.id));
+      // Auto-expand latest 3 scan sessions
+      const sessionIds = [...new Set(result.logs.map(l => l.scanSessionId).filter(Boolean))] as string[];
+      setExpandedSessions(new Set(sessionIds.slice(0, 3)));
     }).catch(console.error);
   }, [snapshot?.repoId]);
 
@@ -2316,29 +2320,129 @@ export default function TreeDashboard() {
                 );
               };
 
+              // Render change content (used in grouped view)
+              const renderChangeContent = (log: LogEntry) => {
+                if (log.type !== "pr" || !log.html) return null;
+                let logData: { branch: string; changeType: string; data: Record<string, unknown> } | null = null;
+                try {
+                  logData = JSON.parse(log.html);
+                } catch {
+                  return null;
+                }
+                if (!logData || !logData.changeType) return null;
+
+                const { changeType, data } = logData;
+                const labelMap: Record<string, string> = {
+                  new: "NEW",
+                  checks: "CI",
+                  labels: "Labels",
+                  review: "Review",
+                  reviewers: "Reviewers",
+                };
+                const label = labelMap[changeType] || changeType;
+
+                const content = (() => {
+                  switch (changeType) {
+                    case "new":
+                      return <span style={{ color: "#22c55e", fontWeight: 600 }}>NEW PR</span>;
+                    case "checks": {
+                      const oldStatus = (data.old as string)?.toLowerCase() || "unknown";
+                      const newStatus = (data.new as string)?.toLowerCase() || "unknown";
+                      const oldPassed = data.oldPassed as number | undefined;
+                      const oldTotal = data.oldTotal as number | undefined;
+                      const newPassed = data.newPassed as number | undefined;
+                      const newTotal = data.newTotal as number | undefined;
+                      const failedChecks = (data.failedChecks as { name: string; url: string | null }[]) || [];
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <CIBadge status={oldStatus as "success" | "failure" | "pending" | "unknown"} passed={oldPassed} total={oldTotal} />
+                            <span style={{ color: "#6b7280" }}>→</span>
+                            <CIBadge status={newStatus as "success" | "failure" | "pending" | "unknown"} passed={newPassed} total={newTotal} />
+                          </div>
+                          {newStatus === "failure" && failedChecks.length > 0 && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 1, paddingLeft: 4 }}>
+                              {failedChecks.map((check, i) => (
+                                <div key={i} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10 }}>
+                                  <span style={{ color: "#f87171" }}>✗</span>
+                                  {check.url ? (
+                                    <a href={check.url} target="_blank" rel="noopener noreferrer" style={{ color: "#f87171", textDecoration: "none" }} onClick={(e) => e.stopPropagation()}>
+                                      {check.name}
+                                    </a>
+                                  ) : (
+                                    <span style={{ color: "#f87171" }}>{check.name}</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                    case "labels": {
+                      const added = (data.added as { name: string; color: string }[]) || [];
+                      const removed = (data.removed as { name: string; color: string }[]) || [];
+                      return (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                          {added.map((l, i) => <LabelChip key={`a-${i}`} name={l.name} color={l.color} />)}
+                          {removed.map((l, i) => <LabelChip key={`r-${i}`} name={l.name} color={l.color} removed />)}
+                        </div>
+                      );
+                    }
+                    case "review": {
+                      const status = (data.new as string)?.toLowerCase();
+                      if (status === "approved") return <ReviewBadge status="approved" />;
+                      if (status === "changes_requested") return <ReviewBadge status="changes_requested" />;
+                      return <ReviewBadge status="pending" />;
+                    }
+                    case "reviewers": {
+                      const newReviewers = (data.new as string)?.split(",").filter(r => r.trim()) || [];
+                      const oldReviewers = (data.old as string)?.split(",").filter(r => r.trim()) || [];
+                      return (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                          {newReviewers.map((r, i) => <UserChip key={`a-${i}`} login={r.trim()} />)}
+                          {oldReviewers.map((r, i) => <UserChip key={`r-${i}`} login={r.trim()} removed />)}
+                        </div>
+                      );
+                    }
+                    default:
+                      return <span>{changeType}</span>;
+                  }
+                })();
+
+                return { label, content, logId: log.id, branch: log.branch };
+              };
+
               return groups.map((item, idx) => {
                 // Single log (no session)
                 if ("id" in item) {
                   return renderSingleLog(item);
                 }
 
-                // Grouped logs
+                // Grouped logs by scan session
                 const group = item;
                 const isExpanded = expandedSessions.has(group.sessionId);
                 const timeStr = formatTime(group.timestamp);
-                const branches = [...new Set(group.logs.map(l => l.branch).filter(Boolean))];
+
+                // Group logs by branch within this scan session
+                const logsByBranch = new Map<string, LogEntry[]>();
+                for (const log of group.logs) {
+                  const branch = log.branch || "unknown";
+                  if (!logsByBranch.has(branch)) logsByBranch.set(branch, []);
+                  logsByBranch.get(branch)!.push(log);
+                }
+                const branches = [...logsByBranch.keys()];
 
                 return (
                   <div key={group.sessionId} style={{ marginBottom: 4 }}>
-                    {/* Group header */}
+                    {/* Scan session header */}
                     <div
                       style={{
                         display: "flex",
-                        gap: 8,
+                        gap: 6,
                         alignItems: "center",
                         cursor: "pointer",
-                        padding: "2px 4px",
-                        margin: "-2px -4px",
+                        padding: "2px 0",
                         borderRadius: 4,
                         background: isExpanded ? "rgba(59, 130, 246, 0.05)" : "transparent",
                       }}
@@ -2351,18 +2455,66 @@ export default function TreeDashboard() {
                         });
                       }}
                     >
-                      <span style={{ color: "#6b7280", fontSize: 12, minWidth: 52 }}>{timeStr}</span>
+                      <span style={{ color: "#6b7280", fontSize: 12 }}>{timeStr}</span>
                       <span style={{ color: "#60a5fa", fontSize: 11 }}>
                         {isExpanded ? "▼" : "▶"} {group.logs.length} changes
                       </span>
-                      <span style={{ color: "#9ca3af", fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {branches.join(", ")}
-                      </span>
                     </div>
-                    {/* Expanded logs */}
+                    {/* Expanded: branch groups */}
                     {isExpanded && (
-                      <div style={{ marginTop: 4, borderLeft: "2px solid #374151", paddingLeft: 8 }}>
-                        {group.logs.map(log => renderSingleLog(log, true))}
+                      <div style={{ marginTop: 2, borderLeft: "2px solid #374151", marginLeft: 4, paddingLeft: 8 }}>
+                        {branches.map(branch => {
+                          const branchLogs = logsByBranch.get(branch) || [];
+                          const isBranchHovered = hoveredLogBranch === branch;
+                          return (
+                            <div
+                              key={branch}
+                              style={{
+                                marginBottom: 4,
+                                background: isBranchHovered ? "rgba(59, 130, 246, 0.08)" : "transparent",
+                                borderRadius: 4,
+                                padding: "2px 4px",
+                                margin: "-2px -4px",
+                                cursor: "pointer",
+                              }}
+                              onMouseEnter={() => setHoveredLogBranch(branch)}
+                              onMouseLeave={() => setHoveredLogBranch(null)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (snapshot) {
+                                  const node = snapshot.nodes.find(n => n.branchName === branch);
+                                  if (node) setSelectedNode(node);
+                                }
+                              }}
+                            >
+                              {/* Branch name */}
+                              <div style={{ color: "#e5e7eb", fontWeight: 500, fontSize: 11 }}>
+                                {branch}
+                              </div>
+                              {/* Changes for this branch */}
+                              <div style={{ paddingLeft: 8, borderLeft: "1px solid #4b5563", marginLeft: 2 }}>
+                                {branchLogs.map(log => {
+                                  const change = renderChangeContent(log);
+                                  if (!change) return null;
+                                  return (
+                                    <div
+                                      key={log.id}
+                                      style={{
+                                        display: "flex",
+                                        gap: 4,
+                                        alignItems: "flex-start",
+                                        padding: "1px 0",
+                                      }}
+                                    >
+                                      <span style={{ color: "#6b7280", fontSize: 10, minWidth: 52 }}>{change.label}:</span>
+                                      {change.content}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

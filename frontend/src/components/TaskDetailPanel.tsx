@@ -1400,8 +1400,8 @@ export function TaskDetailPanel({
                         className={`task-detail-panel__pr-quick-btn ${hasLabel ? "task-detail-panel__pr-quick-btn--active" : ""}`}
                         style={{
                           borderColor: `#${color}`,
-                          backgroundColor: hasLabel ? `#${color}30` : "transparent",
-                          color: `#${color}`,
+                          backgroundColor: hasLabel ? `#${color}` : "transparent",
+                          color: hasLabel ? getTextColor(color) : `#${color}`,
                           opacity: isToggling ? 0.5 : 1,
                         }}
                         onClick={() => handleToggleLabel(pr.id, labelName, labels)}

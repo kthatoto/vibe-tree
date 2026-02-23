@@ -2159,7 +2159,7 @@ export default function TreeDashboard() {
                   <span style={{ color: "#4b5563", flexShrink: 0 }}>{timeStr}</span>
                   {log.html ? (
                     <div
-                      style={{ flex: 1, wordBreak: "break-all", color }}
+                      style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: "4px 8px", alignItems: "center", color }}
                       dangerouslySetInnerHTML={{ __html: log.html }}
                     />
                   ) : (

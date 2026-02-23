@@ -511,11 +511,30 @@ export default function TreeDashboard() {
   const logIdRef = useRef(0);
   const addLog = useCallback((type: string, message: string, html?: string, branch?: string) => {
     const id = ++logIdRef.current;
-    setLogs((prev) => [...prev.slice(-99), { id, timestamp: new Date(), type, message, html, branch }]); // Keep last 100
+    setLogs((prev) => [...prev.slice(-99), { id, timestamp: new Date(), type, message, html, branch }]);
   }, []);
 
   // Hovered log branch (for graph highlight)
   const [hoveredLogBranch, setHoveredLogBranch] = useState<string | null>(null);
+
+  // Load logs from DB when project changes, clear on project switch
+  useEffect(() => {
+    setLogs([]); // Clear logs when project changes
+    logIdRef.current = 0;
+    if (!snapshot?.repoId) return;
+    api.getScanLogs(snapshot.repoId, 50).then((result) => {
+      const dbLogs = result.logs.map((log) => ({
+        id: log.id,
+        timestamp: new Date(log.createdAt),
+        type: log.logType,
+        message: log.message,
+        html: log.html || undefined,
+        branch: log.branchName || undefined,
+      }));
+      setLogs(dbLogs.reverse()); // DB returns newest first, we want oldest first
+      logIdRef.current = Math.max(0, ...dbLogs.map(l => l.id));
+    }).catch(console.error);
+  }, [snapshot?.repoId]);
 
   // Next scan countdown
   const [nextScanIn, setNextScanIn] = useState<number | null>(null);
@@ -1102,20 +1121,23 @@ export default function TreeDashboard() {
         return luminance > 0.5 ? "#000000" : "#ffffff";
       };
 
-      // Format change as HTML line
-      const formatChangeHtml = (change: Change) => {
+      // Format change as HTML row (label cell + content cell)
+      const formatChangeRow = (change: Change): string => {
         const ciHtml = (status: string | null | undefined) => {
-          if (status === "success") return '<span style="color:#22c55e">Success ✔</span>';
-          if (status === "failure") return '<span style="color:#ef4444">Failure ✗</span>';
-          if (status === "pending") return '<span style="color:#eab308">Pending ⏳</span>';
+          if (status === "success") return '<span style="color:#22c55e">✔</span>';
+          if (status === "failure") return '<span style="color:#ef4444">✗</span>';
+          if (status === "pending") return '<span style="color:#eab308">⏳</span>';
           return '<span style="color:#9ca3af">?</span>';
         };
 
+        const row = (label: string, content: string) =>
+          `<div style="display:contents"><span style="color:#6b7280;font-size:11px">${label}</span><div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">${content}</div></div>`;
+
         switch (change.type) {
           case "new":
-            return '<span style="color:#22c55e;font-weight:500">NEW PR</span>';
+            return row("", '<span style="color:#22c55e;font-weight:500">NEW PR</span>');
           case "checks":
-            return `CI: ${ciHtml(change.old)} → ${ciHtml(change.new)}`;
+            return row("CI", `${ciHtml(change.old)} → ${ciHtml(change.new)}`);
           case "labels": {
             const parts: string[] = [];
             if (change.added) {
@@ -1132,17 +1154,17 @@ export default function TreeDashboard() {
                 parts.push(`<span style="background:${bg};color:${text};padding:1px 6px;border-radius:10px;font-size:11px;text-decoration:line-through;opacity:0.6">${label.name}</span>`);
               });
             }
-            return `Labels: ${parts.join(" ")}`;
+            return row("Labels", parts.join(" "));
           }
           case "review": {
             const newStatus = change.new?.toLowerCase();
             if (newStatus === "approved") {
-              return '<span style="display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:2px 8px;border-radius:12px;font-weight:600;font-size:11px">✓ APPROVED</span>';
+              return row("Review", '<span style="background:#22c55e;color:#fff;padding:1px 6px;border-radius:10px;font-weight:500;font-size:11px">✓ Approved</span>');
             }
             if (newStatus === "changes_requested") {
-              return '<span style="display:inline-flex;align-items:center;gap:4px;background:#ef4444;color:#fff;padding:2px 8px;border-radius:12px;font-weight:500;font-size:11px">⚠ Changes Requested</span>';
+              return row("Review", '<span style="background:#ef4444;color:#fff;padding:1px 6px;border-radius:10px;font-size:11px">⚠ Changes</span>');
             }
-            return `Review: <span style="color:#9ca3af">${change.old || "none"}</span> → <span style="color:#a78bfa">${change.new || "none"}</span>`;
+            return row("Review", `<span style="color:#9ca3af">${change.old || "none"}</span> → <span style="color:#a78bfa">${change.new || "none"}</span>`);
           }
           case "reviewers": {
             const parts: string[] = [];
@@ -1155,7 +1177,7 @@ export default function TreeDashboard() {
               const color = isAdded ? "#22c55e" : "#ef4444";
               const prefix = isAdded ? "+" : "";
               const strikethrough = isAdded ? "" : "text-decoration:line-through;opacity:0.6;";
-              return `<span style="display:inline-flex;align-items:center;gap:3px;background:${isAdded ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)"};padding:2px 6px;border-radius:12px;${strikethrough}"><img src="${avatarUrl}" style="width:14px;height:14px;border-radius:50%" onerror="this.style.display='none'"/><span style="color:${color};font-size:11px">${prefix}${displayName}</span></span>`;
+              return `<span style="display:inline-flex;align-items:center;gap:2px;background:${isAdded ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)"};padding:1px 6px;border-radius:10px;${strikethrough}"><img src="${avatarUrl}" style="width:14px;height:14px;border-radius:50%" onerror="this.style.display='none'"/><span style="color:${color};font-size:11px">${prefix}${displayName}</span></span>`;
             };
             if (change.new) {
               change.new.split(",").forEach(r => {
@@ -1167,17 +1189,17 @@ export default function TreeDashboard() {
                 if (r.trim()) parts.push(formatReviewer(r.trim(), false));
               });
             }
-            return `<span style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">Reviewers: ${parts.join(" ")}</span>`;
+            return row("Reviewers", parts.join(" "));
           }
           default:
-            return change.type;
+            return row(change.type, "");
         }
       };
 
-      // Log the update with rich HTML formatting
+      // Log the update with grid HTML structure
       for (const pr of data.prs) {
-        const lines = pr.changes.map(formatChangeHtml);
-        const html = `<div style="font-weight:500;margin-bottom:2px">${pr.branch}</div>${lines.map(l => `<div style="padding-left:8px;font-size:12px">${l}</div>`).join("")}`;
+        const changeRows = pr.changes.map(formatChangeRow).join("");
+        const html = `<div style="display:contents"><span style="color:#6b7280;font-size:11px">__TIME__</span><span style="color:#e5e7eb;font-weight:500">${pr.branch}</span></div>${changeRows}`;
         const plainText = `${pr.branch}: ${pr.changes.map(c => c.type).join(", ")}`;
         addLog("pr", plainText, html, pr.branch);
       }
@@ -2160,21 +2182,54 @@ export default function TreeDashboard() {
                 : log.type === "scan" ? "#60a5fa"
                 : log.type === "branch" ? "#a78bfa"
                 : log.type === "fetch" ? "#34d399"
-                : log.type === "pr" ? "#d1d5db"  // Changed from green to neutral gray
+                : log.type === "pr" ? "#d1d5db"
                 : "#9ca3af";
               const hasBranch = !!log.branch;
+
+              const baseStyle = {
+                cursor: hasBranch ? "pointer" : "default",
+                padding: "2px 4px",
+                margin: "-2px -4px",
+                borderRadius: 4,
+                background: hasBranch && hoveredLogBranch === log.branch ? "rgba(59, 130, 246, 0.1)" : "transparent",
+              };
+
+              // PR log with grid structure (HTML contains display:contents rows)
+              if (log.type === "pr" && log.html?.includes("display:contents")) {
+                const htmlWithTime = log.html.replace("__TIME__", timeStr);
+                return (
+                  <div
+                    key={log.id}
+                    style={{
+                      ...baseStyle,
+                      marginBottom: 6,
+                      display: "grid",
+                      gridTemplateColumns: "60px 1fr",
+                      gap: "2px 8px",
+                    }}
+                    onMouseEnter={() => hasBranch && setHoveredLogBranch(log.branch!)}
+                    onMouseLeave={() => hasBranch && setHoveredLogBranch(null)}
+                    onClick={() => {
+                      if (hasBranch && snapshot) {
+                        const node = snapshot.nodes.find(n => n.branchName === log.branch);
+                        if (node) setSelectedNode(node);
+                      }
+                    }}
+                    dangerouslySetInnerHTML={{ __html: htmlWithTime }}
+                  />
+                );
+              }
+
+              // Other log types (simple layout)
               return (
                 <div
                   key={log.id}
                   style={{
+                    ...baseStyle,
                     display: "flex",
-                    gap: 6,
+                    gap: 8,
                     marginBottom: 4,
-                    cursor: hasBranch ? "pointer" : "default",
-                    padding: "2px 4px",
-                    margin: "-2px -4px",
-                    borderRadius: 4,
-                    background: hasBranch && hoveredLogBranch === log.branch ? "rgba(59, 130, 246, 0.1)" : "transparent",
+                    alignItems: "flex-start",
                   }}
                   onMouseEnter={() => hasBranch && setHoveredLogBranch(log.branch!)}
                   onMouseLeave={() => hasBranch && setHoveredLogBranch(null)}
@@ -2185,10 +2240,10 @@ export default function TreeDashboard() {
                     }
                   }}
                 >
-                  <span style={{ color: "#6b7280", flexShrink: 0, fontSize: 11 }}>{timeStr}</span>
+                  <span style={{ color: "#6b7280", flexShrink: 0, fontSize: 11, minWidth: 60 }}>{timeStr}</span>
                   {log.html ? (
                     <div
-                      style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: "4px 8px", alignItems: "center", color }}
+                      style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", color }}
                       dangerouslySetInnerHTML={{ __html: log.html }}
                     />
                   ) : (

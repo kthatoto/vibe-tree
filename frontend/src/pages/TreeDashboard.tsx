@@ -2506,7 +2506,7 @@ export default function TreeDashboard() {
                                         padding: "1px 0",
                                       }}
                                     >
-                                      <span style={{ color: "#6b7280", fontSize: 10, minWidth: 52 }}>{change.label}:</span>
+                                      <span style={{ color: "#6b7280", fontSize: 10, minWidth: 52, textAlign: "right", display: "inline-block" }}>{change.label}:</span>
                                       {change.content}
                                     </div>
                                   );

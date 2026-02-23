@@ -1,7 +1,8 @@
 import { useMemo, useState, useCallback } from "react";
 import { api, type BranchLink, type TreeEdge, type RepoLabel, type RepoCollaborator } from "../lib/api";
-import { Dropdown, DropdownItem, DropdownEmpty } from "./atoms/Dropdown";
-import { LabelChip, UserChip } from "./atoms/Chips";
+import { Dropdown } from "./atoms/Dropdown";
+import { LabelChip, UserChip, TeamChip } from "./atoms/Chips";
+import "./TaskDetailPanel.css";
 
 interface BulkOperationProgress {
   total: number;
@@ -62,6 +63,10 @@ export default function MultiSelectPanel({
   // Dropdown states
   const [showLabelDropdown, setShowLabelDropdown] = useState(false);
   const [showReviewerDropdown, setShowReviewerDropdown] = useState(false);
+
+  // Selected items in dropdowns (before applying)
+  const [pendingLabels, setPendingLabels] = useState<Set<string>>(new Set());
+  const [pendingReviewers, setPendingReviewers] = useState<Set<string>>(new Set());
 
   // Get branches with PRs
   const branchesWithPRs = useMemo(() => {
@@ -129,14 +134,43 @@ export default function MultiSelectPanel({
     [repoCollaborators]
   );
 
-  // Bulk add label
-  const handleBulkAddLabel = async (labelName: string) => {
+  // Toggle label selection
+  const togglePendingLabel = (labelName: string) => {
+    setPendingLabels((prev) => {
+      const next = new Set(prev);
+      if (next.has(labelName)) {
+        next.delete(labelName);
+      } else {
+        next.add(labelName);
+      }
+      return next;
+    });
+  };
+
+  // Toggle reviewer selection
+  const togglePendingReviewer = (reviewer: string) => {
+    setPendingReviewers((prev) => {
+      const next = new Set(prev);
+      if (next.has(reviewer)) {
+        next.delete(reviewer);
+      } else {
+        next.add(reviewer);
+      }
+      return next;
+    });
+  };
+
+  // Apply labels
+  const handleApplyLabels = async () => {
+    if (pendingLabels.size === 0) return;
     setShowLabelDropdown(false);
+
     const targetBranches = branchesWithPRs;
-    if (targetBranches.length === 0) return;
+    const labelsToAdd = [...pendingLabels];
+    const totalOps = targetBranches.length * labelsToAdd.length;
 
     setProgress({
-      total: targetBranches.length,
+      total: totalOps,
       completed: 0,
       current: null,
       results: [],
@@ -144,37 +178,48 @@ export default function MultiSelectPanel({
     });
 
     const results: BulkOperationProgress["results"] = [];
+    let completed = 0;
 
     for (const branch of targetBranches) {
-      setProgress((p) => ({ ...p, current: branch }));
       const linkId = getPRLinkId(branch);
       if (!linkId) {
-        results.push({ branch, success: false, message: "No PR found" });
-        setProgress((p) => ({ ...p, completed: p.completed + 1, results: [...results] }));
+        for (const label of labelsToAdd) {
+          results.push({ branch: `${branch} (${label})`, success: false, message: "No PR found" });
+          completed++;
+        }
+        setProgress((p) => ({ ...p, completed, results: [...results] }));
         continue;
       }
 
-      try {
-        await api.addPrLabel(linkId, labelName);
-        results.push({ branch, success: true });
-      } catch (e) {
-        results.push({ branch, success: false, message: String(e) });
+      for (const label of labelsToAdd) {
+        setProgress((p) => ({ ...p, current: `${branch}: ${label}` }));
+        try {
+          await api.addPrLabel(linkId, label);
+          results.push({ branch: `${branch} (${label})`, success: true });
+        } catch (e) {
+          results.push({ branch: `${branch} (${label})`, success: false, message: String(e) });
+        }
+        completed++;
+        setProgress((p) => ({ ...p, completed, results: [...results] }));
       }
-      setProgress((p) => ({ ...p, completed: p.completed + 1, results: [...results] }));
     }
 
     setProgress((p) => ({ ...p, current: null, status: "done" }));
+    setPendingLabels(new Set());
     onRefreshBranches?.();
   };
 
-  // Bulk add reviewer
-  const handleBulkAddReviewer = async (reviewer: string) => {
+  // Apply reviewers
+  const handleApplyReviewers = async () => {
+    if (pendingReviewers.size === 0) return;
     setShowReviewerDropdown(false);
+
     const targetBranches = branchesWithPRs;
-    if (targetBranches.length === 0) return;
+    const reviewersToAdd = [...pendingReviewers];
+    const totalOps = targetBranches.length * reviewersToAdd.length;
 
     setProgress({
-      total: targetBranches.length,
+      total: totalOps,
       completed: 0,
       current: null,
       results: [],
@@ -182,26 +227,34 @@ export default function MultiSelectPanel({
     });
 
     const results: BulkOperationProgress["results"] = [];
+    let completed = 0;
 
     for (const branch of targetBranches) {
-      setProgress((p) => ({ ...p, current: branch }));
       const linkId = getPRLinkId(branch);
       if (!linkId) {
-        results.push({ branch, success: false, message: "No PR found" });
-        setProgress((p) => ({ ...p, completed: p.completed + 1, results: [...results] }));
+        for (const reviewer of reviewersToAdd) {
+          results.push({ branch: `${branch} (${reviewer})`, success: false, message: "No PR found" });
+          completed++;
+        }
+        setProgress((p) => ({ ...p, completed, results: [...results] }));
         continue;
       }
 
-      try {
-        await api.addPrReviewer(linkId, reviewer);
-        results.push({ branch, success: true });
-      } catch (e) {
-        results.push({ branch, success: false, message: String(e) });
+      for (const reviewer of reviewersToAdd) {
+        setProgress((p) => ({ ...p, current: `${branch}: ${reviewer}` }));
+        try {
+          await api.addPrReviewer(linkId, reviewer);
+          results.push({ branch: `${branch} (${reviewer})`, success: true });
+        } catch (e) {
+          results.push({ branch: `${branch} (${reviewer})`, success: false, message: String(e) });
+        }
+        completed++;
+        setProgress((p) => ({ ...p, completed, results: [...results] }));
       }
-      setProgress((p) => ({ ...p, completed: p.completed + 1, results: [...results] }));
     }
 
     setProgress((p) => ({ ...p, current: null, status: "done" }));
+    setPendingReviewers(new Set());
     onRefreshBranches?.();
   };
 
@@ -236,7 +289,6 @@ export default function MultiSelectPanel({
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e);
         results.push({ branch, success: false, message });
-        // Stop on first error for rebase (subsequent rebases depend on previous)
         setProgress((p) => ({
           ...p,
           completed: p.completed + 1,
@@ -264,14 +316,25 @@ export default function MultiSelectPanel({
     });
   };
 
+  // Close dropdown and reset pending
+  const closeLabelDropdown = () => {
+    setShowLabelDropdown(false);
+    setPendingLabels(new Set());
+  };
+
+  const closeReviewerDropdown = () => {
+    setShowReviewerDropdown(false);
+    setPendingReviewers(new Set());
+  };
+
   const isOperationRunning = progress.status === "running";
 
   return (
-    <div className="panel">
-      <div className="panel__header">
+    <div className="task-detail-panel">
+      <div className="task-detail-panel__header">
         <h3>{selectedBranches.size} branches selected</h3>
         <button
-          className="btn-icon btn-icon--small"
+          className="task-detail-panel__close"
           onClick={onClearSelection}
           title="Clear selection"
           style={{ marginLeft: "auto" }}
@@ -281,7 +344,7 @@ export default function MultiSelectPanel({
         </button>
       </div>
 
-      <div style={{ padding: "16px", overflowY: "auto", maxHeight: "calc(100vh - 300px)" }}>
+      <div style={{ padding: "16px", flex: 1 }}>
         {/* Progress display */}
         {progress.status !== "idle" && (
           <div
@@ -410,7 +473,7 @@ export default function MultiSelectPanel({
               {/* Add Label */}
               <Dropdown
                 isOpen={showLabelDropdown}
-                onClose={() => setShowLabelDropdown(false)}
+                onClose={closeLabelDropdown}
                 trigger={
                   <button
                     onClick={() => setShowLabelDropdown(!showLabelDropdown)}
@@ -428,31 +491,102 @@ export default function MultiSelectPanel({
                       opacity: isOperationRunning ? 0.5 : 1,
                     }}
                   >
-                    + Add Label to All PRs
+                    + Add Labels to All PRs
                     {quickLabels.length === 0 && (
                       <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>(no quick labels)</span>
                     )}
                   </button>
                 }
               >
-                {quickLabels.length === 0 ? (
-                  <DropdownEmpty>No quick labels configured</DropdownEmpty>
-                ) : (
-                  quickLabels.map((labelName) => {
-                    const label = getLabelInfo(labelName);
-                    return (
-                      <DropdownItem key={labelName} onClick={() => handleBulkAddLabel(labelName)}>
-                        <LabelChip name={labelName} color={label?.color || "6b7280"} />
-                      </DropdownItem>
-                    );
-                  })
-                )}
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  {/* Label list with checkboxes */}
+                  <div style={{ maxHeight: 180, overflowY: "auto" }}>
+                    {quickLabels.map((labelName) => {
+                      const label = getLabelInfo(labelName);
+                      const isSelected = pendingLabels.has(labelName);
+                      return (
+                        <button
+                          key={labelName}
+                          onClick={() => togglePendingLabel(labelName)}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            width: "100%",
+                            padding: "8px 12px",
+                            background: isSelected ? "#374151" : "transparent",
+                            border: "none",
+                            color: "#e5e7eb",
+                            fontSize: 12,
+                            textAlign: "left",
+                            cursor: "pointer",
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isSelected) e.currentTarget.style.background = "#2d3748";
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSelected) e.currentTarget.style.background = "transparent";
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: 16,
+                              height: 16,
+                              borderRadius: 3,
+                              border: isSelected ? "none" : "1px solid #4b5563",
+                              background: isSelected ? "#3b82f6" : "transparent",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: 10,
+                              color: "#fff",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {isSelected && "✓"}
+                          </span>
+                          <LabelChip name={labelName} color={label?.color || "6b7280"} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Apply footer */}
+                  <div
+                    style={{
+                      borderTop: "1px solid #374151",
+                      padding: "8px 12px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <span style={{ fontSize: 11, color: "#9ca3af" }}>
+                      {pendingLabels.size} selected
+                    </span>
+                    <button
+                      onClick={handleApplyLabels}
+                      disabled={pendingLabels.size === 0}
+                      style={{
+                        padding: "6px 16px",
+                        background: pendingLabels.size === 0 ? "#374151" : "#3b82f6",
+                        border: "none",
+                        borderRadius: 4,
+                        color: pendingLabels.size === 0 ? "#6b7280" : "#fff",
+                        fontSize: 12,
+                        fontWeight: 500,
+                        cursor: pendingLabels.size === 0 ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </div>
               </Dropdown>
 
               {/* Add Reviewer */}
               <Dropdown
                 isOpen={showReviewerDropdown}
-                onClose={() => setShowReviewerDropdown(false)}
+                onClose={closeReviewerDropdown}
                 trigger={
                   <button
                     onClick={() => setShowReviewerDropdown(!showReviewerDropdown)}
@@ -470,39 +604,103 @@ export default function MultiSelectPanel({
                       opacity: isOperationRunning ? 0.5 : 1,
                     }}
                   >
-                    + Add Reviewer to All PRs
+                    + Add Reviewers to All PRs
                     {quickReviewers.length === 0 && (
                       <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>(no quick reviewers)</span>
                     )}
                   </button>
                 }
               >
-                {quickReviewers.length === 0 ? (
-                  <DropdownEmpty>No quick reviewers configured</DropdownEmpty>
-                ) : (
-                  quickReviewers.map((reviewerName) => {
-                    const info = getReviewerInfo(reviewerName);
-                    if (info.isTeam) {
-                      const teamSlug = reviewerName.replace("team/", "");
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  {/* Reviewer list with checkboxes */}
+                  <div style={{ maxHeight: 180, overflowY: "auto" }}>
+                    {quickReviewers.map((reviewerName) => {
+                      const info = getReviewerInfo(reviewerName);
+                      const isSelected = pendingReviewers.has(reviewerName);
                       return (
-                        <DropdownItem key={reviewerName} onClick={() => handleBulkAddReviewer(reviewerName)}>
-                          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ fontSize: 14 }}>👥</span>
-                            <span>{teamSlug}</span>
+                        <button
+                          key={reviewerName}
+                          onClick={() => togglePendingReviewer(reviewerName)}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            width: "100%",
+                            padding: "8px 12px",
+                            background: isSelected ? "#374151" : "transparent",
+                            border: "none",
+                            color: "#e5e7eb",
+                            fontSize: 12,
+                            textAlign: "left",
+                            cursor: "pointer",
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isSelected) e.currentTarget.style.background = "#2d3748";
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSelected) e.currentTarget.style.background = "transparent";
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: 16,
+                              height: 16,
+                              borderRadius: 3,
+                              border: isSelected ? "none" : "1px solid #4b5563",
+                              background: isSelected ? "#3b82f6" : "transparent",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: 10,
+                              color: "#fff",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {isSelected && "✓"}
                           </span>
-                        </DropdownItem>
+                          {info.isTeam ? (
+                            <TeamChip slug={reviewerName.replace("team/", "")} />
+                          ) : (
+                            <UserChip
+                              login={info.login}
+                              avatarUrl={"avatarUrl" in info ? info.avatarUrl : undefined}
+                            />
+                          )}
+                        </button>
                       );
-                    }
-                    return (
-                      <DropdownItem key={reviewerName} onClick={() => handleBulkAddReviewer(reviewerName)}>
-                        <UserChip
-                          login={info.login}
-                          avatarUrl={"avatarUrl" in info ? info.avatarUrl : undefined}
-                        />
-                      </DropdownItem>
-                    );
-                  })
-                )}
+                    })}
+                  </div>
+                  {/* Apply footer */}
+                  <div
+                    style={{
+                      borderTop: "1px solid #374151",
+                      padding: "8px 12px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <span style={{ fontSize: 11, color: "#9ca3af" }}>
+                      {pendingReviewers.size} selected
+                    </span>
+                    <button
+                      onClick={handleApplyReviewers}
+                      disabled={pendingReviewers.size === 0}
+                      style={{
+                        padding: "6px 16px",
+                        background: pendingReviewers.size === 0 ? "#374151" : "#3b82f6",
+                        border: "none",
+                        borderRadius: 4,
+                        color: pendingReviewers.size === 0 ? "#6b7280" : "#fff",
+                        fontSize: 12,
+                        fontWeight: 500,
+                        cursor: pendingReviewers.size === 0 ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </div>
               </Dropdown>
             </div>
           </div>

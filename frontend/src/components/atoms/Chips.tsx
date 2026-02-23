@@ -92,6 +92,55 @@ export function UserChip({ login, name, avatarUrl, removed, onClick, onRemove }:
   );
 }
 
+// GitHub Team Chip
+interface TeamChipProps {
+  slug: string;
+  org?: string;
+  removed?: boolean;
+  onClick?: () => void;
+  onRemove?: () => void;
+}
+
+export function TeamChip({ slug, org, removed, onClick, onRemove }: TeamChipProps) {
+  // GitHub team identicon URL
+  const avatar = org
+    ? `https://github.com/orgs/${org}/teams/${slug}/avatar?s=32`
+    : `https://github.com/identicons/${slug}.png`;
+
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    img.style.display = "none";
+    const placeholder = document.createElement("span");
+    placeholder.className = "chip__avatar-placeholder chip__avatar-placeholder--team";
+    placeholder.textContent = slug.charAt(0).toUpperCase();
+    img.parentElement?.insertBefore(placeholder, img);
+  };
+
+  return (
+    <span
+      className={`chip chip--user chip--team ${removed ? "chip--removed" : ""} ${onClick ? "chip--clickable" : ""}`}
+      onClick={onClick}
+    >
+      <img
+        src={avatar}
+        alt={slug}
+        className="chip__avatar"
+        onError={handleImageError}
+      />
+      <span className="chip__text">{slug}</span>
+      {onRemove && (
+        <button
+          className="chip__remove"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          type="button"
+        >
+          ×
+        </button>
+      )}
+    </span>
+  );
+}
+
 // Review Status Badge
 type ReviewStatus = "approved" | "changes_requested" | "review_required" | "pending";
 

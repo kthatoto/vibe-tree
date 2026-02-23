@@ -23,7 +23,9 @@
 
 /* Label chip */
 .chip--label {
-  padding: 1px 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 /* User chip */
@@ -32,6 +34,16 @@
   border: 1px solid #374151;
   padding: 2px 8px 2px 2px;
   color: #e5e7eb;
+}
+
+/* Team chip */
+.chip--team {
+  background: #1e3a5f;
+  border: 1px solid #3b82f6;
+}
+
+.chip__avatar-placeholder--team {
+  background: #3b82f6;
 }
 
 .chip__avatar {

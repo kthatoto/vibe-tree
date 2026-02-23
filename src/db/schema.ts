@@ -423,6 +423,7 @@ export const branchFiles = sqliteTable("branch_files", {
 export const scanLogs = sqliteTable("scan_logs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   repoId: text("repo_id").notNull(),
+  scanSessionId: text("scan_session_id"), // groups logs from the same scan
   logType: text("log_type").notNull(), // 'pr' | 'scan' | 'branch' | 'fetch' | 'error'
   message: text("message").notNull(), // plain text message for search
   html: text("html"), // rich HTML content for display

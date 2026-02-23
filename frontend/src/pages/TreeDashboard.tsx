@@ -1121,8 +1121,8 @@ export default function TreeDashboard() {
         return luminance > 0.5 ? "#000000" : "#ffffff";
       };
 
-      // Format change as HTML row (label cell + content cell)
-      const formatChangeRow = (change: Change): string => {
+      // Format change content HTML (2nd line)
+      const formatChangeContent = (change: Change): string => {
         const ciHtml = (status: string | null | undefined) => {
           if (status === "success") return '<span style="color:#22c55e">✔</span>';
           if (status === "failure") return '<span style="color:#ef4444">✗</span>';
@@ -1130,41 +1130,38 @@ export default function TreeDashboard() {
           return '<span style="color:#9ca3af">?</span>';
         };
 
-        const row = (label: string, content: string) =>
-          `<div style="display:contents"><span style="color:#6b7280;font-size:11px">${label}</span><div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">${content}</div></div>`;
-
         switch (change.type) {
           case "new":
-            return row("", '<span style="color:#22c55e;font-weight:500">NEW PR</span>');
+            return '<span style="color:#22c55e;font-weight:600">NEW PR</span>';
           case "checks":
-            return row("CI", `${ciHtml(change.old)} → ${ciHtml(change.new)}`);
+            return `<span style="color:#6b7280">CI:</span> ${ciHtml(change.old)} → ${ciHtml(change.new)}`;
           case "labels": {
             const parts: string[] = [];
             if (change.added) {
               change.added.forEach(label => {
                 const bg = `#${label.color}`;
                 const text = getTextColor(label.color);
-                parts.push(`<span style="background:${bg};color:${text};padding:1px 6px;border-radius:10px;font-size:11px">${label.name}</span>`);
+                parts.push(`<span style="background:${bg};color:${text};padding:1px 6px;border-radius:10px;font-size:11px">+${label.name}</span>`);
               });
             }
             if (change.removed) {
               change.removed.forEach(label => {
                 const bg = `#${label.color}`;
                 const text = getTextColor(label.color);
-                parts.push(`<span style="background:${bg};color:${text};padding:1px 6px;border-radius:10px;font-size:11px;text-decoration:line-through;opacity:0.6">${label.name}</span>`);
+                parts.push(`<span style="background:${bg};color:${text};padding:1px 6px;border-radius:10px;font-size:11px;text-decoration:line-through;opacity:0.6">-${label.name}</span>`);
               });
             }
-            return row("Labels", parts.join(" "));
+            return `<span style="color:#6b7280">Labels:</span> ${parts.join(" ")}`;
           }
           case "review": {
             const newStatus = change.new?.toLowerCase();
             if (newStatus === "approved") {
-              return row("Review", '<span style="background:#22c55e;color:#fff;padding:1px 6px;border-radius:10px;font-weight:500;font-size:11px">✓ Approved</span>');
+              return '<span style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:2px 8px;border-radius:10px;font-weight:600;font-size:11px">✓ APPROVED</span>';
             }
             if (newStatus === "changes_requested") {
-              return row("Review", '<span style="background:#ef4444;color:#fff;padding:1px 6px;border-radius:10px;font-size:11px">⚠ Changes</span>');
+              return '<span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">⚠ Changes Requested</span>';
             }
-            return row("Review", `<span style="color:#9ca3af">${change.old || "none"}</span> → <span style="color:#a78bfa">${change.new || "none"}</span>`);
+            return `<span style="color:#6b7280">Review:</span> <span style="color:#a78bfa">${change.new || "none"}</span>`;
           }
           case "reviewers": {
             const parts: string[] = [];
@@ -1175,9 +1172,10 @@ export default function TreeDashboard() {
                 ? "https://avatars.githubusercontent.com/in/946600?v=4"
                 : `https://github.com/${name}.png?size=20`;
               const color = isAdded ? "#22c55e" : "#ef4444";
-              const prefix = isAdded ? "+" : "";
-              const strikethrough = isAdded ? "" : "text-decoration:line-through;opacity:0.6;";
-              return `<span style="display:inline-flex;align-items:center;gap:2px;background:${isAdded ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)"};padding:1px 6px;border-radius:10px;${strikethrough}"><img src="${avatarUrl}" style="width:14px;height:14px;border-radius:50%" onerror="this.style.display='none'"/><span style="color:${color};font-size:11px">${prefix}${displayName}</span></span>`;
+              const prefix = isAdded ? "+" : "-";
+              const bg = isAdded ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)";
+              const strike = isAdded ? "" : "text-decoration:line-through;opacity:0.7;";
+              return `<span style="display:inline-flex;align-items:center;gap:3px;background:${bg};padding:2px 8px;border-radius:10px;${strike}"><img src="${avatarUrl}" style="width:14px;height:14px;border-radius:50%" onerror="this.style.display='none'"/><span style="color:${color};font-size:11px">${prefix}${displayName}</span></span>`;
             };
             if (change.new) {
               change.new.split(",").forEach(r => {
@@ -1189,19 +1187,32 @@ export default function TreeDashboard() {
                 if (r.trim()) parts.push(formatReviewer(r.trim(), false));
               });
             }
-            return row("Reviewers", parts.join(" "));
+            return `<span style="color:#6b7280">Reviewers:</span> ${parts.join(" ")}`;
           }
           default:
-            return row(change.type, "");
+            return change.type;
         }
       };
 
-      // Log the update with grid HTML structure
+      // Log each change with 2-column grid structure
+      // Row 1: Time | Branch, Row 2+: Label | Content
       for (const pr of data.prs) {
-        const changeRows = pr.changes.map(formatChangeRow).join("");
-        const html = `<div style="display:contents"><span style="color:#6b7280;font-size:11px">__TIME__</span><span style="color:#e5e7eb;font-weight:500">${pr.branch}</span></div>${changeRows}`;
-        const plainText = `${pr.branch}: ${pr.changes.map(c => c.type).join(", ")}`;
-        addLog("pr", plainText, html, pr.branch);
+        for (const change of pr.changes) {
+          const { label, content } = (() => {
+            switch (change.type) {
+              case "new": return { label: "", content: '<span style="color:#22c55e;font-weight:600">NEW PR</span>' };
+              case "checks": return { label: "CI", content: formatChangeContent(change) };
+              case "labels": return { label: "Labels", content: formatChangeContent(change).replace('<span style="color:#6b7280">Labels:</span> ', '') };
+              case "review": return { label: "Review", content: formatChangeContent(change).replace('<span style="color:#6b7280">Review:</span> ', '') };
+              case "reviewers": return { label: "Reviewers", content: formatChangeContent(change).replace('<span style="color:#6b7280">Reviewers:</span> ', '') };
+              default: return { label: change.type, content: "" };
+            }
+          })();
+          // Store as JSON for grid rendering
+          const html = JSON.stringify({ branch: pr.branch, label, content });
+          const plainText = `${pr.branch}: ${change.type}`;
+          addLog("pr", plainText, html, pr.branch);
+        }
       }
 
       // Trigger burst mode and mark change for adaptive polling
@@ -2194,33 +2205,47 @@ export default function TreeDashboard() {
                 background: hasBranch && hoveredLogBranch === log.branch ? "rgba(59, 130, 246, 0.1)" : "transparent",
               };
 
-              // PR log with grid structure (HTML contains display:contents rows)
-              if (log.type === "pr" && log.html?.includes("display:contents")) {
-                const htmlWithTime = log.html.replace("__TIME__", timeStr);
-                return (
-                  <div
-                    key={log.id}
-                    style={{
-                      ...baseStyle,
-                      marginBottom: 6,
-                      display: "grid",
-                      gridTemplateColumns: "60px 1fr",
-                      gap: "2px 8px",
-                    }}
-                    onMouseEnter={() => hasBranch && setHoveredLogBranch(log.branch!)}
-                    onMouseLeave={() => hasBranch && setHoveredLogBranch(null)}
-                    onClick={() => {
-                      if (hasBranch && snapshot) {
-                        const node = snapshot.nodes.find(n => n.branchName === log.branch);
-                        if (node) setSelectedNode(node);
-                      }
-                    }}
-                    dangerouslySetInnerHTML={{ __html: htmlWithTime }}
-                  />
-                );
+              // PR logs: 2-column grid (Time/Label | Branch/Content)
+              if (log.type === "pr" && log.html) {
+                let prData: { branch: string; label: string; content: string } | null = null;
+                try {
+                  prData = JSON.parse(log.html);
+                } catch {
+                  // Not JSON, skip
+                }
+                if (prData) {
+                  return (
+                    <div
+                      key={log.id}
+                      style={{
+                        ...baseStyle,
+                        display: "grid",
+                        gridTemplateColumns: "70px 1fr",
+                        gap: "2px 8px",
+                        marginBottom: 4,
+                      }}
+                      onMouseEnter={() => hasBranch && setHoveredLogBranch(log.branch!)}
+                      onMouseLeave={() => hasBranch && setHoveredLogBranch(null)}
+                      onClick={() => {
+                        if (hasBranch && snapshot) {
+                          const node = snapshot.nodes.find(n => n.branchName === log.branch);
+                          if (node) setSelectedNode(node);
+                        }
+                      }}
+                    >
+                      <span style={{ color: "#6b7280", fontSize: 12 }}>{timeStr}</span>
+                      <span style={{ color: "#e5e7eb", fontWeight: 500 }}>{prData.branch}</span>
+                      <span style={{ color: "#6b7280", fontSize: 11 }}>{prData.label}</span>
+                      <div
+                        style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}
+                        dangerouslySetInnerHTML={{ __html: prData.content }}
+                      />
+                    </div>
+                  );
+                }
               }
 
-              // Other log types (simple layout)
+              // Other logs: simple flex layout
               return (
                 <div
                   key={log.id}
@@ -2240,7 +2265,7 @@ export default function TreeDashboard() {
                     }
                   }}
                 >
-                  <span style={{ color: "#6b7280", flexShrink: 0, fontSize: 11, minWidth: 60 }}>{timeStr}</span>
+                  <span style={{ color: "#6b7280", flexShrink: 0, fontSize: 12, minWidth: 70 }}>{timeStr}</span>
                   {log.html ? (
                     <div
                       style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", color }}

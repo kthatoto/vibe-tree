@@ -858,31 +858,39 @@ scanRouter.post("/", async (c) => {
               const old = existing[0];
 
               if ((old.checksStatus ?? null) !== prData.checksStatus) {
-                // Count passed/total from checks JSON
-                const countChecks = (checksJson: string | null) => {
-                  if (!checksJson) return { passed: 0, total: 0 };
+                // Count passed/total and get failed checks from checks JSON
+                type CheckInfo = { name?: string; conclusion?: string; detailsUrl?: string };
+                const parseChecks = (checksJson: string | null) => {
+                  if (!checksJson) return { passed: 0, total: 0, failed: [] as { name: string; url: string | null }[] };
                   try {
-                    const checks = JSON.parse(checksJson) as { conclusion?: string }[];
+                    const checks = JSON.parse(checksJson) as CheckInfo[];
                     const total = checks.length;
                     const passed = checks.filter(c => {
                       const conclusion = c.conclusion?.toUpperCase();
                       return conclusion === "SUCCESS" || conclusion === "SKIPPED";
                     }).length;
-                    return { passed, total };
+                    const failed = checks
+                      .filter(c => {
+                        const conclusion = c.conclusion?.toUpperCase();
+                        return conclusion !== "SUCCESS" && conclusion !== "SKIPPED" && conclusion !== null;
+                      })
+                      .map(c => ({ name: c.name || "Unknown", url: c.detailsUrl || null }));
+                    return { passed, total, failed };
                   } catch {
-                    return { passed: 0, total: 0 };
+                    return { passed: 0, total: 0, failed: [] as { name: string; url: string | null }[] };
                   }
                 };
-                const oldCounts = countChecks(old.checks);
-                const newCounts = countChecks(prData.checks);
+                const oldParsed = parseChecks(old.checks);
+                const newParsed = parseChecks(prData.checks);
                 changes.push({
                   type: "checks",
                   old: old.checksStatus,
                   new: prData.checksStatus,
-                  oldPassed: oldCounts.passed,
-                  oldTotal: oldCounts.total,
-                  newPassed: newCounts.passed,
-                  newTotal: newCounts.total,
+                  oldPassed: oldParsed.passed,
+                  oldTotal: oldParsed.total,
+                  newPassed: newParsed.passed,
+                  newTotal: newParsed.total,
+                  failedChecks: newParsed.failed,
                 });
               }
               {

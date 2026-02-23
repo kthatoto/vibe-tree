@@ -2149,12 +2149,37 @@ export default function TreeDashboard() {
                         const oldTotal = data.oldTotal as number | undefined;
                         const newPassed = data.newPassed as number | undefined;
                         const newTotal = data.newTotal as number | undefined;
+                        const failedChecks = (data.failedChecks as { name: string; url: string | null }[]) || [];
                         return (
-                          <>
-                            <CIBadge status={oldStatus as "success" | "failure" | "pending" | "unknown"} passed={oldPassed} total={oldTotal} />
-                            <span style={{ color: "#6b7280" }}>→</span>
-                            <CIBadge status={newStatus as "success" | "failure" | "pending" | "unknown"} passed={newPassed} total={newTotal} />
-                          </>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              <CIBadge status={oldStatus as "success" | "failure" | "pending" | "unknown"} passed={oldPassed} total={oldTotal} />
+                              <span style={{ color: "#6b7280" }}>→</span>
+                              <CIBadge status={newStatus as "success" | "failure" | "pending" | "unknown"} passed={newPassed} total={newTotal} />
+                            </div>
+                            {newStatus === "failure" && failedChecks.length > 0 && (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingLeft: 4 }}>
+                                {failedChecks.map((check, i) => (
+                                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10 }}>
+                                    <span style={{ color: "#f87171" }}>✗</span>
+                                    {check.url ? (
+                                      <a
+                                        href={check.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        style={{ color: "#f87171", textDecoration: "none" }}
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {check.name}
+                                      </a>
+                                    ) : (
+                                      <span style={{ color: "#f87171" }}>{check.name}</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         );
                       }
                       case "labels": {

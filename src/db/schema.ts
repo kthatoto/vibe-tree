@@ -418,3 +418,15 @@ export const branchFiles = sqliteTable("branch_files", {
   sourceUrl: text("source_url"), // original URL if from external source
   createdAt: text("created_at").notNull(),
 });
+
+// Scan logs (スキャン実行ログ)
+export const scanLogs = sqliteTable("scan_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  repoId: text("repo_id").notNull(),
+  logType: text("log_type").notNull(), // 'pr' | 'scan' | 'branch' | 'fetch' | 'error'
+  message: text("message").notNull(), // plain text message for search
+  html: text("html"), // rich HTML content for display
+  branchName: text("branch_name"), // associated branch (optional)
+  metadata: text("metadata"), // JSON: additional data (changes, etc.)
+  createdAt: text("created_at").notNull(),
+});

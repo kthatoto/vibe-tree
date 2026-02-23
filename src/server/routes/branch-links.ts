@@ -136,14 +136,18 @@ async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<GitH
     }
 
     // Fetch requested_reviewers via REST API to include Copilot
+    // Normalize Copilot login name to "Copilot" for consistency
+    const normalizeCopilot = (login: string) =>
+      login.toLowerCase().includes("copilot") ? "Copilot" : login;
     try {
       const requestedResult = (await execAsync(
         `gh api repos/${repoId}/pulls/${prNumber}/requested_reviewers --jq '.users[].login'`
       )).trim();
       if (requestedResult) {
         for (const login of requestedResult.split('\n')) {
-          if (login && !reviewers.includes(login) && !isOtherBot(login)) {
-            reviewers.push(login);
+          const normalized = normalizeCopilot(login);
+          if (normalized && !reviewers.includes(normalized) && !isOtherBot(login)) {
+            reviewers.push(normalized);
           }
         }
       }
@@ -160,9 +164,11 @@ async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<GitH
         if (!login || reviewers.includes(login)) continue;
 
         // Include Copilot if it has reviewed (any state)
-        // Note: Copilot login can be "copilot-pull-request-reviewer" or "copilot-pull-request-reviewer[bot]"
+        // Normalize to "Copilot" for consistency
         if (login.toLowerCase().includes("copilot")) {
-          reviewers.push(login);
+          if (!reviewers.includes("Copilot")) {
+            reviewers.push("Copilot");
+          }
           continue;
         }
 
@@ -740,9 +746,11 @@ branchLinksRouter.post("/detect", async (c) => {
         if (!login || reviewers.includes(login)) continue;
 
         // Include Copilot if it has reviewed (any state)
-        // Note: Copilot login can be "copilot-pull-request-reviewer" or "copilot-pull-request-reviewer[bot]"
+        // Normalize to "Copilot" for consistency
         if (login.toLowerCase().includes("copilot")) {
-          reviewers.push(login);
+          if (!reviewers.includes("Copilot")) {
+            reviewers.push("Copilot");
+          }
           continue;
         }
 

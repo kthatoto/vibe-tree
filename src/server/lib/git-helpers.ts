@@ -175,12 +175,21 @@ export async function getPRs(repoPath: string): Promise<PRInfo[]> {
       const hasReviews = humanReviews.length > 0;
 
       // Also include Copilot from reviews (any state including COMMENTED)
-      const copilotFromReviews = (pr.reviews ?? [])
-        .filter((r) => r.author?.login?.toLowerCase().includes("copilot"))
-        .map((r) => r.author!.login);
+      // Normalize all Copilot variants to "Copilot"
+      const hasCopilotReview = (pr.reviews ?? []).some(
+        (r) => r.author?.login?.toLowerCase().includes("copilot")
+      );
 
-      // Combine reviewers (deduplicated)
-      const allReviewers = [...new Set([...reviewersFromRequests, ...copilotFromReviews])];
+      // Normalize Copilot in reviewersFromRequests
+      const normalizedReviewers = reviewersFromRequests.map((name) =>
+        name.toLowerCase().includes("copilot") ? "Copilot" : name
+      );
+
+      // Add Copilot if it has reviewed
+      const allReviewers = [...new Set([
+        ...normalizedReviewers,
+        ...(hasCopilotReview ? ["Copilot"] : []),
+      ])];
 
       // Compute review status (only count human reviewers, not Copilot)
       const humanReviewers = reviewersFromRequests.filter(

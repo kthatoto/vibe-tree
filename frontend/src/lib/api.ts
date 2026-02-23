@@ -65,6 +65,16 @@ export interface RepoTeam {
   description: string | null;
 }
 
+export interface ScanLog {
+  id: number;
+  logType: string;
+  message: string;
+  html?: string | null;
+  branchName?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
 export interface Plan {
   id: number;
   repoId: string;
@@ -1448,6 +1458,30 @@ export const api = {
       aheadBehind?: { ahead: number; behind: number };
       remoteAheadBehind?: { ahead: number; behind: number };
     }>>(`${API_BASE}/branch/refresh-status`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // Scan Logs
+  getScanLogs: (repoId: string, limit?: number, before?: number) => {
+    const params = new URLSearchParams({ repoId });
+    if (limit) params.set("limit", String(limit));
+    if (before) params.set("before", String(before));
+    return fetchJson<{
+      logs: ScanLog[];
+      hasMore: boolean;
+      nextCursor: number | null;
+    }>(`${API_BASE}/scan-logs?${params}`);
+  },
+  createScanLog: (data: {
+    repoId: string;
+    logType: string;
+    message: string;
+    html?: string;
+    branchName?: string;
+    metadata?: Record<string, unknown>;
+  }) =>
+    fetchJson<ScanLog>(`${API_BASE}/scan-logs`, {
       method: "POST",
       body: JSON.stringify(data),
     }),

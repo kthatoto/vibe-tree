@@ -1456,7 +1456,7 @@ export function TaskDetailPanel({
                 <span className="task-detail-panel__pr-row-label">Reviewers:</span>
                 <div className="task-detail-panel__pr-row-items">
                   {reviewers.map((r, i) => {
-                    const isCopilot = r === "copilot-pull-request-reviewer[bot]" || r === "copilot" || r === "Copilot";
+                    const isCopilot = r.toLowerCase().includes("copilot");
                     const isTeam = r.startsWith("team/");
                     const displayName = isCopilot ? "Copilot" : isTeam ? r.replace("team/", "@") : r;
                     return (
@@ -1468,6 +1468,14 @@ export function TaskDetailPanel({
                             src={isCopilot ? COPILOT_REVIEWER.avatarUrl : `https://github.com/${r}.png?size=32`}
                             alt={displayName}
                             className="task-detail-panel__pr-reviewer-avatar"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = "none";
+                              const placeholder = document.createElement("span");
+                              placeholder.className = "task-detail-panel__pr-reviewer-placeholder";
+                              placeholder.textContent = displayName.charAt(0).toUpperCase();
+                              target.parentElement?.insertBefore(placeholder, target);
+                            }}
                           />
                         )}
                         {displayName}
@@ -1492,7 +1500,7 @@ export function TaskDetailPanel({
                     <div className="task-detail-panel__pr-popup-items">
                       {/* Copilot - always first */}
                       {(() => {
-                        const hasCopilot = reviewers.includes("copilot-pull-request-reviewer[bot]") || reviewers.includes("copilot");
+                        const hasCopilot = reviewers.some((r) => r.toLowerCase().includes("copilot"));
                         const isToggling = togglingReviewer === COPILOT_REVIEWER.login;
                         return (
                           <button
@@ -1535,6 +1543,14 @@ export function TaskDetailPanel({
                                 src={collaborator?.avatarUrl || `https://github.com/${reviewer}.png?size=32`}
                                 alt={reviewer}
                                 className="task-detail-panel__pr-popup-avatar"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.style.display = "none";
+                                  const placeholder = document.createElement("span");
+                                  placeholder.className = "task-detail-panel__pr-popup-placeholder";
+                                  placeholder.textContent = (collaborator?.name || reviewer).charAt(0).toUpperCase();
+                                  target.parentElement?.insertBefore(placeholder, target);
+                                }}
                               />
                             )}
                             <span className="task-detail-panel__pr-popup-name">

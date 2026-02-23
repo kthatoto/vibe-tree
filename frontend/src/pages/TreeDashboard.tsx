@@ -514,8 +514,9 @@ export default function TreeDashboard() {
     setLogs((prev) => [...prev.slice(-99), { id, timestamp: new Date(), type, message, html, branch }]);
   }, []);
 
-  // Hovered log branch (for graph highlight)
+  // Hovered log branch (for graph highlight) and hovered log id (for single log highlight)
   const [hoveredLogBranch, setHoveredLogBranch] = useState<string | null>(null);
+  const [hoveredLogId, setHoveredLogId] = useState<number | null>(null);
 
   // Load logs from DB when project changes, clear on project switch
   useEffect(() => {
@@ -1124,9 +1125,9 @@ export default function TreeDashboard() {
       // Format change content HTML (2nd line)
       const formatChangeContent = (change: Change): string => {
         const ciHtml = (status: string | null | undefined) => {
-          if (status === "success") return '<span style="color:#22c55e">✔</span>';
-          if (status === "failure") return '<span style="color:#ef4444">✗</span>';
-          if (status === "pending") return '<span style="color:#eab308">⏳</span>';
+          if (status === "success") return '<span style="color:#22c55e">✔ Passed</span>';
+          if (status === "failure") return '<span style="color:#ef4444">✗ Failed</span>';
+          if (status === "pending") return '<span style="color:#eab308">⏳ Pending</span>';
           return '<span style="color:#9ca3af">?</span>';
         };
 
@@ -1171,11 +1172,8 @@ export default function TreeDashboard() {
               const avatarUrl = isCopilot
                 ? "https://avatars.githubusercontent.com/in/946600?v=4"
                 : `https://github.com/${name}.png?size=20`;
-              const color = isAdded ? "#22c55e" : "#ef4444";
-              const prefix = isAdded ? "+" : "-";
-              const bg = isAdded ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)";
-              const strike = isAdded ? "" : "text-decoration:line-through;opacity:0.7;";
-              return `<span style="display:inline-flex;align-items:center;gap:3px;background:${bg};padding:2px 8px;border-radius:10px;${strike}"><img src="${avatarUrl}" style="width:14px;height:14px;border-radius:50%" onerror="this.style.display='none'"/><span style="color:${color};font-size:11px">${prefix}${displayName}</span></span>`;
+              const strike = isAdded ? "" : "text-decoration:line-through;opacity:0.5;";
+              return `<span style="display:inline-flex;align-items:center;gap:3px;${strike}"><img src="${avatarUrl}" style="width:14px;height:14px;border-radius:50%" onerror="this.style.display='none'"/><span style="color:#e5e7eb;font-size:11px">${displayName}</span></span>`;
             };
             if (change.new) {
               change.new.split(",").forEach(r => {
@@ -2202,7 +2200,7 @@ export default function TreeDashboard() {
                 padding: "2px 4px",
                 margin: "-2px -4px",
                 borderRadius: 4,
-                background: hasBranch && hoveredLogBranch === log.branch ? "rgba(59, 130, 246, 0.1)" : "transparent",
+                background: hoveredLogId === log.id ? "rgba(59, 130, 246, 0.1)" : "transparent",
               };
 
               // PR logs: 2-column grid (Time/Label | Branch/Content)
@@ -2224,8 +2222,8 @@ export default function TreeDashboard() {
                         gap: "2px 6px",
                         marginBottom: 4,
                       }}
-                      onMouseEnter={() => hasBranch && setHoveredLogBranch(log.branch!)}
-                      onMouseLeave={() => hasBranch && setHoveredLogBranch(null)}
+                      onMouseEnter={() => { setHoveredLogId(log.id); if (hasBranch) setHoveredLogBranch(log.branch!); }}
+                      onMouseLeave={() => { setHoveredLogId(null); if (hasBranch) setHoveredLogBranch(null); }}
                       onClick={() => {
                         if (hasBranch && snapshot) {
                           const node = snapshot.nodes.find(n => n.branchName === log.branch);
@@ -2256,8 +2254,8 @@ export default function TreeDashboard() {
                     marginBottom: 4,
                     alignItems: "flex-start",
                   }}
-                  onMouseEnter={() => hasBranch && setHoveredLogBranch(log.branch!)}
-                  onMouseLeave={() => hasBranch && setHoveredLogBranch(null)}
+                  onMouseEnter={() => { setHoveredLogId(log.id); if (hasBranch) setHoveredLogBranch(log.branch!); }}
+                  onMouseLeave={() => { setHoveredLogId(null); if (hasBranch) setHoveredLogBranch(null); }}
                   onClick={() => {
                     if (hasBranch && snapshot) {
                       const node = snapshot.nodes.find(n => n.branchName === log.branch);
@@ -2265,7 +2263,7 @@ export default function TreeDashboard() {
                     }
                   }}
                 >
-                  <span style={{ color: "#6b7280", flexShrink: 0, fontSize: 12, minWidth: 70 }}>{timeStr}</span>
+                  <span style={{ color: "#6b7280", flexShrink: 0, fontSize: 12, minWidth: 52 }}>{timeStr}</span>
                   {log.html ? (
                     <div
                       style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", color }}

@@ -21,6 +21,7 @@ import {
   type TaskInstruction,
   type BranchLink,
   type RepoCollaborator,
+  type RepoTeam,
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import { diff, formatDiffSummary } from "../lib/scanDiff";
@@ -456,6 +457,7 @@ export default function TreeDashboard() {
   const [prQuickReviewers, setPrQuickReviewers] = useState<string[]>([]);
   const [repoLabels, setRepoLabels] = useState<Array<{ name: string; color: string; description: string }>>([]);
   const [repoCollaborators, setRepoCollaborators] = useState<RepoCollaborator[]>([]);
+  const [repoTeams, setRepoTeams] = useState<RepoTeam[]>([]);
   // PR settings search filters
   const [labelSearch, setLabelSearch] = useState("");
   const [reviewerSearch, setReviewerSearch] = useState("");
@@ -473,15 +475,17 @@ export default function TreeDashboard() {
           api.syncRepoCache(snapshot.repoId).catch(console.error);
         }
 
-        const [prSettings, labels, collaborators] = await Promise.all([
+        const [prSettings, labels, collaborators, teams] = await Promise.all([
           api.getPrSettings(snapshot.repoId),
           api.getRepoLabels(snapshot.repoId).catch(() => []),
           api.getRepoCollaborators(snapshot.repoId).catch(() => []),
+          api.searchRepoTeams(snapshot.repoId).catch(() => []),
         ]);
         setPrQuickLabels(prSettings.quickLabels || []);
         setPrQuickReviewers(prSettings.quickReviewers || []);
         setRepoLabels(labels);
         setRepoCollaborators(collaborators);
+        setRepoTeams(teams);
       } catch {
         // No settings yet, use defaults
         setPrQuickLabels([]);
@@ -1628,13 +1632,14 @@ export default function TreeDashboard() {
     setSettingsDefaultBranch(selectedPin.baseBranch || "");
     setSettingsCategory("branch");
     try {
-      const [rule, wtSettings, pollSettings, prSettings, labels, collaborators] = await Promise.all([
+      const [rule, wtSettings, pollSettings, prSettings, labels, collaborators, teams] = await Promise.all([
         api.getBranchNaming(snapshot.repoId),
         api.getWorktreeSettings(snapshot.repoId),
         api.getPollingSettings(snapshot.repoId),
         api.getPrSettings(snapshot.repoId),
         api.getRepoLabels(snapshot.repoId).catch(() => []),
         api.getRepoCollaborators(snapshot.repoId).catch(() => []),
+        api.searchRepoTeams(snapshot.repoId).catch(() => []),
       ]);
       setSettingsRule(rule);
       setSettingsPatterns(rule.patterns || []);
@@ -1647,6 +1652,7 @@ export default function TreeDashboard() {
       setPrQuickLabels(prSettings.quickLabels || []);
       setPrQuickReviewers(prSettings.quickReviewers || []);
       setRepoLabels(labels);
+      setRepoTeams(teams);
       setRepoCollaborators(collaborators);
     } catch {
       // No rule exists yet
@@ -3176,12 +3182,14 @@ export default function TreeDashboard() {
                               setIsSyncingCache(true);
                               try {
                                 await api.syncRepoCache(snapshot.repoId);
-                                const [labels, collaborators] = await Promise.all([
+                                const [labels, collaborators, teams] = await Promise.all([
                                   api.getRepoLabels(snapshot.repoId).catch(() => []),
                                   api.getRepoCollaborators(snapshot.repoId).catch(() => []),
+                                  api.searchRepoTeams(snapshot.repoId).catch(() => []),
                                 ]);
                                 setRepoLabels(labels);
                                 setRepoCollaborators(collaborators);
+                                setRepoTeams(teams);
                               } finally {
                                 setIsSyncingCache(false);
                               }
@@ -3194,6 +3202,61 @@ export default function TreeDashboard() {
                         <p style={{ color: "#9ca3af", margin: "0 0 16px" }}>
                           Quick toggle labels in the PR section of branch details.
                         </p>
+
+                        {/* Selected labels at the top */}
+                        {prQuickLabels.length > 0 && (
+                          <div style={{ marginBottom: 16 }}>
+                            <label style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8, display: "block" }}>Selected ({prQuickLabels.length})</label>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                              {prQuickLabels.map((labelName) => {
+                                const label = repoLabels.find((l) => l.name === labelName);
+                                const color = label?.color || "6b7280";
+                                const r = parseInt(color.slice(0, 2), 16);
+                                const g = parseInt(color.slice(2, 4), 16);
+                                const b = parseInt(color.slice(4, 6), 16);
+                                const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+                                const textColor = luminance > 0.5 ? "#000000" : "#ffffff";
+                                return (
+                                  <span
+                                    key={labelName}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      padding: "4px 8px",
+                                      borderRadius: 12,
+                                      background: `#${color}`,
+                                      color: textColor,
+                                      fontSize: 13,
+                                      fontWeight: 500,
+                                    }}
+                                  >
+                                    {labelName}
+                                    <button
+                                      type="button"
+                                      onClick={() => setPrQuickLabels(prQuickLabels.filter((l) => l !== labelName))}
+                                      style={{
+                                        background: "none",
+                                        border: "none",
+                                        color: textColor,
+                                        cursor: "pointer",
+                                        padding: "0 2px",
+                                        fontSize: 14,
+                                        lineHeight: 1,
+                                        opacity: 0.8,
+                                      }}
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Search and available labels */}
+                        <label style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8, display: "block" }}>Available Labels</label>
                         <input
                           type="text"
                           placeholder="Search labels..."
@@ -3210,11 +3273,10 @@ export default function TreeDashboard() {
                             marginBottom: 12,
                           }}
                         />
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, maxHeight: 300, overflowY: "auto" }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, maxHeight: 250, overflowY: "auto" }}>
                           {repoLabels
-                            .filter((label) => label.name.toLowerCase().includes(labelSearch.toLowerCase()))
+                            .filter((label) => !prQuickLabels.includes(label.name) && label.name.toLowerCase().includes(labelSearch.toLowerCase()))
                             .map((label) => {
-                              const isSelected = prQuickLabels.includes(label.name);
                               // GitHub-style text color based on background luminance
                               const r = parseInt(label.color.slice(0, 2), 16);
                               const g = parseInt(label.color.slice(2, 4), 16);
@@ -3225,42 +3287,33 @@ export default function TreeDashboard() {
                                 <button
                                   key={label.name}
                                   type="button"
-                                  onClick={() => {
-                                    if (isSelected) {
-                                      setPrQuickLabels(prQuickLabels.filter((l) => l !== label.name));
-                                    } else {
-                                      setPrQuickLabels([...prQuickLabels, label.name]);
-                                    }
-                                  }}
+                                  onClick={() => setPrQuickLabels([...prQuickLabels, label.name])}
                                   style={{
                                     padding: "4px 10px",
                                     borderRadius: 12,
-                                    border: isSelected ? "2px solid #fff" : "none",
+                                    border: "none",
                                     background: `#${label.color}`,
                                     color: textColor,
                                     cursor: "pointer",
                                     fontSize: 13,
                                     fontWeight: 500,
-                                    opacity: isSelected ? 1 : 0.6,
+                                    opacity: 0.6,
                                   }}
                                   title={label.description || label.name}
                                 >
-                                  {isSelected && "✓ "}{label.name}
+                                  + {label.name}
                                 </button>
                               );
                             })}
                           {repoLabels.length === 0 && (
                             <span style={{ color: "#6b7280", fontStyle: "italic" }}>No labels found in repository</span>
                           )}
-                          {repoLabels.length > 0 && repoLabels.filter((l) => l.name.toLowerCase().includes(labelSearch.toLowerCase())).length === 0 && (
-                            <span style={{ color: "#6b7280", fontStyle: "italic" }}>No matching labels</span>
+                          {repoLabels.length > 0 && repoLabels.filter((l) => !prQuickLabels.includes(l.name) && l.name.toLowerCase().includes(labelSearch.toLowerCase())).length === 0 && (
+                            <span style={{ color: "#6b7280", fontStyle: "italic" }}>
+                              {prQuickLabels.length === repoLabels.length ? "All labels selected" : "No matching labels"}
+                            </span>
                           )}
                         </div>
-                        {prQuickLabels.length > 0 && (
-                          <p style={{ color: "#9ca3af", margin: "8px 0 0", fontSize: 12 }}>
-                            Selected: {prQuickLabels.join(", ")}
-                          </p>
-                        )}
                       </>
                     )}
 
@@ -3278,12 +3331,14 @@ export default function TreeDashboard() {
                               setIsSyncingCache(true);
                               try {
                                 await api.syncRepoCache(snapshot.repoId);
-                                const [labels, collaborators] = await Promise.all([
+                                const [labels, collaborators, teams] = await Promise.all([
                                   api.getRepoLabels(snapshot.repoId).catch(() => []),
                                   api.getRepoCollaborators(snapshot.repoId).catch(() => []),
+                                  api.searchRepoTeams(snapshot.repoId).catch(() => []),
                                 ]);
                                 setRepoLabels(labels);
                                 setRepoCollaborators(collaborators);
+                                setRepoTeams(teams);
                               } finally {
                                 setIsSyncingCache(false);
                               }
@@ -3296,6 +3351,71 @@ export default function TreeDashboard() {
                         <p style={{ color: "#9ca3af", margin: "0 0 16px" }}>
                           Quick toggle reviewers in the PR section of branch details.
                         </p>
+
+                        {/* Selected reviewers at the top */}
+                        {prQuickReviewers.length > 0 && (
+                          <div style={{ marginBottom: 16 }}>
+                            <label style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8, display: "block" }}>Selected ({prQuickReviewers.length})</label>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                              {prQuickReviewers.map((reviewerName) => {
+                                // Check if it's a team (starts with team/) or a user
+                                const isTeam = reviewerName.startsWith("team/");
+                                const collaborator = !isTeam ? repoCollaborators.find((c) => c.login === reviewerName) : null;
+                                const team = isTeam ? repoTeams.find((t) => `team/${t.slug}` === reviewerName) : null;
+                                return (
+                                  <span
+                                    key={reviewerName}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 6,
+                                      padding: "4px 10px",
+                                      borderRadius: 12,
+                                      background: isTeam ? "#4f46e530" : "#60a5fa30",
+                                      color: isTeam ? "#a78bfa" : "#60a5fa",
+                                      fontSize: 13,
+                                      fontWeight: 500,
+                                    }}
+                                  >
+                                    {isTeam ? (
+                                      <>
+                                        <span style={{ fontSize: 12 }}>👥</span>
+                                        {team?.name || reviewerName.replace("team/", "")}
+                                      </>
+                                    ) : (
+                                      <>
+                                        <img
+                                          src={collaborator?.avatarUrl || `https://github.com/${reviewerName}.png?size=32`}
+                                          alt={reviewerName}
+                                          style={{ width: 18, height: 18, borderRadius: "50%" }}
+                                        />
+                                        {reviewerName}
+                                      </>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => setPrQuickReviewers(prQuickReviewers.filter((r) => r !== reviewerName))}
+                                      style={{
+                                        background: "none",
+                                        border: "none",
+                                        color: isTeam ? "#a78bfa" : "#60a5fa",
+                                        cursor: "pointer",
+                                        padding: "0 2px",
+                                        fontSize: 14,
+                                        lineHeight: 1,
+                                        opacity: 0.8,
+                                      }}
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Search */}
                         <input
                           type="text"
                           placeholder="Search reviewers..."
@@ -3312,65 +3432,98 @@ export default function TreeDashboard() {
                             marginBottom: 12,
                           }}
                         />
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, maxHeight: 300, overflowY: "auto" }}>
+
+                        {/* Teams section */}
+                        {repoTeams.length > 0 && (
+                          <div style={{ marginBottom: 16 }}>
+                            <label style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8, display: "block" }}>Teams</label>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                              {repoTeams
+                                .filter((team) => {
+                                  const teamKey = `team/${team.slug}`;
+                                  if (prQuickReviewers.includes(teamKey)) return false;
+                                  const search = reviewerSearch.toLowerCase();
+                                  return team.name.toLowerCase().includes(search) || team.slug.toLowerCase().includes(search);
+                                })
+                                .map((team) => (
+                                  <button
+                                    key={team.slug}
+                                    type="button"
+                                    onClick={() => setPrQuickReviewers([...prQuickReviewers, `team/${team.slug}`])}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 6,
+                                      padding: "4px 10px",
+                                      borderRadius: 12,
+                                      border: "1px solid #374151",
+                                      background: "#1f2937",
+                                      color: "#a78bfa",
+                                      cursor: "pointer",
+                                      fontSize: 13,
+                                      fontWeight: 500,
+                                    }}
+                                    title={team.description || team.name}
+                                  >
+                                    <span style={{ fontSize: 12 }}>👥</span>
+                                    + {team.name}
+                                  </button>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Users section */}
+                        <label style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8, display: "block" }}>Users</label>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, maxHeight: 200, overflowY: "auto" }}>
                           {repoCollaborators
                             .filter((c) => {
+                              if (prQuickReviewers.includes(c.login)) return false;
                               const search = reviewerSearch.toLowerCase();
                               return c.login.toLowerCase().includes(search) || (c.name && c.name.toLowerCase().includes(search));
                             })
-                            .map((collaborator) => {
-                              const isSelected = prQuickReviewers.includes(collaborator.login);
-                              return (
-                                <button
-                                  key={collaborator.login}
-                                  type="button"
-                                  onClick={() => {
-                                    if (isSelected) {
-                                      setPrQuickReviewers(prQuickReviewers.filter((r) => r !== collaborator.login));
-                                    } else {
-                                      setPrQuickReviewers([...prQuickReviewers, collaborator.login]);
-                                    }
-                                  }}
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 6,
-                                    padding: "4px 10px",
-                                    borderRadius: 12,
-                                    border: isSelected ? "2px solid #60a5fa" : "1px solid #374151",
-                                    background: isSelected ? "#60a5fa30" : "#1f2937",
-                                    color: isSelected ? "#60a5fa" : "#d1d5db",
-                                    cursor: "pointer",
-                                    fontSize: 13,
-                                    fontWeight: 500,
-                                  }}
-                                  title={collaborator.name ? `${collaborator.name} (@${collaborator.login})` : `@${collaborator.login}`}
-                                >
-                                  <img
-                                    src={collaborator.avatarUrl || `https://github.com/${collaborator.login}.png?size=32`}
-                                    alt={collaborator.login}
-                                    style={{ width: 18, height: 18, borderRadius: "50%" }}
-                                  />
-                                  {isSelected && "✓ "}{collaborator.login}
-                                  {collaborator.name && <span style={{ color: "#6b7280", marginLeft: 4, fontSize: 11 }}>({collaborator.name})</span>}
-                                </button>
-                              );
-                            })}
+                            .map((collaborator) => (
+                              <button
+                                key={collaborator.login}
+                                type="button"
+                                onClick={() => setPrQuickReviewers([...prQuickReviewers, collaborator.login])}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  padding: "4px 10px",
+                                  borderRadius: 12,
+                                  border: "1px solid #374151",
+                                  background: "#1f2937",
+                                  color: "#d1d5db",
+                                  cursor: "pointer",
+                                  fontSize: 13,
+                                  fontWeight: 500,
+                                }}
+                                title={collaborator.name ? `${collaborator.name} (@${collaborator.login})` : `@${collaborator.login}`}
+                              >
+                                <img
+                                  src={collaborator.avatarUrl || `https://github.com/${collaborator.login}.png?size=32`}
+                                  alt={collaborator.login}
+                                  style={{ width: 18, height: 18, borderRadius: "50%" }}
+                                />
+                                + {collaborator.login}
+                                {collaborator.name && <span style={{ color: "#6b7280", marginLeft: 4, fontSize: 11 }}>({collaborator.name})</span>}
+                              </button>
+                            ))}
                           {repoCollaborators.length === 0 && (
                             <span style={{ color: "#6b7280", fontStyle: "italic" }}>No collaborators found</span>
                           )}
                           {repoCollaborators.length > 0 && repoCollaborators.filter((c) => {
+                            if (prQuickReviewers.includes(c.login)) return false;
                             const search = reviewerSearch.toLowerCase();
                             return c.login.toLowerCase().includes(search) || (c.name && c.name.toLowerCase().includes(search));
                           }).length === 0 && (
-                            <span style={{ color: "#6b7280", fontStyle: "italic" }}>No matching reviewers</span>
+                            <span style={{ color: "#6b7280", fontStyle: "italic" }}>
+                              {prQuickReviewers.filter(r => !r.startsWith("team/")).length === repoCollaborators.length ? "All users selected" : "No matching users"}
+                            </span>
                           )}
                         </div>
-                        {prQuickReviewers.length > 0 && (
-                          <p style={{ color: "#9ca3af", margin: "8px 0 0", fontSize: 12 }}>
-                            Selected: {prQuickReviewers.map((r) => `@${r}`).join(", ")}
-                          </p>
-                        )}
                       </>
                     )}
 

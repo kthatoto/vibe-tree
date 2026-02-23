@@ -278,6 +278,12 @@ repoCacheRouter.get("/sync-status", async (c) => {
   });
 });
 
+// Helper: Sanitize search query for shell command
+function sanitizeSearchQuery(q: string): string {
+  // Remove or escape shell special characters
+  return q.replace(/[`$\\;"'&|<>(){}[\]!#*?~]/g, '');
+}
+
 // GET /api/repo-cache/labels - Get labels (with optional search)
 repoCacheRouter.get("/labels", async (c) => {
   const query = validateOrThrow(searchSchema, {
@@ -301,40 +307,43 @@ repoCacheRouter.get("/labels", async (c) => {
     // If no results, try GitHub search
     if (labels.length === 0) {
       try {
-        const result = (await execAsync(
-          `gh label list --repo "${query.repoId}" --search "${query.q}" --json name,color,description --limit 20`
-        )).trim();
-        const githubLabels: GitHubLabel[] = JSON.parse(result || "[]");
+        const sanitizedQuery = sanitizeSearchQuery(query.q);
+        if (sanitizedQuery.length > 0) {
+          const result = (await execAsync(
+            `gh label list --repo "${query.repoId}" --search "${sanitizedQuery}" --json name,color,description --limit 20`
+          )).trim();
+          const githubLabels: GitHubLabel[] = JSON.parse(result || "[]");
 
-        // Cache the results
-        const now = new Date().toISOString();
-        for (const label of githubLabels) {
-          const [existing] = await db.select().from(schema.repoLabels)
-            .where(and(eq(schema.repoLabels.repoId, query.repoId), eq(schema.repoLabels.name, label.name)))
-            .limit(1);
+          // Cache the results
+          const now = new Date().toISOString();
+          for (const label of githubLabels) {
+            const [existing] = await db.select().from(schema.repoLabels)
+              .where(and(eq(schema.repoLabels.repoId, query.repoId), eq(schema.repoLabels.name, label.name)))
+              .limit(1);
 
-          if (!existing) {
-            await db.insert(schema.repoLabels).values({
-              repoId: query.repoId,
-              name: label.name,
-              color: label.color,
-              description: label.description || null,
-              syncedAt: now,
-              updatedAt: now,
-            });
+            if (!existing) {
+              await db.insert(schema.repoLabels).values({
+                repoId: query.repoId,
+                name: label.name,
+                color: label.color,
+                description: label.description || null,
+                syncedAt: now,
+                updatedAt: now,
+              });
+            }
           }
-        }
 
-        // Return fresh results from DB
-        labels = await db.select().from(schema.repoLabels)
-          .where(and(
-            eq(schema.repoLabels.repoId, query.repoId),
-            or(
-              like(schema.repoLabels.name, searchTerm),
-              like(schema.repoLabels.description, searchTerm)
-            )
-          ))
-          .orderBy(schema.repoLabels.name);
+          // Return fresh results from DB
+          labels = await db.select().from(schema.repoLabels)
+            .where(and(
+              eq(schema.repoLabels.repoId, query.repoId),
+              or(
+                like(schema.repoLabels.name, searchTerm),
+                like(schema.repoLabels.description, searchTerm)
+              )
+            ))
+            .orderBy(schema.repoLabels.name);
+        }
       } catch (err) {
         console.error("GitHub label search failed:", err);
       }
@@ -345,7 +354,7 @@ repoCacheRouter.get("/labels", async (c) => {
       .orderBy(schema.repoLabels.name);
   }
 
-  return c.json(labels.map(l => ({
+  return c.json((labels || []).map(l => ({
     name: l.name,
     color: l.color,
     description: l.description || "",
@@ -375,54 +384,58 @@ repoCacheRouter.get("/collaborators", async (c) => {
     // If no results, try GitHub search
     if (collaborators.length === 0) {
       try {
-        // Search users on GitHub
-        const result = (await execAsync(
-          `gh api "search/users?q=${encodeURIComponent(query.q)}+type:user&per_page=10" --jq '.items[] | {login, avatar_url}'`
-        )).trim();
+        // Search users on GitHub - use encodeURIComponent for URL safety
+        const sanitizedQuery = sanitizeSearchQuery(query.q);
+        if (sanitizedQuery.length > 0) {
+          const result = (await execAsync(
+            `gh api "search/users?q=${encodeURIComponent(sanitizedQuery)}+type:user&per_page=10" --jq '.items[] | {login, avatar_url}'`
+          )).trim();
 
-        if (result) {
-          const lines = result.split('\n').filter(Boolean);
-          const users = lines.map(line => JSON.parse(line));
+          if (result) {
+            const lines = result.split('\n').filter(Boolean);
+            const users = lines.map(line => JSON.parse(line));
 
-          // Check if each user is a collaborator and add to cache
-          const now = new Date().toISOString();
-          for (const user of users) {
-            try {
-              // Check if user is a collaborator (this will fail if not)
-              await execAsync(`gh api repos/${query.repoId}/collaborators/${user.login} --silent`);
+            // Check if each user is a collaborator and add to cache
+            const now = new Date().toISOString();
+            for (const user of users) {
+              try {
+                // Check if user is a collaborator (this will fail if not)
+                // user.login comes from GitHub API so it's safe
+                await execAsync(`gh api repos/${query.repoId}/collaborators/${user.login} --silent`);
 
-              // Get full user info
-              const userInfo = (await execAsync(`gh api users/${user.login} --jq '.name'`)).trim();
+                // Get full user info
+                const userInfo = (await execAsync(`gh api users/${user.login} --jq '.name'`)).trim();
 
-              const [existing] = await db.select().from(schema.repoCollaborators)
-                .where(and(eq(schema.repoCollaborators.repoId, query.repoId), eq(schema.repoCollaborators.login, user.login)))
-                .limit(1);
+                const [existing] = await db.select().from(schema.repoCollaborators)
+                  .where(and(eq(schema.repoCollaborators.repoId, query.repoId), eq(schema.repoCollaborators.login, user.login)))
+                  .limit(1);
 
-              if (!existing) {
-                await db.insert(schema.repoCollaborators).values({
-                  repoId: query.repoId,
-                  login: user.login,
-                  name: userInfo || null,
-                  avatarUrl: user.avatar_url,
-                  role: null,
-                  syncedAt: now,
-                });
+                if (!existing) {
+                  await db.insert(schema.repoCollaborators).values({
+                    repoId: query.repoId,
+                    login: user.login,
+                    name: userInfo || null,
+                    avatarUrl: user.avatar_url,
+                    role: null,
+                    syncedAt: now,
+                  });
+                }
+              } catch {
+                // User is not a collaborator, skip
               }
-            } catch {
-              // User is not a collaborator, skip
             }
-          }
 
-          // Fetch results again
-          collaborators = await db.select().from(schema.repoCollaborators)
-            .where(and(
-              eq(schema.repoCollaborators.repoId, query.repoId),
-              or(
-                like(schema.repoCollaborators.login, searchTerm),
-                like(schema.repoCollaborators.name, searchTerm)
-              )
-            ))
-            .orderBy(schema.repoCollaborators.login);
+            // Fetch results again
+            collaborators = await db.select().from(schema.repoCollaborators)
+              .where(and(
+                eq(schema.repoCollaborators.repoId, query.repoId),
+                or(
+                  like(schema.repoCollaborators.login, searchTerm),
+                  like(schema.repoCollaborators.name, searchTerm)
+                )
+              ))
+              .orderBy(schema.repoCollaborators.login);
+          }
         }
       } catch (err) {
         console.error("GitHub user search failed:", err);
@@ -434,7 +447,7 @@ repoCacheRouter.get("/collaborators", async (c) => {
       .orderBy(schema.repoCollaborators.login);
   }
 
-  return c.json(collaborators.map(c => ({
+  return c.json((collaborators || []).map(c => ({
     login: c.login,
     name: c.name,
     avatarUrl: c.avatarUrl,

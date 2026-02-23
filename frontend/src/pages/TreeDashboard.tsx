@@ -1156,7 +1156,7 @@ export default function TreeDashboard() {
           case "review": {
             const newStatus = change.new?.toLowerCase();
             if (newStatus === "approved") {
-              return '<span style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:2px 8px;border-radius:10px;font-weight:600;font-size:11px">✓ APPROVED</span>';
+              return '<span style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:2px 8px;border-radius:10px;font-weight:600;font-size:11px">✓ Approved</span>';
             }
             if (newStatus === "changes_requested") {
               return '<span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">⚠ Changes Requested</span>';

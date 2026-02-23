@@ -155,24 +155,37 @@ export async function getPRs(repoPath: string): Promise<PRInfo[]> {
     );
     const prs: GhPR[] = JSON.parse(output);
     return prs.map((pr) => {
-      // Filter out bot reviewers (e.g., GitHub Copilot)
-      const isBot = (name: string | undefined) =>
-        name && (name.toLowerCase().includes("copilot") || name.endsWith("[bot]"));
+      // Filter out bot reviewers (except Copilot which is shown as a reviewer)
+      const isOtherBot = (name: string | undefined) =>
+        name && name.endsWith("[bot]") && !name.toLowerCase().includes("copilot");
 
       // Get reviewers - supports both User (login) and Team (name/slug)
-      const humanReviewers = (pr.reviewRequests ?? [])
+      // Note: Include Copilot as a reviewer
+      const reviewersFromRequests = (pr.reviewRequests ?? [])
         .map((r) => r.login || r.slug || r.name) // User has login, Team has slug/name
-        .filter((name): name is string => !!name && !isBot(name));
+        .filter((name): name is string => !!name && !isOtherBot(name));
 
-      // Check if there are any human reviews submitted (exclude bots and COMMENTED-only)
+      // Check if there are any human reviews submitted (exclude all bots and COMMENTED-only)
       // Only count APPROVED, CHANGES_REQUESTED as actual reviews
+      // Note: Copilot reviews are informational (COMMENTED) so they don't count here
       const humanReviews = (pr.reviews ?? []).filter(
-        (r) => r.author?.login && !isBot(r.author.login) &&
+        (r) => r.author?.login && !r.author.login.endsWith("[bot]") &&
                (r.state === "APPROVED" || r.state === "CHANGES_REQUESTED")
       );
       const hasReviews = humanReviews.length > 0;
 
-      // Compute review status
+      // Also include Copilot from reviews (any state including COMMENTED)
+      const copilotFromReviews = (pr.reviews ?? [])
+        .filter((r) => r.author?.login?.toLowerCase().includes("copilot"))
+        .map((r) => r.author!.login);
+
+      // Combine reviewers (deduplicated)
+      const allReviewers = [...new Set([...reviewersFromRequests, ...copilotFromReviews])];
+
+      // Compute review status (only count human reviewers, not Copilot)
+      const humanReviewers = reviewersFromRequests.filter(
+        (name) => !name.toLowerCase().includes("copilot")
+      );
       let reviewStatus: "none" | "requested" | "reviewed" | "approved" = "none";
       if (pr.reviewDecision === "APPROVED") {
         reviewStatus = "approved";
@@ -180,7 +193,7 @@ export async function getPRs(repoPath: string): Promise<PRInfo[]> {
         // Has reviews but not approved (could be CHANGES_REQUESTED or pending)
         reviewStatus = "reviewed";
       } else if (humanReviewers.length > 0) {
-        // Reviewers assigned but no reviews yet
+        // Reviewers assigned but no reviews yet (only count humans)
         reviewStatus = "requested";
       }
 
@@ -195,7 +208,7 @@ export async function getPRs(repoPath: string): Promise<PRInfo[]> {
         assignees: pr.assignees?.map((a) => a.login) ?? [],
         reviewDecision: pr.reviewDecision,
         reviewStatus,
-        reviewers: humanReviewers,
+        reviewers: allReviewers,
         additions: pr.additions,
         deletions: pr.deletions,
         changedFiles: pr.changedFiles,

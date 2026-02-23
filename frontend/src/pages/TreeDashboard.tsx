@@ -455,6 +455,9 @@ export default function TreeDashboard() {
   const [prQuickReviewers, setPrQuickReviewers] = useState<string[]>([]);
   const [repoLabels, setRepoLabels] = useState<Array<{ name: string; color: string; description: string }>>([]);
   const [repoCollaborators, setRepoCollaborators] = useState<string[]>([]);
+  // PR settings search filters
+  const [labelSearch, setLabelSearch] = useState("");
+  const [reviewerSearch, setReviewerSearch] = useState("");
 
   // Load PR settings when project is loaded
   useEffect(() => {
@@ -3144,93 +3147,149 @@ export default function TreeDashboard() {
                     {/* PR Settings */}
                     {settingsCategory === "pr" && (
                       <>
-                        <h3>PR Quick Actions</h3>
-                        <div className="settings-section">
-                          <label>Quick Labels</label>
-                          <p style={{ color: "#9ca3af", margin: "4px 0 8px" }}>
-                            Labels that will appear as quick toggles in the PR section of branch details.
+                        <h3>PR</h3>
+                        <p style={{ color: "#9ca3af", margin: "0 0 16px" }}>
+                          Configure quick actions for Pull Request management.
+                        </p>
+
+                        {/* Labels Subsection */}
+                        <div className="settings-section" style={{ background: "#1f2937", padding: 16, borderRadius: 8, marginBottom: 16 }}>
+                          <h4 style={{ margin: "0 0 8px", color: "#e5e7eb", fontSize: 14 }}>Labels</h4>
+                          <p style={{ color: "#9ca3af", margin: "0 0 12px", fontSize: 13 }}>
+                            Quick toggle labels in the PR section of branch details.
                           </p>
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-                            {repoLabels.map((label) => {
-                              const isSelected = prQuickLabels.includes(label.name);
-                              return (
-                                <button
-                                  key={label.name}
-                                  type="button"
-                                  onClick={() => {
-                                    if (isSelected) {
-                                      setPrQuickLabels(prQuickLabels.filter((l) => l !== label.name));
-                                    } else {
-                                      setPrQuickLabels([...prQuickLabels, label.name]);
-                                    }
-                                  }}
-                                  style={{
-                                    padding: "4px 10px",
-                                    borderRadius: 12,
-                                    border: isSelected ? `2px solid #${label.color}` : "1px solid #374151",
-                                    background: isSelected ? `#${label.color}30` : "#1f2937",
-                                    color: `#${label.color}`,
-                                    cursor: "pointer",
-                                    fontSize: 13,
-                                    fontWeight: 500,
-                                  }}
-                                  title={label.description || label.name}
-                                >
-                                  {label.name}
-                                </button>
-                              );
-                            })}
+                          <input
+                            type="text"
+                            placeholder="Search labels..."
+                            value={labelSearch}
+                            onChange={(e) => setLabelSearch(e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "8px 12px",
+                              background: "#111827",
+                              border: "1px solid #374151",
+                              borderRadius: 6,
+                              color: "white",
+                              fontSize: 13,
+                              marginBottom: 12,
+                            }}
+                          />
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, maxHeight: 200, overflowY: "auto" }}>
+                            {repoLabels
+                              .filter((label) => label.name.toLowerCase().includes(labelSearch.toLowerCase()))
+                              .map((label) => {
+                                const isSelected = prQuickLabels.includes(label.name);
+                                return (
+                                  <button
+                                    key={label.name}
+                                    type="button"
+                                    onClick={() => {
+                                      if (isSelected) {
+                                        setPrQuickLabels(prQuickLabels.filter((l) => l !== label.name));
+                                      } else {
+                                        setPrQuickLabels([...prQuickLabels, label.name]);
+                                      }
+                                    }}
+                                    style={{
+                                      padding: "4px 10px",
+                                      borderRadius: 12,
+                                      border: isSelected ? `2px solid #${label.color}` : "1px solid #374151",
+                                      background: isSelected ? `#${label.color}30` : "#111827",
+                                      color: `#${label.color}`,
+                                      cursor: "pointer",
+                                      fontSize: 13,
+                                      fontWeight: 500,
+                                    }}
+                                    title={label.description || label.name}
+                                  >
+                                    {label.name}
+                                  </button>
+                                );
+                              })}
                             {repoLabels.length === 0 && (
                               <span style={{ color: "#6b7280", fontStyle: "italic" }}>No labels found in repository</span>
                             )}
+                            {repoLabels.length > 0 && repoLabels.filter((l) => l.name.toLowerCase().includes(labelSearch.toLowerCase())).length === 0 && (
+                              <span style={{ color: "#6b7280", fontStyle: "italic" }}>No matching labels</span>
+                            )}
                           </div>
                           {prQuickLabels.length > 0 && (
-                            <p style={{ color: "#9ca3af", margin: "8px 0 0" }}>
+                            <p style={{ color: "#9ca3af", margin: "8px 0 0", fontSize: 12 }}>
                               Selected: {prQuickLabels.join(", ")}
                             </p>
                           )}
                         </div>
 
-                        <div className="settings-section" style={{ marginTop: 16 }}>
-                          <label>Quick Reviewers</label>
-                          <p style={{ color: "#9ca3af", margin: "4px 0 8px" }}>
-                            Reviewers that will appear as quick toggles in the PR section of branch details.
+                        {/* Reviewers Subsection */}
+                        <div className="settings-section" style={{ background: "#1f2937", padding: 16, borderRadius: 8 }}>
+                          <h4 style={{ margin: "0 0 8px", color: "#e5e7eb", fontSize: 14 }}>Reviewers</h4>
+                          <p style={{ color: "#9ca3af", margin: "0 0 12px", fontSize: 13 }}>
+                            Quick toggle reviewers in the PR section of branch details.
                           </p>
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-                            {repoCollaborators.map((collaborator) => {
-                              const isSelected = prQuickReviewers.includes(collaborator);
-                              return (
-                                <button
-                                  key={collaborator}
-                                  type="button"
-                                  onClick={() => {
-                                    if (isSelected) {
-                                      setPrQuickReviewers(prQuickReviewers.filter((r) => r !== collaborator));
-                                    } else {
-                                      setPrQuickReviewers([...prQuickReviewers, collaborator]);
-                                    }
-                                  }}
-                                  style={{
-                                    padding: "4px 10px",
-                                    borderRadius: 12,
-                                    border: isSelected ? "2px solid #60a5fa" : "1px solid #374151",
-                                    background: isSelected ? "#60a5fa30" : "#1f2937",
-                                    color: isSelected ? "#60a5fa" : "#d1d5db",
-                                    cursor: "pointer",
-                                    fontSize: 13,
-                                    fontWeight: 500,
-                                  }}
-                                >
-                                  @{collaborator}
-                                </button>
-                              );
-                            })}
+                          <input
+                            type="text"
+                            placeholder="Search reviewers..."
+                            value={reviewerSearch}
+                            onChange={(e) => setReviewerSearch(e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "8px 12px",
+                              background: "#111827",
+                              border: "1px solid #374151",
+                              borderRadius: 6,
+                              color: "white",
+                              fontSize: 13,
+                              marginBottom: 12,
+                            }}
+                          />
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, maxHeight: 200, overflowY: "auto" }}>
+                            {repoCollaborators
+                              .filter((c) => c.toLowerCase().includes(reviewerSearch.toLowerCase()))
+                              .map((collaborator) => {
+                                const isSelected = prQuickReviewers.includes(collaborator);
+                                return (
+                                  <button
+                                    key={collaborator}
+                                    type="button"
+                                    onClick={() => {
+                                      if (isSelected) {
+                                        setPrQuickReviewers(prQuickReviewers.filter((r) => r !== collaborator));
+                                      } else {
+                                        setPrQuickReviewers([...prQuickReviewers, collaborator]);
+                                      }
+                                    }}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 6,
+                                      padding: "4px 10px",
+                                      borderRadius: 12,
+                                      border: isSelected ? "2px solid #60a5fa" : "1px solid #374151",
+                                      background: isSelected ? "#60a5fa30" : "#111827",
+                                      color: isSelected ? "#60a5fa" : "#d1d5db",
+                                      cursor: "pointer",
+                                      fontSize: 13,
+                                      fontWeight: 500,
+                                    }}
+                                  >
+                                    <img
+                                      src={`https://github.com/${collaborator}.png?size=32`}
+                                      alt={collaborator}
+                                      style={{ width: 18, height: 18, borderRadius: "50%" }}
+                                    />
+                                    {collaborator}
+                                  </button>
+                                );
+                              })}
                             {repoCollaborators.length === 0 && (
                               <span style={{ color: "#6b7280", fontStyle: "italic" }}>No collaborators found</span>
                             )}
+                            {repoCollaborators.length > 0 && repoCollaborators.filter((c) => c.toLowerCase().includes(reviewerSearch.toLowerCase())).length === 0 && (
+                              <span style={{ color: "#6b7280", fontStyle: "italic" }}>No matching reviewers</span>
+                            )}
                           </div>
                           {prQuickReviewers.length > 0 && (
-                            <p style={{ color: "#9ca3af", margin: "8px 0 0" }}>
+                            <p style={{ color: "#9ca3af", margin: "8px 0 0", fontSize: 12 }}>
                               Selected: {prQuickReviewers.map((r) => `@${r}`).join(", ")}
                             </p>
                           )}

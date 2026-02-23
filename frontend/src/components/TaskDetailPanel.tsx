@@ -1424,7 +1424,7 @@ export function TaskDetailPanel({
                     return (
                       <button
                         key={reviewer}
-                        className={`task-detail-panel__pr-quick-btn ${hasReviewer ? "task-detail-panel__pr-quick-btn--active" : ""}`}
+                        className={`task-detail-panel__pr-quick-btn task-detail-panel__pr-quick-btn--reviewer ${hasReviewer ? "task-detail-panel__pr-quick-btn--active" : ""}`}
                         style={{
                           borderColor: "#60a5fa",
                           backgroundColor: hasReviewer ? "#60a5fa30" : "transparent",
@@ -1435,7 +1435,12 @@ export function TaskDetailPanel({
                         disabled={isToggling}
                         title={hasReviewer ? `Remove @${reviewer}` : `Add @${reviewer}`}
                       >
-                        {isToggling ? "..." : `@${reviewer}`}
+                        <img
+                          src={`https://github.com/${reviewer}.png?size=32`}
+                          alt={reviewer}
+                          className="task-detail-panel__pr-quick-avatar"
+                        />
+                        {isToggling ? "..." : reviewer}
                       </button>
                     );
                   })}

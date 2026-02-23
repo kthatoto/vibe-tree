@@ -1670,6 +1670,19 @@
   font-weight: 600;
 }
 
+.task-detail-panel__pr-quick-btn--reviewer {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.task-detail-panel__pr-quick-avatar {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 /* Review Decision Badges */
 .task-detail-panel__review-badge {
   padding: 2px 8px;

@@ -41,6 +41,7 @@ import { TaskCard } from "../components/TaskCard";
 import { DraggableTask, DroppableTreeNode } from "../components/DndComponents";
 import { PlanningPanel } from "../components/PlanningPanel";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
+import MultiSelectPanel from "../components/MultiSelectPanel";
 import { useSmartPolling, INTERVALS, COUNTDOWN_INITIAL_PAUSE } from "../hooks/useSmartPolling";
 import { LabelChip, UserChip, ReviewBadge, CIBadge } from "../components/atoms/Chips";
 import type { PlanningSession, TaskNode, TaskEdge } from "../lib/api";
@@ -261,9 +262,21 @@ export default function TreeDashboard() {
   // Main state
   const [plan, setPlan] = useState<Plan | null>(null);
   const [snapshot, setSnapshot] = useState<ScanSnapshot | null>(null);
-  const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
+  // Multi-select state: stores selected branch names
+  const [selectedBranches, setSelectedBranches] = useState<Set<string>>(new Set());
+  // Selection anchor for Shift+click range selection
+  const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Derive selectedNode from selectedBranches (single selection only)
+  const selectedNode = useMemo(() => {
+    if (selectedBranches.size === 1) {
+      const [branchName] = selectedBranches;
+      return snapshot?.nodes.find((n) => n.branchName === branchName) ?? null;
+    }
+    return null;
+  }, [selectedBranches, snapshot?.nodes]);
 
   // Keep snapshotRef in sync with snapshot state (for use in WebSocket callbacks)
   useEffect(() => {
@@ -281,7 +294,8 @@ export default function TreeDashboard() {
     if (savedBranch) {
       const node = snapshot.nodes.find(n => n.branchName === savedBranch);
       if (node) {
-        setSelectedNode(node);
+        setSelectedBranches(new Set([savedBranch]));
+        setSelectionAnchor(savedBranch);
       }
     }
   }, [snapshot, selectedPinId]);
@@ -389,8 +403,6 @@ export default function TreeDashboard() {
     return localStorage.getItem("branchGraph.filterEnabled") === "true";
   });
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  // Paint mode state (Pattern C: paint mode)
-  const [paintMode, setPaintMode] = useState<"check" | "uncheck" | null>(null);
   useEffect(() => {
     localStorage.setItem("branchGraph.checkedBranches", JSON.stringify([...checkedBranches]));
   }, [checkedBranches]);
@@ -839,34 +851,36 @@ export default function TreeDashboard() {
     hasTriggeredInitialScan.current = false;
   }, [selectedPin?.id]);
 
-  // Sync selectedNode with latest snapshot data
+  // Sync selectedBranches with snapshot data (remove deleted branches)
   useEffect(() => {
-    if (selectedNode && snapshot) {
-      const updatedNode = snapshot.nodes.find((n) => n.branchName === selectedNode.branchName);
-      if (updatedNode && updatedNode !== selectedNode) {
-        setSelectedNode(updatedNode);
-      } else if (!updatedNode) {
-        // Node was deleted
-        setSelectedNode(null);
+    if (selectedBranches.size > 0 && snapshot) {
+      const validBranches = new Set(snapshot.nodes.map(n => n.branchName));
+      const filtered = new Set([...selectedBranches].filter(b => validBranches.has(b)));
+      if (filtered.size !== selectedBranches.size) {
+        setSelectedBranches(filtered);
+        if (selectionAnchor && !filtered.has(selectionAnchor)) {
+          setSelectionAnchor(null);
+        }
       }
     }
-  }, [snapshot, selectedNode]);
+  }, [snapshot, selectedBranches, selectionAnchor]);
 
-  // Escape key to deselect branch
+  // Escape key to clear selection
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && selectedNode) {
+      if (e.key === "Escape" && selectedBranches.size > 0) {
         // Don't deselect if user is typing in an input/textarea
         const target = e.target as HTMLElement;
         if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
           return;
         }
-        setSelectedNode(null);
+        setSelectedBranches(new Set());
+        setSelectionAnchor(null);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selectedNode]);
+  }, [selectedBranches.size]);
 
   // Load instruction when selectedNode changes (with caching)
   useEffect(() => {
@@ -2088,10 +2102,13 @@ export default function TreeDashboard() {
               {snapshot.worktrees.map((wt) => (
                 <div
                   key={wt.path}
-                  className={`sidebar__worktree ${selectedNode?.branchName === wt.branch ? "sidebar__worktree--selected" : ""}`}
+                  className={`sidebar__worktree ${selectedBranches.has(wt.branch) ? "sidebar__worktree--selected" : ""}`}
                   onClick={() => {
                     const node = snapshot.nodes.find((n) => n.branchName === wt.branch);
-                    if (node) setSelectedNode(node);
+                    if (node) {
+                      setSelectedBranches(new Set([wt.branch]));
+                      setSelectionAnchor(wt.branch);
+                    }
                   }}
                 >
                   <div className="sidebar__worktree-header">
@@ -2353,9 +2370,12 @@ export default function TreeDashboard() {
                         onMouseEnter={() => { setHoveredLogId(log.id); if (hasBranch) setHoveredLogBranch(log.branch!); }}
                         onMouseLeave={() => { setHoveredLogId(null); if (hasBranch) setHoveredLogBranch(null); }}
                         onClick={() => {
-                          if (hasBranch && snapshot) {
+                          if (hasBranch && snapshot && log.branch) {
                             const node = snapshot.nodes.find(n => n.branchName === log.branch);
-                            if (node) setSelectedNode(node);
+                            if (node) {
+                              setSelectedBranches(new Set([log.branch]));
+                              setSelectionAnchor(log.branch);
+                            }
                           }
                         }}
                       >
@@ -2385,9 +2405,12 @@ export default function TreeDashboard() {
                     onMouseEnter={() => { setHoveredLogId(log.id); if (hasBranch) setHoveredLogBranch(log.branch!); }}
                     onMouseLeave={() => { setHoveredLogId(null); if (hasBranch) setHoveredLogBranch(null); }}
                     onClick={() => {
-                      if (hasBranch && snapshot) {
+                      if (hasBranch && snapshot && log.branch) {
                         const node = snapshot.nodes.find(n => n.branchName === log.branch);
-                        if (node) setSelectedNode(node);
+                        if (node) {
+                          setSelectedBranches(new Set([log.branch]));
+                          setSelectionAnchor(log.branch);
+                        }
                       }
                     }}
                   >
@@ -2585,7 +2608,10 @@ export default function TreeDashboard() {
                                 e.stopPropagation();
                                 if (snapshot) {
                                   const node = snapshot.nodes.find(n => n.branchName === branch);
-                                  if (node) setSelectedNode(node);
+                                  if (node) {
+                                    setSelectedBranches(new Set([branch]));
+                                    setSelectionAnchor(branch);
+                                  }
                                 }
                               }}
                             >
@@ -2818,77 +2844,9 @@ export default function TreeDashboard() {
                             >
                               Toggle All Checkboxes
                             </button>
-                            <div style={{ height: 1, background: "#374151", margin: "4px 0" }} />
-                            <button
-                              style={{
-                                display: "block",
-                                width: "100%",
-                                padding: "8px 12px",
-                                background: paintMode === "check" ? "#14532d" : "transparent",
-                                border: "none",
-                                color: paintMode === "check" ? "#4ade80" : "#e5e7eb",
-                                textAlign: "left",
-                                cursor: "pointer",
-                                borderRadius: 4,
-                                whiteSpace: "nowrap",
-                              }}
-                              onMouseEnter={(e) => (e.currentTarget.style.background = paintMode === "check" ? "#166534" : "#374151")}
-                              onMouseLeave={(e) => (e.currentTarget.style.background = paintMode === "check" ? "#14532d" : "transparent")}
-                              onClick={() => {
-                                setPaintMode(paintMode === "check" ? null : "check");
-                                setShowMoreMenu(false);
-                              }}
-                            >
-                              ✅ Paint Check
-                            </button>
-                            <button
-                              style={{
-                                display: "block",
-                                width: "100%",
-                                padding: "8px 12px",
-                                background: paintMode === "uncheck" ? "#7f1d1d" : "transparent",
-                                border: "none",
-                                color: paintMode === "uncheck" ? "#f87171" : "#e5e7eb",
-                                textAlign: "left",
-                                cursor: "pointer",
-                                borderRadius: 4,
-                                whiteSpace: "nowrap",
-                              }}
-                              onMouseEnter={(e) => (e.currentTarget.style.background = paintMode === "uncheck" ? "#991b1b" : "#374151")}
-                              onMouseLeave={(e) => (e.currentTarget.style.background = paintMode === "uncheck" ? "#7f1d1d" : "transparent")}
-                              onClick={() => {
-                                setPaintMode(paintMode === "uncheck" ? null : "uncheck");
-                                setShowMoreMenu(false);
-                              }}
-                            >
-                              ❌ Paint Uncheck
-                            </button>
                           </div>
                         )}
                       </div>
-                      {/* Paint Mode Bar */}
-                      {paintMode && (
-                        <button
-                          onClick={() => setPaintMode(null)}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                            height: 25,
-                            padding: "0 10px",
-                            background: paintMode === "check" ? "#14532d" : "#7f1d1d",
-                            border: `1px solid ${paintMode === "check" ? "#22c55e" : "#ef4444"}`,
-                            borderRadius: 6,
-                            cursor: "pointer",
-                            fontSize: 12,
-                            color: paintMode === "check" ? "#4ade80" : "#f87171",
-                          }}
-                          title="Click or press ESC to exit"
-                        >
-                          {paintMode === "check" ? "✅" : "❌"} {paintMode === "check" ? "Check" : "Uncheck"}
-                          <span style={{ color: "#9ca3af", fontSize: 10, background: "rgba(255,255,255,0.15)", padding: "2px 4px", borderRadius: 3 }}>ESC</span>
-                        </button>
-                      )}
                       {/* Zoom controls */}
                       <span className="zoom-controls">
                         <button
@@ -2929,11 +2887,14 @@ export default function TreeDashboard() {
                       nodes={snapshot.nodes}
                       edges={snapshot.edges}
                       defaultBranch={snapshot.defaultBranch}
-                      selectedBranch={selectedNode?.branchName ?? null}
-                      onSelectBranch={(branchName) => {
-                        const node = snapshot.nodes.find((n) => n.branchName === branchName);
-                        setSelectedNode(node ?? null);
+                      selectedBranches={selectedBranches}
+                      onSelectionChange={(branches, anchor) => {
+                        setSelectedBranches(branches);
+                        if (anchor !== undefined) {
+                          setSelectionAnchor(anchor);
+                        }
                       }}
+                      selectionAnchor={selectionAnchor}
                       tentativeNodes={tentativeNodes}
                       tentativeEdges={tentativeEdges}
                       editMode={branchGraphEditMode}
@@ -2952,8 +2913,6 @@ export default function TreeDashboard() {
                         });
                       }}
                       filterEnabled={filterEnabled}
-                      paintMode={paintMode}
-                      onExitPaintMode={() => setPaintMode(null)}
                       onEdgeCreate={(parentBranch, childBranch) => {
                         // Create a new edge from parent to child (reparent operation)
                         // Frontend-only update during edit mode - DB save happens on Done
@@ -3034,7 +2993,26 @@ export default function TreeDashboard() {
 
               {/* Right: Details */}
               <div className="tree-view__details">
-                {selectedNode && selectedPin ? (
+                {selectedBranches.size > 1 ? (
+                  <MultiSelectPanel
+                    selectedBranches={selectedBranches}
+                    checkedBranches={checkedBranches}
+                    onCheckAll={() => {
+                      setCheckedBranches((prev) => new Set([...prev, ...selectedBranches]));
+                    }}
+                    onUncheckAll={() => {
+                      setCheckedBranches((prev) => {
+                        const next = new Set(prev);
+                        selectedBranches.forEach((b) => next.delete(b));
+                        return next;
+                      });
+                    }}
+                    onClearSelection={() => {
+                      setSelectedBranches(new Set());
+                      setSelectionAnchor(null);
+                    }}
+                  />
+                ) : selectedNode && selectedPin ? (
                   <TaskDetailPanel
                     key={selectedNode.branchName}
                     repoId={snapshot.repoId}
@@ -3043,7 +3021,10 @@ export default function TreeDashboard() {
                     node={selectedNode}
                     defaultBranch={snapshot.defaultBranch}
                     parentBranch={snapshot.edges.find((e) => e.child === selectedNode.branchName)?.parent}
-                    onClose={() => setSelectedNode(null)}
+                    onClose={() => {
+                      setSelectedBranches(new Set());
+                      setSelectionAnchor(null);
+                    }}
                     onWorktreeCreated={() => triggerScan(selectedPin.localPath)}
                     onStartPlanning={(branchName, instruction) => {
                       setPendingPlanning({ branchName, instruction });

@@ -6,8 +6,10 @@ interface BranchGraphProps {
   nodes: TreeNode[];
   edges: TreeEdge[];
   defaultBranch: string;
-  selectedBranch: string | null;
-  onSelectBranch: (branchName: string) => void;
+  // Multi-select state
+  selectedBranches: Set<string>;
+  onSelectionChange: (branches: Set<string>, anchor?: string) => void;
+  selectionAnchor?: string | null;
   // Tentative nodes/edges from planning sessions
   tentativeNodes?: TaskNode[];
   tentativeEdges?: TaskEdge[];
@@ -28,9 +30,6 @@ interface BranchGraphProps {
   checkedBranches?: Set<string>;
   onCheckedChange?: (branchName: string, checked: boolean) => void;
   filterEnabled?: boolean;
-  // Paint mode (Pattern C: paint mode)
-  paintMode?: "check" | "uncheck" | null;
-  onExitPaintMode?: () => void;
   // Sibling order for column reordering (parent branchName -> ordered child branchNames)
   siblingOrder?: Record<string, string[]>;
   onSiblingOrderChange?: (siblingOrder: Record<string, string[]>) => void;
@@ -111,8 +110,9 @@ export default function BranchGraph({
   nodes,
   edges,
   defaultBranch,
-  selectedBranch,
-  onSelectBranch,
+  selectedBranches,
+  onSelectionChange,
+  selectionAnchor = null,
   tentativeNodes = [],
   tentativeEdges = [],
   tentativeBaseBranch,
@@ -126,8 +126,6 @@ export default function BranchGraph({
   checkedBranches = new Set(),
   onCheckedChange,
   filterEnabled = false,
-  paintMode = null,
-  onExitPaintMode,
   siblingOrder = {},
   onSiblingOrderChange,
   focusSeparatorIndex = null,
@@ -165,29 +163,18 @@ export default function BranchGraph({
     currentIndex: number; // current position during drag (updates on swap)
   } | null>(null);
 
-  // Paint mode range selection drag state
-  const [paintModeDragState, setPaintModeDragState] = useState<{
+  // Rectangle selection drag state (for multi-select)
+  const [rectangleSelectState, setRectangleSelectState] = useState<{
     startX: number;
     startY: number;
     currentX: number;
     currentY: number;
+    addToSelection: boolean; // Shift+drag adds to existing selection
   } | null>(null);
 
-  // ESC key handler to exit paint mode
-  useEffect(() => {
-    if (!paintMode) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onExitPaintMode?.();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [paintMode, onExitPaintMode]);
-
-  // Store refs for paint mode drag handlers
-  const paintModeDragStateRef = useRef(paintModeDragState);
-  paintModeDragStateRef.current = paintModeDragState;
+  // Store refs for rectangle selection drag handlers
+  const rectangleSelectStateRef = useRef(rectangleSelectState);
+  rectangleSelectStateRef.current = rectangleSelectState;
 
   // Prevent browser back/forward gesture on horizontal scroll (only when at scroll boundary)
   useEffect(() => {
@@ -1093,16 +1080,16 @@ export default function BranchGraph({
     };
   }, [separatorDragState, getSVGCoords, edges, defaultBranch, layoutNodes, getColumnBoundsHelper, onFocusSeparatorIndexChange]);
 
-  // Handle paint mode range selection drag
+  // Handle rectangle selection drag (multi-select)
   useEffect(() => {
-    if (!paintModeDragState) return;
+    if (!rectangleSelectState) return;
 
     const originalUserSelect = document.body.style.userSelect;
     document.body.style.userSelect = "none";
 
     const handleMouseMove = (e: MouseEvent) => {
       const coords = getSVGCoords(e);
-      setPaintModeDragState(prev => prev ? {
+      setRectangleSelectState(prev => prev ? {
         ...prev,
         currentX: coords.x,
         currentY: coords.y,
@@ -1110,8 +1097,8 @@ export default function BranchGraph({
     };
 
     const handleMouseUp = () => {
-      const dragState = paintModeDragStateRef.current;
-      if (dragState && paintMode && onCheckedChange) {
+      const dragState = rectangleSelectStateRef.current;
+      if (dragState) {
         // Calculate selection rectangle bounds
         const minX = Math.min(dragState.startX, dragState.currentX);
         const maxX = Math.max(dragState.startX, dragState.currentX);
@@ -1119,7 +1106,7 @@ export default function BranchGraph({
         const maxY = Math.max(dragState.startY, dragState.currentY);
 
         // Find all nodes within the selection rectangle
-        const selectedNodes = layoutNodes.filter(node => {
+        const nodesInRect = layoutNodes.filter(node => {
           if (node.id === defaultBranch || node.isTentative) return false;
           const nodeX = node.x;
           const nodeY = node.y;
@@ -1128,15 +1115,18 @@ export default function BranchGraph({
 
           // Check if node overlaps with selection rectangle
           return !(nodeRight < minX || nodeX > maxX || nodeBottom < minY || nodeY > maxY);
-        });
+        }).map(n => n.id);
 
-        // Apply paint action to all selected nodes
-        const shouldCheck = paintMode === "check";
-        selectedNodes.forEach(node => {
-          onCheckedChange(node.id, shouldCheck);
-        });
+        // Update selection based on whether Shift was held
+        if (dragState.addToSelection) {
+          // Add to existing selection
+          onSelectionChange(new Set([...selectedBranches, ...nodesInRect]));
+        } else {
+          // Replace selection
+          onSelectionChange(new Set(nodesInRect));
+        }
       }
-      setPaintModeDragState(null);
+      setRectangleSelectState(null);
     };
 
     document.addEventListener("mousemove", handleMouseMove);
@@ -1147,7 +1137,7 @@ export default function BranchGraph({
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.userSelect = originalUserSelect;
     };
-  }, [paintModeDragState, getSVGCoords, layoutNodes, defaultBranch, paintMode, onCheckedChange]);
+  }, [rectangleSelectState, getSVGCoords, layoutNodes, defaultBranch, selectedBranches, onSelectionChange]);
 
   // Worktree drag effect
   useEffect(() => {
@@ -1414,7 +1404,7 @@ export default function BranchGraph({
     const nodeOffset = getNodeOffset(id);
     const x = originalX + nodeOffset;
 
-    const isSelected = selectedBranch === id;
+    const isSelected = selectedBranches.has(id);
     const isDefault = id === defaultBranch;
     const hasWorktree = !!node.worktree;
     // Use branchLinks as single source of truth for PR info
@@ -1520,9 +1510,9 @@ export default function BranchGraph({
 
     // Determine cursor style
     const getCursorStyle = () => {
-      if (paintMode && !isDefault && !isTentative) return "pointer";
       if (canDrag) return isDragging ? "grabbing" : "grab";
       if (isTentative) return "default";
+      if (isDefault) return "default";
       return "pointer";
     };
 
@@ -1555,13 +1545,45 @@ export default function BranchGraph({
           stroke={strokeColor}
           strokeWidth={isSelected || isDropTarget ? 2 : 1.5}
           strokeDasharray={strokeDash}
-          onClick={() => {
-            if (isTentative || dragState) return;
-            if (paintMode && !isDefault) {
-              // In paint mode, apply the paint action
-              onCheckedChange?.(id, paintMode === "check");
+          onClick={(e) => {
+            if (isTentative || dragState || isDefault) return;
+
+            const isMetaKey = e.metaKey || e.ctrlKey;
+            const isShiftKey = e.shiftKey;
+
+            if (isMetaKey) {
+              // Cmd/Ctrl+click: toggle selection
+              const newSelection = new Set(selectedBranches);
+              if (newSelection.has(id)) {
+                newSelection.delete(id);
+              } else {
+                newSelection.add(id);
+              }
+              onSelectionChange(newSelection, id);
+            } else if (isShiftKey && selectionAnchor) {
+              // Shift+click: range selection (add nodes between anchor and this node)
+              const anchorNode = layoutNodes.find(n => n.id === selectionAnchor);
+              const targetNode = layoutNodes.find(n => n.id === id);
+              if (anchorNode && targetNode) {
+                const minRow = Math.min(anchorNode.row, targetNode.row);
+                const maxRow = Math.max(anchorNode.row, targetNode.row);
+                const minDepth = Math.min(anchorNode.depth, targetNode.depth);
+                const maxDepth = Math.max(anchorNode.depth, targetNode.depth);
+
+                const rangeNodes = layoutNodes
+                  .filter(n =>
+                    !n.isTentative &&
+                    n.id !== defaultBranch &&
+                    n.row >= minRow && n.row <= maxRow &&
+                    n.depth >= minDepth && n.depth <= maxDepth
+                  )
+                  .map(n => n.id);
+
+                onSelectionChange(new Set([...selectedBranches, ...rangeNodes]));
+              }
             } else {
-              onSelectBranch(id);
+              // Normal click: single selection
+              onSelectionChange(new Set([id]), id);
             }
           }}
         />
@@ -2015,8 +2037,8 @@ export default function BranchGraph({
           );
         })()}
 
-        {/* Add branch button - positioned at bottom right of node (hidden in paint mode) */}
-        {onBranchCreate && !isTentative && !isMerged && !paintMode && (
+        {/* Add branch button - positioned at bottom right of node */}
+        {onBranchCreate && !isTentative && !isMerged && (
           <g
             style={{ cursor: "pointer" }}
             onClick={(e) => {
@@ -2070,18 +2092,19 @@ export default function BranchGraph({
           height: "100%",
           minWidth: width * zoom,
           minHeight: height * zoom,
-          cursor: paintModeDragState ? "crosshair" : dragState ? "grabbing" : paintMode ? "crosshair" : undefined,
-          userSelect: (dragState || paintModeDragState) ? "none" : undefined,
+          cursor: rectangleSelectState ? "crosshair" : dragState ? "grabbing" : undefined,
+          userSelect: (dragState || rectangleSelectState) ? "none" : undefined,
         }}
         onMouseDown={(e) => {
-          // Start range selection in paint mode
-          if (paintMode && !paintModeDragState) {
+          // Start rectangle selection (only when not in edit mode and clicking on SVG background)
+          if (!editMode && !rectangleSelectState && e.target === e.currentTarget) {
             const coords = getSVGCoords(e);
-            setPaintModeDragState({
+            setRectangleSelectState({
               startX: coords.x,
               startY: coords.y,
               currentX: coords.x,
               currentY: coords.y,
+              addToSelection: e.shiftKey,
             });
           }
         }}
@@ -2146,15 +2169,15 @@ export default function BranchGraph({
             </g>
           )}
 
-          {/* Render paint mode range selection rectangle */}
-          {paintModeDragState && (
+          {/* Render rectangle selection box */}
+          {rectangleSelectState && (
             <rect
-              x={Math.min(paintModeDragState.startX, paintModeDragState.currentX)}
-              y={Math.min(paintModeDragState.startY, paintModeDragState.currentY)}
-              width={Math.abs(paintModeDragState.currentX - paintModeDragState.startX)}
-              height={Math.abs(paintModeDragState.currentY - paintModeDragState.startY)}
-              fill={paintMode === "check" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)"}
-              stroke={paintMode === "check" ? "#22c55e" : "#ef4444"}
+              x={Math.min(rectangleSelectState.startX, rectangleSelectState.currentX)}
+              y={Math.min(rectangleSelectState.startY, rectangleSelectState.currentY)}
+              width={Math.abs(rectangleSelectState.currentX - rectangleSelectState.startX)}
+              height={Math.abs(rectangleSelectState.currentY - rectangleSelectState.startY)}
+              fill="rgba(59, 130, 246, 0.15)"
+              stroke="#3b82f6"
               strokeWidth={1}
               strokeDasharray="4,4"
               pointerEvents="none"

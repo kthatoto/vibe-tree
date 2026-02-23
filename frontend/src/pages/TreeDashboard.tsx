@@ -3271,44 +3271,13 @@ export default function TreeDashboard() {
                               {prQuickLabels.map((labelName) => {
                                 const label = repoLabels.find((l) => l.name === labelName);
                                 const color = label?.color || "6b7280";
-                                const r = parseInt(color.slice(0, 2), 16);
-                                const g = parseInt(color.slice(2, 4), 16);
-                                const b = parseInt(color.slice(4, 6), 16);
-                                const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-                                const textColor = luminance > 0.5 ? "#000000" : "#ffffff";
                                 return (
-                                  <span
+                                  <LabelChip
                                     key={labelName}
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: 4,
-                                      padding: "4px 8px",
-                                      borderRadius: 12,
-                                      background: `#${color}`,
-                                      color: textColor,
-                                      fontSize: 13,
-                                      fontWeight: 500,
-                                    }}
-                                  >
-                                    {labelName}
-                                    <button
-                                      type="button"
-                                      onClick={() => setPrQuickLabels(prQuickLabels.filter((l) => l !== labelName))}
-                                      style={{
-                                        background: "none",
-                                        border: "none",
-                                        color: textColor,
-                                        cursor: "pointer",
-                                        padding: "0 2px",
-                                        fontSize: 14,
-                                        lineHeight: 1,
-                                        opacity: 0.8,
-                                      }}
-                                    >
-                                      ×
-                                    </button>
-                                  </span>
+                                    name={labelName}
+                                    color={color}
+                                    onRemove={() => setPrQuickLabels(prQuickLabels.filter((l) => l !== labelName))}
+                                  />
                                 );
                               })}
                             </div>
@@ -3336,35 +3305,14 @@ export default function TreeDashboard() {
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, maxHeight: 250, overflowY: "auto" }}>
                           {repoLabels
                             .filter((label) => !prQuickLabels.includes(label.name) && label.name.toLowerCase().includes(labelSearch.toLowerCase()))
-                            .map((label) => {
-                              // GitHub-style text color based on background luminance
-                              const r = parseInt(label.color.slice(0, 2), 16);
-                              const g = parseInt(label.color.slice(2, 4), 16);
-                              const b = parseInt(label.color.slice(4, 6), 16);
-                              const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-                              const textColor = luminance > 0.5 ? "#000000" : "#ffffff";
-                              return (
-                                <button
-                                  key={label.name}
-                                  type="button"
-                                  onClick={() => setPrQuickLabels([...prQuickLabels, label.name])}
-                                  style={{
-                                    padding: "4px 10px",
-                                    borderRadius: 12,
-                                    border: "none",
-                                    background: `#${label.color}`,
-                                    color: textColor,
-                                    cursor: "pointer",
-                                    fontSize: 13,
-                                    fontWeight: 500,
-                                    opacity: 0.6,
-                                  }}
-                                  title={label.description || label.name}
-                                >
-                                  + {label.name}
-                                </button>
-                              );
-                            })}
+                            .map((label) => (
+                              <LabelChip
+                                key={label.name}
+                                name={label.name}
+                                color={label.color}
+                                onClick={() => setPrQuickLabels([...prQuickLabels, label.name])}
+                              />
+                            ))}
                           {repoLabels.length === 0 && (
                             <span style={{ color: "#6b7280", fontStyle: "italic" }}>No labels found in repository</span>
                           )}

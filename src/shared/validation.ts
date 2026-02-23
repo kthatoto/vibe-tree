@@ -62,6 +62,20 @@ export const updateWorktreeSettingsSchema = z.object({
 
 export type UpdateWorktreeSettingsInput = z.infer<typeof updateWorktreeSettingsSchema>;
 
+// PR settings schemas
+export const prSettingsSchema = z.object({
+  quickLabels: z.array(z.string()),
+  quickReviewers: z.array(z.string()),
+});
+
+export const updatePrSettingsSchema = z.object({
+  repoId: repoIdSchema,
+  quickLabels: z.array(z.string()),
+  quickReviewers: z.array(z.string()),
+});
+
+export type UpdatePrSettingsInput = z.infer<typeof updatePrSettingsSchema>;
+
 // Plan schemas
 export const startPlanSchema = z.object({
   repoId: repoIdSchema,

@@ -1630,6 +1630,46 @@
   white-space: nowrap;
 }
 
+/* Quick Actions for Labels/Reviewers */
+.task-detail-panel__pr-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #374151;
+}
+
+.task-detail-panel__pr-quick-label {
+  font-size: 11px;
+  color: #6b7280;
+  margin-right: 4px;
+}
+
+.task-detail-panel__pr-quick-btn {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: transparent;
+}
+
+.task-detail-panel__pr-quick-btn:hover:not(:disabled) {
+  opacity: 0.8;
+}
+
+.task-detail-panel__pr-quick-btn:disabled {
+  cursor: wait;
+}
+
+.task-detail-panel__pr-quick-btn--active {
+  font-weight: 600;
+}
+
 /* Review Decision Badges */
 .task-detail-panel__review-badge {
   padding: 2px 8px;

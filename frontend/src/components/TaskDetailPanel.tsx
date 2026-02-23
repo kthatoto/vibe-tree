@@ -188,6 +188,11 @@ interface TaskDetailPanelProps {
   onBranchStatusRefresh?: (updates: Record<string, BranchStatusUpdate>) => void;
   onBranchStatusRefreshStart?: (branches: string[]) => void;
   onBranchStatusRefreshEnd?: (branches: string[]) => void;
+  // PR quick actions (from project settings)
+  prQuickLabels?: string[];
+  prQuickReviewers?: string[];
+  allRepoLabels?: Array<{ name: string; color: string; description: string }>;
+  repoCollaborators?: string[];
 }
 
 export function TaskDetailPanel({
@@ -213,6 +218,10 @@ export function TaskDetailPanel({
   onBranchStatusRefresh,
   onBranchStatusRefreshStart,
   onBranchStatusRefreshEnd,
+  prQuickLabels = [],
+  prQuickReviewers = [],
+  allRepoLabels = [],
+  repoCollaborators = [],
 }: TaskDetailPanelProps) {
   const isDefaultBranch = branchName === defaultBranch;
 
@@ -222,6 +231,10 @@ export function TaskDetailPanel({
   const [editingInstruction, setEditingInstruction] = useState(false);
   const [instructionDraft, setInstructionDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  // Label/reviewer toggle state
+  const [togglingLabel, setTogglingLabel] = useState<string | null>(null);
+  const [togglingReviewer, setTogglingReviewer] = useState<string | null>(null);
 
   // Chat state
   const [chatSessionId, setChatSessionId] = useState<string | null>(null);
@@ -830,6 +843,46 @@ export function TaskDetailPanel({
     }
   };
 
+  // Toggle a label on/off for a PR
+  const handleToggleLabel = async (linkId: number, labelName: string, currentLabels: Array<{ name: string; color: string }>) => {
+    setTogglingLabel(labelName);
+    try {
+      const hasLabel = currentLabels.some((l) => l.name === labelName);
+      if (hasLabel) {
+        await api.removePrLabel(linkId, labelName);
+      } else {
+        await api.addPrLabel(linkId, labelName);
+      }
+      // Refresh the link to get updated labels
+      const refreshed = await api.refreshBranchLink(linkId);
+      onBranchLinksChange?.(branchName, branchLinks.map((l) => (l.id === refreshed.id ? refreshed : l)));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setTogglingLabel(null);
+    }
+  };
+
+  // Toggle a reviewer on/off for a PR
+  const handleToggleReviewer = async (linkId: number, reviewer: string, currentReviewers: string[]) => {
+    setTogglingReviewer(reviewer);
+    try {
+      const hasReviewer = currentReviewers.includes(reviewer);
+      if (hasReviewer) {
+        await api.removePrReviewer(linkId, reviewer);
+      } else {
+        await api.addPrReviewer(linkId, reviewer);
+      }
+      // Refresh the link to get updated reviewers
+      const refreshed = await api.refreshBranchLink(linkId);
+      onBranchLinksChange?.(branchName, branchLinks.map((l) => (l.id === refreshed.id ? refreshed : l)));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setTogglingReviewer(null);
+    }
+  };
+
   const handleSendMessage = useCallback(async () => {
     if (!chatSessionId || !chatInput.trim() || chatLoading) return;
     const userMessage = chatInput.trim();
@@ -1330,6 +1383,62 @@ export function TaskDetailPanel({
                       {l.name}
                     </span>
                   ))}
+                </div>
+              )}
+              {/* Quick Label Toggles */}
+              {prQuickLabels.length > 0 && (
+                <div className="task-detail-panel__pr-quick-actions">
+                  <span className="task-detail-panel__pr-quick-label">Labels:</span>
+                  {prQuickLabels.map((labelName) => {
+                    const hasLabel = labels.some((l) => l.name === labelName);
+                    const labelInfo = allRepoLabels.find((l) => l.name === labelName);
+                    const color = labelInfo?.color || "374151";
+                    const isToggling = togglingLabel === labelName;
+                    return (
+                      <button
+                        key={labelName}
+                        className={`task-detail-panel__pr-quick-btn ${hasLabel ? "task-detail-panel__pr-quick-btn--active" : ""}`}
+                        style={{
+                          borderColor: `#${color}`,
+                          backgroundColor: hasLabel ? `#${color}30` : "transparent",
+                          color: `#${color}`,
+                          opacity: isToggling ? 0.5 : 1,
+                        }}
+                        onClick={() => handleToggleLabel(pr.id, labelName, labels)}
+                        disabled={isToggling}
+                        title={hasLabel ? `Remove ${labelName}` : `Add ${labelName}`}
+                      >
+                        {isToggling ? "..." : labelName}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {/* Quick Reviewer Toggles */}
+              {prQuickReviewers.length > 0 && (
+                <div className="task-detail-panel__pr-quick-actions">
+                  <span className="task-detail-panel__pr-quick-label">Reviewers:</span>
+                  {prQuickReviewers.map((reviewer) => {
+                    const hasReviewer = reviewers.includes(reviewer);
+                    const isToggling = togglingReviewer === reviewer;
+                    return (
+                      <button
+                        key={reviewer}
+                        className={`task-detail-panel__pr-quick-btn ${hasReviewer ? "task-detail-panel__pr-quick-btn--active" : ""}`}
+                        style={{
+                          borderColor: "#60a5fa",
+                          backgroundColor: hasReviewer ? "#60a5fa30" : "transparent",
+                          color: hasReviewer ? "#60a5fa" : "#9ca3af",
+                          opacity: isToggling ? 0.5 : 1,
+                        }}
+                        onClick={() => handleToggleReviewer(pr.id, reviewer, reviewers)}
+                        disabled={isToggling}
+                        title={hasReviewer ? `Remove @${reviewer}` : `Add @${reviewer}`}
+                      >
+                        {isToggling ? "..." : `@${reviewer}`}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

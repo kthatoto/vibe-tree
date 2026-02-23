@@ -450,8 +450,37 @@ export default function TreeDashboard() {
     superIdle: number;
     ciPendingTimeout: number;
   } | null>(null);
+  // PR settings
+  const [prQuickLabels, setPrQuickLabels] = useState<string[]>([]);
+  const [prQuickReviewers, setPrQuickReviewers] = useState<string[]>([]);
+  const [repoLabels, setRepoLabels] = useState<Array<{ name: string; color: string; description: string }>>([]);
+  const [repoCollaborators, setRepoCollaborators] = useState<string[]>([]);
+
+  // Load PR settings when project is loaded
+  useEffect(() => {
+    if (!snapshot?.repoId) return;
+    const loadPrSettings = async () => {
+      try {
+        const [prSettings, labels, collaborators] = await Promise.all([
+          api.getPrSettings(snapshot.repoId),
+          api.getRepoLabels(snapshot.repoId).catch(() => []),
+          api.getRepoCollaborators(snapshot.repoId).catch(() => []),
+        ]);
+        setPrQuickLabels(prSettings.quickLabels || []);
+        setPrQuickReviewers(prSettings.quickReviewers || []);
+        setRepoLabels(labels);
+        setRepoCollaborators(collaborators);
+      } catch {
+        // No settings yet, use defaults
+        setPrQuickLabels([]);
+        setPrQuickReviewers([]);
+      }
+    };
+    loadPrSettings();
+  }, [snapshot?.repoId]);
+
   // Settings modal category
-  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "polling" | "cleanup" | "debug">("branch");
+  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "polling" | "pr" | "cleanup" | "debug">("branch");
   const [debugModeEnabled, setDebugModeEnabled] = useState(() => localStorage.getItem("vibe-tree-debug-mode") === "true");
   const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<{ chatSessions: number; taskInstructions: number; branchLinks: number } | null>(null);
@@ -1587,10 +1616,13 @@ export default function TreeDashboard() {
     setSettingsDefaultBranch(selectedPin.baseBranch || "");
     setSettingsCategory("branch");
     try {
-      const [rule, wtSettings, pollSettings] = await Promise.all([
+      const [rule, wtSettings, pollSettings, prSettings, labels, collaborators] = await Promise.all([
         api.getBranchNaming(snapshot.repoId),
         api.getWorktreeSettings(snapshot.repoId),
         api.getPollingSettings(snapshot.repoId),
+        api.getPrSettings(snapshot.repoId),
+        api.getRepoLabels(snapshot.repoId).catch(() => []),
+        api.getRepoCollaborators(snapshot.repoId).catch(() => []),
       ]);
       setSettingsRule(rule);
       setSettingsPatterns(rule.patterns || []);
@@ -1600,6 +1632,10 @@ export default function TreeDashboard() {
       setPollingPrFetchCount(pollSettings.prFetchCount ?? 5);
       setPollingIntervals(pollSettings.intervals || null);
       setPollingThresholds(pollSettings.thresholds || null);
+      setPrQuickLabels(prSettings.quickLabels || []);
+      setPrQuickReviewers(prSettings.quickReviewers || []);
+      setRepoLabels(labels);
+      setRepoCollaborators(collaborators);
     } catch {
       // No rule exists yet
       setSettingsRule({ patterns: [] });
@@ -1610,6 +1646,8 @@ export default function TreeDashboard() {
       setPollingPrFetchCount(5);
       setPollingIntervals(null);
       setPollingThresholds(null);
+      setPrQuickLabels([]);
+      setPrQuickReviewers([]);
     } finally {
       setSettingsLoading(false);
     }
@@ -1643,6 +1681,13 @@ export default function TreeDashboard() {
         prFetchCount: pollingPrFetchCount,
         intervals: pollingIntervals || undefined,
         thresholds: pollingThresholds || undefined,
+      });
+
+      // Save PR settings
+      await api.updatePrSettings({
+        repoId: snapshot.repoId,
+        quickLabels: prQuickLabels,
+        quickReviewers: prQuickReviewers,
       });
 
       // Save default branch (empty string clears it)
@@ -2659,6 +2704,10 @@ export default function TreeDashboard() {
                         return next;
                       });
                     }}
+                    prQuickLabels={prQuickLabels}
+                    prQuickReviewers={prQuickReviewers}
+                    allRepoLabels={repoLabels}
+                    repoCollaborators={repoCollaborators}
                   />
                 ) : (
                   <div className="panel">
@@ -2770,6 +2819,12 @@ export default function TreeDashboard() {
                   onClick={() => setSettingsCategory("polling")}
                 >
                   Polling
+                </button>
+                <button
+                  className={`settings-modal__nav-item ${settingsCategory === "pr" ? "settings-modal__nav-item--active" : ""}`}
+                  onClick={() => setSettingsCategory("pr")}
+                >
+                  PR
                 </button>
                 <button
                   className={`settings-modal__nav-item ${settingsCategory === "cleanup" ? "settings-modal__nav-item--active" : ""}`}
@@ -3082,6 +3137,103 @@ export default function TreeDashboard() {
                             {" • "}
                             <strong style={{ color: "#e5e7eb" }}>Interval:</strong> {pollingState.interval / 1000}s
                           </p>
+                        </div>
+                      </>
+                    )}
+
+                    {/* PR Settings */}
+                    {settingsCategory === "pr" && (
+                      <>
+                        <h3>PR Quick Actions</h3>
+                        <div className="settings-section">
+                          <label>Quick Labels</label>
+                          <p style={{ color: "#9ca3af", margin: "4px 0 8px" }}>
+                            Labels that will appear as quick toggles in the PR section of branch details.
+                          </p>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                            {repoLabels.map((label) => {
+                              const isSelected = prQuickLabels.includes(label.name);
+                              return (
+                                <button
+                                  key={label.name}
+                                  type="button"
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      setPrQuickLabels(prQuickLabels.filter((l) => l !== label.name));
+                                    } else {
+                                      setPrQuickLabels([...prQuickLabels, label.name]);
+                                    }
+                                  }}
+                                  style={{
+                                    padding: "4px 10px",
+                                    borderRadius: 12,
+                                    border: isSelected ? `2px solid #${label.color}` : "1px solid #374151",
+                                    background: isSelected ? `#${label.color}30` : "#1f2937",
+                                    color: `#${label.color}`,
+                                    cursor: "pointer",
+                                    fontSize: 13,
+                                    fontWeight: 500,
+                                  }}
+                                  title={label.description || label.name}
+                                >
+                                  {label.name}
+                                </button>
+                              );
+                            })}
+                            {repoLabels.length === 0 && (
+                              <span style={{ color: "#6b7280", fontStyle: "italic" }}>No labels found in repository</span>
+                            )}
+                          </div>
+                          {prQuickLabels.length > 0 && (
+                            <p style={{ color: "#9ca3af", margin: "8px 0 0" }}>
+                              Selected: {prQuickLabels.join(", ")}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="settings-section" style={{ marginTop: 16 }}>
+                          <label>Quick Reviewers</label>
+                          <p style={{ color: "#9ca3af", margin: "4px 0 8px" }}>
+                            Reviewers that will appear as quick toggles in the PR section of branch details.
+                          </p>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                            {repoCollaborators.map((collaborator) => {
+                              const isSelected = prQuickReviewers.includes(collaborator);
+                              return (
+                                <button
+                                  key={collaborator}
+                                  type="button"
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      setPrQuickReviewers(prQuickReviewers.filter((r) => r !== collaborator));
+                                    } else {
+                                      setPrQuickReviewers([...prQuickReviewers, collaborator]);
+                                    }
+                                  }}
+                                  style={{
+                                    padding: "4px 10px",
+                                    borderRadius: 12,
+                                    border: isSelected ? "2px solid #60a5fa" : "1px solid #374151",
+                                    background: isSelected ? "#60a5fa30" : "#1f2937",
+                                    color: isSelected ? "#60a5fa" : "#d1d5db",
+                                    cursor: "pointer",
+                                    fontSize: 13,
+                                    fontWeight: 500,
+                                  }}
+                                >
+                                  @{collaborator}
+                                </button>
+                              );
+                            })}
+                            {repoCollaborators.length === 0 && (
+                              <span style={{ color: "#6b7280", fontStyle: "italic" }}>No collaborators found</span>
+                            )}
+                          </div>
+                          {prQuickReviewers.length > 0 && (
+                            <p style={{ color: "#9ca3af", margin: "8px 0 0" }}>
+                              Selected: {prQuickReviewers.map((r) => `@${r}`).join(", ")}
+                            </p>
+                          )}
                         </div>
                       </>
                     )}

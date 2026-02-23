@@ -776,3 +776,227 @@ branchLinksRouter.post("/detect", async (c) => {
     return c.json({ found: false });
   }
 });
+
+// GET /repo-labels-full - Get all labels for a repository (with descriptions, fetches from GitHub)
+branchLinksRouter.get("/repo-labels-full", async (c) => {
+  const repoId = c.req.query("repoId");
+  if (!repoId) {
+    throw new BadRequestError("repoId is required");
+  }
+
+  try {
+    // Fetch labels from GitHub
+    const result = (await execAsync(
+      `gh label list --repo "${repoId}" --json name,color,description --limit 100`
+    )).trim();
+    const labels = JSON.parse(result) as Array<{ name: string; color: string; description: string }>;
+
+    // Cache labels
+    await cacheRepoLabels(repoId, labels);
+
+    return c.json(labels);
+  } catch (err) {
+    console.error("Failed to fetch repo labels:", err);
+    // Fallback to cached labels
+    const cached = await db.select().from(schema.repoLabels).where(eq(schema.repoLabels.repoId, repoId));
+    return c.json(cached.map((l) => ({ name: l.name, color: l.color, description: "" })));
+  }
+});
+
+// GET /repo-collaborators - Get collaborators for a repository (potential reviewers)
+branchLinksRouter.get("/repo-collaborators", async (c) => {
+  const repoId = c.req.query("repoId");
+  if (!repoId) {
+    throw new BadRequestError("repoId is required");
+  }
+
+  try {
+    // Fetch collaborators from GitHub
+    const result = (await execAsync(
+      `gh api repos/${repoId}/collaborators --jq '.[].login'`
+    )).trim();
+    const collaborators = result.split("\n").filter(Boolean);
+
+    return c.json(collaborators);
+  } catch (err) {
+    console.error("Failed to fetch repo collaborators:", err);
+    return c.json([]);
+  }
+});
+
+// POST /branch-links/:id/labels/add - Add a label to a PR
+branchLinksRouter.post("/:id/labels/add", async (c) => {
+  const id = parseInt(c.req.param("id"), 10);
+  const body = await c.req.json();
+  const { labelName } = body as { labelName: string };
+
+  if (!labelName) {
+    throw new BadRequestError("labelName is required");
+  }
+
+  // Get the branch link
+  const [link] = await db.select().from(schema.branchLinks).where(eq(schema.branchLinks.id, id)).limit(1);
+  if (!link) {
+    throw new NotFoundError("Branch link not found");
+  }
+  if (link.linkType !== "pr" || !link.number) {
+    throw new BadRequestError("Can only add labels to PRs");
+  }
+
+  try {
+    // Add label via gh API (more reliable than gh pr edit which has issues with project warnings)
+    await execAsync(`gh api repos/${link.repoId}/issues/${link.number}/labels --method POST -f "labels[]=${labelName}"`);
+
+    // Update local cache
+    const currentLabels: Array<{ name: string; color: string }> = link.labels ? JSON.parse(link.labels) : [];
+    if (!currentLabels.find((l) => l.name === labelName)) {
+      // Get label color from cache
+      const [cachedLabel] = await db.select().from(schema.repoLabels)
+        .where(and(eq(schema.repoLabels.repoId, link.repoId), eq(schema.repoLabels.name, labelName)))
+        .limit(1);
+      const color = cachedLabel?.color || "888888";
+      currentLabels.push({ name: labelName, color });
+
+      const now = new Date().toISOString();
+      await db.update(schema.branchLinks)
+        .set({ labels: JSON.stringify(currentLabels), updatedAt: now })
+        .where(eq(schema.branchLinks.id, id));
+
+      // Broadcast update
+      const [updated] = await db.select().from(schema.branchLinks).where(eq(schema.branchLinks.id, id)).limit(1);
+      broadcast({ type: "branchLink.updated", repoId: link.repoId, data: updated });
+    }
+
+    return c.json({ success: true, labels: currentLabels });
+  } catch (err) {
+    throw new BadRequestError(`Failed to add label: ${err instanceof Error ? err.message : String(err)}`);
+  }
+});
+
+// POST /branch-links/:id/labels/remove - Remove a label from a PR
+branchLinksRouter.post("/:id/labels/remove", async (c) => {
+  const id = parseInt(c.req.param("id"), 10);
+  const body = await c.req.json();
+  const { labelName } = body as { labelName: string };
+
+  if (!labelName) {
+    throw new BadRequestError("labelName is required");
+  }
+
+  // Get the branch link
+  const [link] = await db.select().from(schema.branchLinks).where(eq(schema.branchLinks.id, id)).limit(1);
+  if (!link) {
+    throw new NotFoundError("Branch link not found");
+  }
+  if (link.linkType !== "pr" || !link.number) {
+    throw new BadRequestError("Can only remove labels from PRs");
+  }
+
+  try {
+    // Remove label via gh API (more reliable than gh pr edit)
+    await execAsync(`gh api repos/${link.repoId}/issues/${link.number}/labels/${encodeURIComponent(labelName)} --method DELETE`);
+
+    // Update local cache
+    const currentLabels: Array<{ name: string; color: string }> = link.labels ? JSON.parse(link.labels) : [];
+    const updatedLabels = currentLabels.filter((l) => l.name !== labelName);
+
+    const now = new Date().toISOString();
+    await db.update(schema.branchLinks)
+      .set({ labels: JSON.stringify(updatedLabels), updatedAt: now })
+      .where(eq(schema.branchLinks.id, id));
+
+    // Broadcast update
+    const [updated] = await db.select().from(schema.branchLinks).where(eq(schema.branchLinks.id, id)).limit(1);
+    broadcast({ type: "branchLink.updated", repoId: link.repoId, data: updated });
+
+    return c.json({ success: true, labels: updatedLabels });
+  } catch (err) {
+    throw new BadRequestError(`Failed to remove label: ${err instanceof Error ? err.message : String(err)}`);
+  }
+});
+
+// POST /branch-links/:id/reviewers/add - Add a reviewer to a PR
+branchLinksRouter.post("/:id/reviewers/add", async (c) => {
+  const id = parseInt(c.req.param("id"), 10);
+  const body = await c.req.json();
+  const { reviewer } = body as { reviewer: string };
+
+  if (!reviewer) {
+    throw new BadRequestError("reviewer is required");
+  }
+
+  // Get the branch link
+  const [link] = await db.select().from(schema.branchLinks).where(eq(schema.branchLinks.id, id)).limit(1);
+  if (!link) {
+    throw new NotFoundError("Branch link not found");
+  }
+  if (link.linkType !== "pr" || !link.number) {
+    throw new BadRequestError("Can only add reviewers to PRs");
+  }
+
+  try {
+    // Add reviewer via gh API (more reliable than gh pr edit)
+    await execAsync(`gh api repos/${link.repoId}/pulls/${link.number}/requested_reviewers --method POST -f "reviewers[]=${reviewer}"`);
+
+    // Update local cache
+    const currentReviewers: string[] = link.reviewers ? JSON.parse(link.reviewers) : [];
+    if (!currentReviewers.includes(reviewer)) {
+      currentReviewers.push(reviewer);
+
+      const now = new Date().toISOString();
+      await db.update(schema.branchLinks)
+        .set({ reviewers: JSON.stringify(currentReviewers), updatedAt: now })
+        .where(eq(schema.branchLinks.id, id));
+
+      // Broadcast update
+      const [updated] = await db.select().from(schema.branchLinks).where(eq(schema.branchLinks.id, id)).limit(1);
+      broadcast({ type: "branchLink.updated", repoId: link.repoId, data: updated });
+    }
+
+    return c.json({ success: true, reviewers: currentReviewers });
+  } catch (err) {
+    throw new BadRequestError(`Failed to add reviewer: ${err instanceof Error ? err.message : String(err)}`);
+  }
+});
+
+// POST /branch-links/:id/reviewers/remove - Remove a reviewer from a PR
+branchLinksRouter.post("/:id/reviewers/remove", async (c) => {
+  const id = parseInt(c.req.param("id"), 10);
+  const body = await c.req.json();
+  const { reviewer } = body as { reviewer: string };
+
+  if (!reviewer) {
+    throw new BadRequestError("reviewer is required");
+  }
+
+  // Get the branch link
+  const [link] = await db.select().from(schema.branchLinks).where(eq(schema.branchLinks.id, id)).limit(1);
+  if (!link) {
+    throw new NotFoundError("Branch link not found");
+  }
+  if (link.linkType !== "pr" || !link.number) {
+    throw new BadRequestError("Can only remove reviewers from PRs");
+  }
+
+  try {
+    // Remove reviewer via gh API (more reliable than gh pr edit)
+    await execAsync(`gh api repos/${link.repoId}/pulls/${link.number}/requested_reviewers --method DELETE -f "reviewers[]=${reviewer}"`);
+
+    // Update local cache
+    const currentReviewers: string[] = link.reviewers ? JSON.parse(link.reviewers) : [];
+    const updatedReviewers = currentReviewers.filter((r) => r !== reviewer);
+
+    const now = new Date().toISOString();
+    await db.update(schema.branchLinks)
+      .set({ reviewers: JSON.stringify(updatedReviewers), updatedAt: now })
+      .where(eq(schema.branchLinks.id, id));
+
+    // Broadcast update
+    const [updated] = await db.select().from(schema.branchLinks).where(eq(schema.branchLinks.id, id)).limit(1);
+    broadcast({ type: "branchLink.updated", repoId: link.repoId, data: updated });
+
+    return c.json({ success: true, reviewers: updatedReviewers });
+  } catch (err) {
+    throw new BadRequestError(`Failed to remove reviewer: ${err instanceof Error ? err.message : String(err)}`);
+  }
+});

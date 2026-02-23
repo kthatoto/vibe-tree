@@ -59,6 +59,13 @@ export interface PollingSettings {
   thresholds?: PollingThresholds;
 }
 
+export interface PrSettings {
+  // Quick labels for fast add/remove (name only, color fetched from repo)
+  quickLabels: string[];
+  // Quick reviewers for fast add/remove (GitHub usernames)
+  quickReviewers: string[];
+}
+
 export interface ProjectRule {
   id: number;
   repoId: string; // owner/name format

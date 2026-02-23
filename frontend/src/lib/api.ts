@@ -41,6 +41,17 @@ export interface PollingSettings {
   };
 }
 
+export interface PrSettings {
+  quickLabels: string[];
+  quickReviewers: string[];
+}
+
+export interface RepoLabel {
+  name: string;
+  color: string;
+  description: string;
+}
+
 export interface Plan {
   id: number;
   repoId: string;
@@ -533,6 +544,17 @@ export const api = {
     ),
   updatePollingSettings: (data: { repoId: string } & PollingSettings) =>
     fetchJson<PollingSettings>(`${API_BASE}/project-rules/polling`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // PR Settings
+  getPrSettings: (repoId: string) =>
+    fetchJson<PrSettings & { id: number | null; repoId: string }>(
+      `${API_BASE}/project-rules/pr-settings?repoId=${encodeURIComponent(repoId)}`
+    ),
+  updatePrSettings: (data: { repoId: string } & PrSettings) =>
+    fetchJson<PrSettings>(`${API_BASE}/project-rules/pr-settings`, {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -1136,8 +1158,44 @@ export const api = {
       `${API_BASE}/branch-links/batch?repoId=${encodeURIComponent(repoId)}&branches=${encodeURIComponent(branches.join(","))}`
     ),
   getRepoLabels: (repoId: string) =>
-    fetchJson<Record<string, string>>(
-      `${API_BASE}/branch-links/repo-labels?repoId=${encodeURIComponent(repoId)}`
+    fetchJson<RepoLabel[]>(
+      `${API_BASE}/branch-links/repo-labels-full?repoId=${encodeURIComponent(repoId)}`
+    ),
+  getRepoCollaborators: (repoId: string) =>
+    fetchJson<string[]>(
+      `${API_BASE}/branch-links/repo-collaborators?repoId=${encodeURIComponent(repoId)}`
+    ),
+  addPrLabel: (linkId: number, labelName: string) =>
+    fetchJson<{ success: boolean; labels: Array<{ name: string; color: string }> }>(
+      `${API_BASE}/branch-links/${linkId}/labels/add`,
+      {
+        method: "POST",
+        body: JSON.stringify({ labelName }),
+      }
+    ),
+  removePrLabel: (linkId: number, labelName: string) =>
+    fetchJson<{ success: boolean; labels: Array<{ name: string; color: string }> }>(
+      `${API_BASE}/branch-links/${linkId}/labels/remove`,
+      {
+        method: "POST",
+        body: JSON.stringify({ labelName }),
+      }
+    ),
+  addPrReviewer: (linkId: number, reviewer: string) =>
+    fetchJson<{ success: boolean; reviewers: string[] }>(
+      `${API_BASE}/branch-links/${linkId}/reviewers/add`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reviewer }),
+      }
+    ),
+  removePrReviewer: (linkId: number, reviewer: string) =>
+    fetchJson<{ success: boolean; reviewers: string[] }>(
+      `${API_BASE}/branch-links/${linkId}/reviewers/remove`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reviewer }),
+      }
     ),
   createBranchLink: (data: {
     repoId: string;

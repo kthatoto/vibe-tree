@@ -63,6 +63,7 @@ scanLogsRouter.get("/", async (c) => {
       message: log.message,
       html: log.html,
       branchName: log.branchName,
+      scanSessionId: log.scanSessionId,
       metadata: log.metadata ? JSON.parse(log.metadata) : null,
       createdAt: log.createdAt,
     })),

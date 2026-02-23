@@ -405,7 +405,9 @@ scanRouter.post("/", async (c) => {
   // Start background scan (don't await)
   (async () => {
     try {
-      console.log(`[Scan] Starting background scan for ${repoId}`);
+      // Generate scan session ID for grouping logs
+      const scanSessionId = `scan_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      console.log(`[Scan] Starting background scan for ${repoId} (session: ${scanSessionId})`);
 
       // Helper to build snapshot
       const buildSnapshot = (
@@ -955,6 +957,7 @@ scanRouter.post("/", async (c) => {
                     message: `${pr.branch}: ${change.type}`,
                     html: JSON.stringify(logData),
                     branchName: pr.branch,
+                    scanSessionId,
                     createdAt: now,
                   });
                 }
@@ -982,6 +985,7 @@ scanRouter.post("/", async (c) => {
                 message: `${pr.branch}: new`,
                 html: JSON.stringify(logData),
                 branchName: pr.branch,
+                scanSessionId,
                 createdAt: now,
               });
               // Broadcast branchLink.created so frontend branchLinks state is updated

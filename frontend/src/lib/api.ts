@@ -71,6 +71,7 @@ export interface ScanLog {
   message: string;
   html?: string | null;
   branchName?: string | null;
+  scanSessionId?: string | null;
   metadata?: Record<string, unknown> | null;
   createdAt: string;
 }

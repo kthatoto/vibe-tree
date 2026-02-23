@@ -507,13 +507,15 @@ export default function TreeDashboard() {
   const [warningFilter, setWarningFilter] = useState<string | null>(null);
 
   // Logs state
-  type LogEntry = { id: number; timestamp: Date; type: string; message: string; html?: string; branch?: string };
+  type LogEntry = { id: number; timestamp: Date; type: string; message: string; html?: string; branch?: string; scanSessionId?: string };
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const logIdRef = useRef(0);
-  const addLog = useCallback((type: string, message: string, html?: string, branch?: string) => {
+  const addLog = useCallback((type: string, message: string, html?: string, branch?: string, scanSessionId?: string) => {
     const id = ++logIdRef.current;
-    setLogs((prev) => [...prev.slice(-99), { id, timestamp: new Date(), type, message, html, branch }]);
+    setLogs((prev) => [...prev.slice(-99), { id, timestamp: new Date(), type, message, html, branch, scanSessionId }]);
   }, []);
+  // Expanded scan session IDs for grouping
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
 
   // Hovered log branch (for graph highlight) and hovered log id (for single log highlight)
   const [hoveredLogBranch, setHoveredLogBranch] = useState<string | null>(null);
@@ -532,6 +534,7 @@ export default function TreeDashboard() {
         message: log.message,
         html: log.html || undefined,
         branch: log.branchName || undefined,
+        scanSessionId: log.scanSessionId || undefined,
       }));
       setLogs(dbLogs.reverse()); // DB returns newest first, we want oldest first
       logIdRef.current = Math.max(0, ...dbLogs.map(l => l.id));
@@ -2098,192 +2101,274 @@ export default function TreeDashboard() {
             fontFamily: "monospace",
             overflow: "auto",
           }}>
-            {[...logs].reverse().map((log) => {
-              const pad = (n: number) => n.toString().padStart(2, "0");
-              const t = log.timestamp;
-              const timeStr = `${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
-              const color = log.type === "error" ? "#f87171"
-                : log.type === "scan" ? "#60a5fa"
-                : log.type === "branch" ? "#a78bfa"
-                : log.type === "fetch" ? "#34d399"
-                : log.type === "pr" ? "#d1d5db"
-                : "#9ca3af";
-              const hasBranch = !!log.branch;
+            {(() => {
+              // Group logs by scanSessionId
+              const reversedLogs = [...logs].reverse();
+              type LogGroup = { sessionId: string; logs: LogEntry[]; timestamp: Date };
+              const groups: (LogEntry | LogGroup)[] = [];
+              let currentGroup: LogGroup | null = null;
 
-              const baseStyle = {
-                cursor: hasBranch ? "pointer" : "default",
-                padding: "2px 4px",
-                margin: "-2px -4px",
-                borderRadius: 4,
-                background: hoveredLogId === log.id ? "rgba(59, 130, 246, 0.1)" : "transparent",
-              };
-
-              // PR logs: 2-column grid (Time/Label | Branch/Content)
-              if (log.type === "pr" && log.html) {
-                let logData: { branch: string; changeType: string; data: Record<string, unknown> } | null = null;
-                try {
-                  logData = JSON.parse(log.html);
-                } catch {
-                  // Not JSON, skip
-                }
-                if (logData && logData.changeType) {
-                  const { changeType, data } = logData;
-                  const labelMap: Record<string, string> = {
-                    new: "",
-                    checks: "CI",
-                    labels: "Labels",
-                    review: "Review",
-                    reviewers: "Reviewers",
-                  };
-                  const label = labelMap[changeType] || changeType;
-
-                  // Render content based on change type
-                  const renderContent = () => {
-                    switch (changeType) {
-                      case "new":
-                        return <span style={{ color: "#22c55e", fontWeight: 600 }}>NEW PR</span>;
-                      case "checks": {
-                        const oldStatus = (data.old as string)?.toLowerCase() || "unknown";
-                        const newStatus = (data.new as string)?.toLowerCase() || "unknown";
-                        const oldPassed = data.oldPassed as number | undefined;
-                        const oldTotal = data.oldTotal as number | undefined;
-                        const newPassed = data.newPassed as number | undefined;
-                        const newTotal = data.newTotal as number | undefined;
-                        const failedChecks = (data.failedChecks as { name: string; url: string | null }[]) || [];
-                        return (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                              <CIBadge status={oldStatus as "success" | "failure" | "pending" | "unknown"} passed={oldPassed} total={oldTotal} />
-                              <span style={{ color: "#6b7280" }}>→</span>
-                              <CIBadge status={newStatus as "success" | "failure" | "pending" | "unknown"} passed={newPassed} total={newTotal} />
-                            </div>
-                            {newStatus === "failure" && failedChecks.length > 0 && (
-                              <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingLeft: 4 }}>
-                                {failedChecks.map((check, i) => (
-                                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10 }}>
-                                    <span style={{ color: "#f87171" }}>✗</span>
-                                    {check.url ? (
-                                      <a
-                                        href={check.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        style={{ color: "#f87171", textDecoration: "none" }}
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        {check.name}
-                                      </a>
-                                    ) : (
-                                      <span style={{ color: "#f87171" }}>{check.name}</span>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      }
-                      case "labels": {
-                        const added = (data.added as { name: string; color: string }[]) || [];
-                        const removed = (data.removed as { name: string; color: string }[]) || [];
-                        return (
-                          <>
-                            {added.map((l, i) => <LabelChip key={`a-${i}`} name={l.name} color={l.color} />)}
-                            {removed.map((l, i) => <LabelChip key={`r-${i}`} name={l.name} color={l.color} removed />)}
-                          </>
-                        );
-                      }
-                      case "review": {
-                        const status = (data.new as string)?.toLowerCase();
-                        if (status === "approved") return <ReviewBadge status="approved" />;
-                        if (status === "changes_requested") return <ReviewBadge status="changes_requested" />;
-                        return <ReviewBadge status="pending" />;
-                      }
-                      case "reviewers": {
-                        const newReviewers = (data.new as string)?.split(",").filter(r => r.trim()) || [];
-                        const oldReviewers = (data.old as string)?.split(",").filter(r => r.trim()) || [];
-                        return (
-                          <>
-                            {newReviewers.map((r, i) => <UserChip key={`a-${i}`} login={r.trim()} />)}
-                            {oldReviewers.map((r, i) => <UserChip key={`r-${i}`} login={r.trim()} removed />)}
-                          </>
-                        );
-                      }
-                      default:
-                        return <span>{changeType}</span>;
-                    }
-                  };
-
-                  return (
-                    <div
-                      key={log.id}
-                      style={{
-                        ...baseStyle,
-                        display: "grid",
-                        gridTemplateColumns: "52px 1fr",
-                        gap: "2px 6px",
-                        marginBottom: 4,
-                      }}
-                      onMouseEnter={() => { setHoveredLogId(log.id); if (hasBranch) setHoveredLogBranch(log.branch!); }}
-                      onMouseLeave={() => { setHoveredLogId(null); if (hasBranch) setHoveredLogBranch(null); }}
-                      onClick={() => {
-                        if (hasBranch && snapshot) {
-                          const node = snapshot.nodes.find(n => n.branchName === log.branch);
-                          if (node) setSelectedNode(node);
-                        }
-                      }}
-                    >
-                      <span style={{ color: "#6b7280", fontSize: 12, textAlign: "right" }}>{timeStr}</span>
-                      <span style={{ color: "#e5e7eb", fontWeight: 500 }}>{logData.branch}</span>
-                      <span style={{ color: "#6b7280", fontSize: 11, textAlign: "right" }}>{label}</span>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
-                        {renderContent()}
-                      </div>
-                    </div>
-                  );
+              for (const log of reversedLogs) {
+                if (log.scanSessionId) {
+                  if (currentGroup && currentGroup.sessionId === log.scanSessionId) {
+                    currentGroup.logs.push(log);
+                  } else {
+                    if (currentGroup) groups.push(currentGroup);
+                    currentGroup = { sessionId: log.scanSessionId, logs: [log], timestamp: log.timestamp };
+                  }
+                } else {
+                  if (currentGroup) {
+                    groups.push(currentGroup);
+                    currentGroup = null;
+                  }
+                  groups.push(log);
                 }
               }
+              if (currentGroup) groups.push(currentGroup);
 
-              // Other logs: simple flex layout
-              return (
-                <div
-                  key={log.id}
-                  style={{
-                    ...baseStyle,
-                    display: "flex",
-                    gap: 8,
-                    marginBottom: 4,
-                    alignItems: "flex-start",
-                  }}
-                  onMouseEnter={() => { setHoveredLogId(log.id); if (hasBranch) setHoveredLogBranch(log.branch!); }}
-                  onMouseLeave={() => { setHoveredLogId(null); if (hasBranch) setHoveredLogBranch(null); }}
-                  onClick={() => {
-                    if (hasBranch && snapshot) {
-                      const node = snapshot.nodes.find(n => n.branchName === log.branch);
-                      if (node) setSelectedNode(node);
-                    }
-                  }}
-                >
-                  <span style={{ color: "#6b7280", flexShrink: 0, fontSize: 12, minWidth: 52 }}>{timeStr}</span>
-                  {log.html ? (
+              const pad = (n: number) => n.toString().padStart(2, "0");
+              const formatTime = (t: Date) => `${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
+
+              const renderSingleLog = (log: LogEntry, isGrouped = false) => {
+                const timeStr = formatTime(log.timestamp);
+                const color = log.type === "error" ? "#f87171"
+                  : log.type === "scan" ? "#60a5fa"
+                  : log.type === "branch" ? "#a78bfa"
+                  : log.type === "fetch" ? "#34d399"
+                  : log.type === "pr" ? "#d1d5db"
+                  : "#9ca3af";
+                const hasBranch = !!log.branch;
+
+                const baseStyle = {
+                  cursor: hasBranch ? "pointer" : "default",
+                  padding: "2px 4px",
+                  margin: "-2px -4px",
+                  borderRadius: 4,
+                  background: hoveredLogId === log.id ? "rgba(59, 130, 246, 0.1)" : "transparent",
+                  marginLeft: isGrouped ? 12 : 0,
+                };
+
+                // PR logs: 2-column grid (Time/Label | Branch/Content)
+                if (log.type === "pr" && log.html) {
+                  let logData: { branch: string; changeType: string; data: Record<string, unknown> } | null = null;
+                  try {
+                    logData = JSON.parse(log.html);
+                  } catch {
+                    // Not JSON, skip
+                  }
+                  if (logData && logData.changeType) {
+                    const { changeType, data } = logData;
+                    const labelMap: Record<string, string> = {
+                      new: "",
+                      checks: "CI",
+                      labels: "Labels",
+                      review: "Review",
+                      reviewers: "Reviewers",
+                    };
+                    const label = labelMap[changeType] || changeType;
+
+                    // Render content based on change type
+                    const renderContent = () => {
+                      switch (changeType) {
+                        case "new":
+                          return <span style={{ color: "#22c55e", fontWeight: 600 }}>NEW PR</span>;
+                        case "checks": {
+                          const oldStatus = (data.old as string)?.toLowerCase() || "unknown";
+                          const newStatus = (data.new as string)?.toLowerCase() || "unknown";
+                          const oldPassed = data.oldPassed as number | undefined;
+                          const oldTotal = data.oldTotal as number | undefined;
+                          const newPassed = data.newPassed as number | undefined;
+                          const newTotal = data.newTotal as number | undefined;
+                          const failedChecks = (data.failedChecks as { name: string; url: string | null }[]) || [];
+                          return (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                <CIBadge status={oldStatus as "success" | "failure" | "pending" | "unknown"} passed={oldPassed} total={oldTotal} />
+                                <span style={{ color: "#6b7280" }}>→</span>
+                                <CIBadge status={newStatus as "success" | "failure" | "pending" | "unknown"} passed={newPassed} total={newTotal} />
+                              </div>
+                              {newStatus === "failure" && failedChecks.length > 0 && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingLeft: 4 }}>
+                                  {failedChecks.map((check, i) => (
+                                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10 }}>
+                                      <span style={{ color: "#f87171" }}>✗</span>
+                                      {check.url ? (
+                                        <a
+                                          href={check.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          style={{ color: "#f87171", textDecoration: "none" }}
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          {check.name}
+                                        </a>
+                                      ) : (
+                                        <span style={{ color: "#f87171" }}>{check.name}</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+                        case "labels": {
+                          const added = (data.added as { name: string; color: string }[]) || [];
+                          const removed = (data.removed as { name: string; color: string }[]) || [];
+                          return (
+                            <>
+                              {added.map((l, i) => <LabelChip key={`a-${i}`} name={l.name} color={l.color} />)}
+                              {removed.map((l, i) => <LabelChip key={`r-${i}`} name={l.name} color={l.color} removed />)}
+                            </>
+                          );
+                        }
+                        case "review": {
+                          const status = (data.new as string)?.toLowerCase();
+                          if (status === "approved") return <ReviewBadge status="approved" />;
+                          if (status === "changes_requested") return <ReviewBadge status="changes_requested" />;
+                          return <ReviewBadge status="pending" />;
+                        }
+                        case "reviewers": {
+                          const newReviewers = (data.new as string)?.split(",").filter(r => r.trim()) || [];
+                          const oldReviewers = (data.old as string)?.split(",").filter(r => r.trim()) || [];
+                          return (
+                            <>
+                              {newReviewers.map((r, i) => <UserChip key={`a-${i}`} login={r.trim()} />)}
+                              {oldReviewers.map((r, i) => <UserChip key={`r-${i}`} login={r.trim()} removed />)}
+                            </>
+                          );
+                        }
+                        default:
+                          return <span>{changeType}</span>;
+                      }
+                    };
+
+                    return (
+                      <div
+                        key={log.id}
+                        style={{
+                          ...baseStyle,
+                          display: "grid",
+                          gridTemplateColumns: isGrouped ? "1fr" : "52px 1fr",
+                          gap: "2px 6px",
+                          marginBottom: 4,
+                        }}
+                        onMouseEnter={() => { setHoveredLogId(log.id); if (hasBranch) setHoveredLogBranch(log.branch!); }}
+                        onMouseLeave={() => { setHoveredLogId(null); if (hasBranch) setHoveredLogBranch(null); }}
+                        onClick={() => {
+                          if (hasBranch && snapshot) {
+                            const node = snapshot.nodes.find(n => n.branchName === log.branch);
+                            if (node) setSelectedNode(node);
+                          }
+                        }}
+                      >
+                        {!isGrouped && <span style={{ color: "#6b7280", fontSize: 12, textAlign: "right" }}>{timeStr}</span>}
+                        <span style={{ color: "#e5e7eb", fontWeight: 500 }}>{logData.branch}</span>
+                        {!isGrouped && <span style={{ color: "#6b7280", fontSize: 11, textAlign: "right" }}>{label}</span>}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+                          {isGrouped && <span style={{ color: "#6b7280", fontSize: 11, marginRight: 4 }}>{label}</span>}
+                          {renderContent()}
+                        </div>
+                      </div>
+                    );
+                  }
+                }
+
+                // Other logs: simple flex layout
+                return (
+                  <div
+                    key={log.id}
+                    style={{
+                      ...baseStyle,
+                      display: "flex",
+                      gap: 8,
+                      marginBottom: 4,
+                      alignItems: "flex-start",
+                    }}
+                    onMouseEnter={() => { setHoveredLogId(log.id); if (hasBranch) setHoveredLogBranch(log.branch!); }}
+                    onMouseLeave={() => { setHoveredLogId(null); if (hasBranch) setHoveredLogBranch(null); }}
+                    onClick={() => {
+                      if (hasBranch && snapshot) {
+                        const node = snapshot.nodes.find(n => n.branchName === log.branch);
+                        if (node) setSelectedNode(node);
+                      }
+                    }}
+                  >
+                    {!isGrouped && <span style={{ color: "#6b7280", flexShrink: 0, fontSize: 12, minWidth: 52 }}>{timeStr}</span>}
+                    {log.html ? (
+                      <div
+                        style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", color }}
+                        dangerouslySetInnerHTML={{ __html: log.html }}
+                      />
+                    ) : (
+                      <span style={{
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                        wordBreak: "break-all",
+                        color,
+                      }}>
+                        {log.message}
+                      </span>
+                    )}
+                  </div>
+                );
+              };
+
+              return groups.map((item, idx) => {
+                // Single log (no session)
+                if ("id" in item) {
+                  return renderSingleLog(item);
+                }
+
+                // Grouped logs
+                const group = item;
+                const isExpanded = expandedSessions.has(group.sessionId);
+                const timeStr = formatTime(group.timestamp);
+                const branches = [...new Set(group.logs.map(l => l.branch).filter(Boolean))];
+
+                return (
+                  <div key={group.sessionId} style={{ marginBottom: 4 }}>
+                    {/* Group header */}
                     <div
-                      style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", color }}
-                      dangerouslySetInnerHTML={{ __html: log.html }}
-                    />
-                  ) : (
-                    <span style={{
-                      display: "-webkit-box",
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical",
-                      overflow: "hidden",
-                      wordBreak: "break-all",
-                      color,
-                    }}>
-                      {log.message}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "center",
+                        cursor: "pointer",
+                        padding: "2px 4px",
+                        margin: "-2px -4px",
+                        borderRadius: 4,
+                        background: isExpanded ? "rgba(59, 130, 246, 0.05)" : "transparent",
+                      }}
+                      onClick={() => {
+                        setExpandedSessions(prev => {
+                          const next = new Set(prev);
+                          if (next.has(group.sessionId)) next.delete(group.sessionId);
+                          else next.add(group.sessionId);
+                          return next;
+                        });
+                      }}
+                    >
+                      <span style={{ color: "#6b7280", fontSize: 12, minWidth: 52 }}>{timeStr}</span>
+                      <span style={{ color: "#60a5fa", fontSize: 11 }}>
+                        {isExpanded ? "▼" : "▶"} {group.logs.length} changes
+                      </span>
+                      <span style={{ color: "#9ca3af", fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {branches.join(", ")}
+                      </span>
+                    </div>
+                    {/* Expanded logs */}
+                    {isExpanded && (
+                      <div style={{ marginTop: 4, borderLeft: "2px solid #374151", paddingLeft: 8 }}>
+                        {group.logs.map(log => renderSingleLog(log, true))}
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
           </div>
         </div>
 

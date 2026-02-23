@@ -885,8 +885,11 @@ scanRouter.post("/", async (c) => {
                   });
                 }
               }
-              if ((old.reviewDecision ?? null) !== prData.reviewDecision) {
-                changes.push({ type: "review", old: old.reviewDecision, new: prData.reviewDecision });
+              // Normalize empty/null values for comparison
+              const oldReviewDecision = old.reviewDecision || null;
+              const newReviewDecision = prData.reviewDecision || null;
+              if (oldReviewDecision !== newReviewDecision) {
+                changes.push({ type: "review", old: oldReviewDecision, new: newReviewDecision });
               }
               {
                 const oldReviewers: string[] = old.reviewers ? JSON.parse(old.reviewers).sort() : [];

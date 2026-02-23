@@ -1146,17 +1146,28 @@ export default function TreeDashboard() {
           }
           case "reviewers": {
             const parts: string[] = [];
+            const formatReviewer = (name: string, isAdded: boolean) => {
+              const isCopilot = name.toLowerCase().includes("copilot");
+              const displayName = isCopilot ? "Copilot" : name;
+              const avatarUrl = isCopilot
+                ? "https://avatars.githubusercontent.com/in/946600?v=4"
+                : `https://github.com/${name}.png?size=20`;
+              const color = isAdded ? "#22c55e" : "#ef4444";
+              const prefix = isAdded ? "+" : "";
+              const strikethrough = isAdded ? "" : "text-decoration:line-through;opacity:0.6;";
+              return `<span style="display:inline-flex;align-items:center;gap:3px;background:${isAdded ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)"};padding:2px 6px;border-radius:12px;${strikethrough}"><img src="${avatarUrl}" style="width:14px;height:14px;border-radius:50%" onerror="this.style.display='none'"/><span style="color:${color};font-size:11px">${prefix}${displayName}</span></span>`;
+            };
             if (change.new) {
               change.new.split(",").forEach(r => {
-                parts.push(`<span style="color:#22c55e">+${r}</span>`);
+                if (r.trim()) parts.push(formatReviewer(r.trim(), true));
               });
             }
             if (change.old) {
               change.old.split(",").forEach(r => {
-                parts.push(`<span style="color:#ef4444;text-decoration:line-through">${r}</span>`);
+                if (r.trim()) parts.push(formatReviewer(r.trim(), false));
               });
             }
-            return `Reviewers: ${parts.join(" ")}`;
+            return `<span style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">Reviewers: ${parts.join(" ")}</span>`;
           }
           default:
             return change.type;
@@ -2149,7 +2160,7 @@ export default function TreeDashboard() {
                 : log.type === "scan" ? "#60a5fa"
                 : log.type === "branch" ? "#a78bfa"
                 : log.type === "fetch" ? "#34d399"
-                : log.type === "pr" ? "#22c55e"
+                : log.type === "pr" ? "#d1d5db"  // Changed from green to neutral gray
                 : "#9ca3af";
               const hasBranch = !!log.branch;
               return (
@@ -2174,7 +2185,7 @@ export default function TreeDashboard() {
                     }
                   }}
                 >
-                  <span style={{ color: "#4b5563", flexShrink: 0 }}>{timeStr}</span>
+                  <span style={{ color: "#6b7280", flexShrink: 0, fontSize: 11 }}>{timeStr}</span>
                   {log.html ? (
                     <div
                       style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: "4px 8px", alignItems: "center", color }}

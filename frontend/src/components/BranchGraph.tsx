@@ -175,37 +175,58 @@ export default function BranchGraph({
     };
   }, [branchLinks]);
 
-  // Calculate which branches match highlight criteria
-  const highlightMatchingBranches = useMemo(() => {
+  // Calculate highlight match level for each branch
+  // Returns: null (no filter), or Map<branchName, "full" | "partial" | "none">
+  const highlightMatchLevel = useMemo(() => {
     // If no highlights selected, no special highlighting (all visible)
     if (highlightLabels.size === 0 && highlightReviewers.size === 0) {
       return null; // null means no filtering
     }
-    const matching = new Set<string>();
+
+    const totalRequired = highlightLabels.size + highlightReviewers.size;
+    const matchLevels = new Map<string, "full" | "partial" | "none">();
+
     branchLinks.forEach((links, branchName) => {
-      const hasMatchingLabel = links.some((link) => {
-        if (!link.labels) return false;
-        try {
-          const parsed = JSON.parse(link.labels) as Array<{ name: string; color: string }>;
-          return parsed.some((l) => highlightLabels.has(l.name));
-        } catch {
-          return false;
+      let matchCount = 0;
+
+      // Count how many selected labels this branch has
+      const branchLabelNames = new Set<string>();
+      links.forEach((link) => {
+        if (link.labels) {
+          try {
+            const parsed = JSON.parse(link.labels) as Array<{ name: string; color: string }>;
+            parsed.forEach((l) => branchLabelNames.add(l.name));
+          } catch {}
         }
       });
-      const hasMatchingReviewer = links.some((link) => {
-        if (!link.reviewers) return false;
-        try {
-          const parsed = JSON.parse(link.reviewers) as string[];
-          return parsed.some((r) => highlightReviewers.has(r));
-        } catch {
-          return false;
+      highlightLabels.forEach((labelName) => {
+        if (branchLabelNames.has(labelName)) matchCount++;
+      });
+
+      // Count how many selected reviewers this branch has
+      const branchReviewers = new Set<string>();
+      links.forEach((link) => {
+        if (link.reviewers) {
+          try {
+            const parsed = JSON.parse(link.reviewers) as string[];
+            parsed.forEach((r) => branchReviewers.add(r));
+          } catch {}
         }
       });
-      if (hasMatchingLabel || hasMatchingReviewer) {
-        matching.add(branchName);
+      highlightReviewers.forEach((reviewer) => {
+        if (branchReviewers.has(reviewer)) matchCount++;
+      });
+
+      if (matchCount === totalRequired) {
+        matchLevels.set(branchName, "full");
+      } else if (matchCount > 0) {
+        matchLevels.set(branchName, "partial");
+      } else {
+        matchLevels.set(branchName, "none");
       }
     });
-    return matching;
+
+    return matchLevels;
   }, [branchLinks, highlightLabels, highlightReviewers]);
 
   const [worktreeDragState, setWorktreeDragState] = useState<WorktreeDragState | null>(null);
@@ -1742,10 +1763,11 @@ export default function BranchGraph({
     // Check if node is unfocused (to the right of separator)
     const nodeUnfocused = isUnfocusedBranch(id);
     const baseNodeOpacity = isTentative ? 0.8 : isDragging ? 0.5 : isMerged ? 0.6 : 1;
-    // Apply highlight filter: matching nodes are bright, others are dimmed
-    const isHighlightMatch = highlightMatchingBranches !== null && highlightMatchingBranches.has(id);
-    const isHighlightDimmed = highlightMatchingBranches !== null && !highlightMatchingBranches.has(id);
-    const highlightDim = isHighlightDimmed ? 0.2 : 1;
+    // Apply highlight filter: full match = bright, partial = slightly dimmed, none = very dimmed
+    const matchLevel = highlightMatchLevel?.get(id) ?? null;
+    const isHighlightFull = matchLevel === "full";
+    const isHighlightPartial = matchLevel === "partial";
+    const highlightDim = highlightMatchLevel === null ? 1 : isHighlightFull ? 1 : isHighlightPartial ? 0.5 : 0.15;
     const nodeOpacity = (nodeUnfocused ? baseNodeOpacity * 0.3 : baseNodeOpacity) * highlightDim;
 
     // Determine cursor style
@@ -1773,8 +1795,8 @@ export default function BranchGraph({
         }}
         onMouseDown={handleNodeMouseDown}
       >
-        {/* Highlight glow effect (yellow/golden) */}
-        {isHighlightMatch && (
+        {/* Highlight glow effect - full match (yellow/golden) */}
+        {isHighlightFull && (
           <rect
             x={x - 4}
             y={y - 4}
@@ -1785,7 +1807,24 @@ export default function BranchGraph({
             fill="none"
             stroke="#fbbf24"
             strokeWidth={2}
-            opacity={0.8}
+            opacity={0.9}
+            pointerEvents="none"
+          />
+        )}
+        {/* Highlight glow effect - partial match (dimmer yellow) */}
+        {isHighlightPartial && (
+          <rect
+            x={x - 3}
+            y={y - 3}
+            width={nodeWidth + 6}
+            height={nodeHeight + 6}
+            rx={9}
+            ry={9}
+            fill="none"
+            stroke="#fbbf24"
+            strokeWidth={1}
+            strokeDasharray="4,2"
+            opacity={0.5}
             pointerEvents="none"
           />
         )}

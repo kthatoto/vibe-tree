@@ -1087,9 +1087,13 @@ branchLinksRouter.post("/:id/reviewers/add", async (c) => {
 
   try {
     // Add reviewer via gh CLI
-    // For Copilot bot, use gh pr edit; for regular users, use gh api
+    // For Copilot bot, use gh pr edit; for teams, use team_reviewers; for regular users, use reviewers
     if (reviewer === "copilot-pull-request-reviewer[bot]") {
       await execAsync(`gh pr edit ${link.number} --repo ${link.repoId} --add-reviewer "${reviewer}"`);
+    } else if (reviewer.startsWith("team/")) {
+      // Team reviewers use team_reviewers parameter (without "team/" prefix)
+      const teamSlug = reviewer.replace("team/", "");
+      await execAsync(`gh api repos/${link.repoId}/pulls/${link.number}/requested_reviewers --method POST -f "team_reviewers[]=${teamSlug}"`);
     } else {
       await execAsync(`gh api repos/${link.repoId}/pulls/${link.number}/requested_reviewers --method POST -f "reviewers[]=${reviewer}"`);
     }
@@ -1151,9 +1155,13 @@ branchLinksRouter.post("/:id/reviewers/remove", async (c) => {
 
   try {
     // Remove reviewer via gh CLI
-    // For Copilot bot, use gh pr edit; for regular users, use gh api
+    // For Copilot bot, use gh pr edit; for teams, use team_reviewers; for regular users, use reviewers
     if (reviewer === "copilot-pull-request-reviewer[bot]") {
       await execAsync(`gh pr edit ${link.number} --repo ${link.repoId} --remove-reviewer "${reviewer}"`);
+    } else if (reviewer.startsWith("team/")) {
+      // Team reviewers use team_reviewers parameter (without "team/" prefix)
+      const teamSlug = reviewer.replace("team/", "");
+      await execAsync(`gh api repos/${link.repoId}/pulls/${link.number}/requested_reviewers --method DELETE -f "team_reviewers[]=${teamSlug}"`);
     } else {
       await execAsync(`gh api repos/${link.repoId}/pulls/${link.number}/requested_reviewers --method DELETE -f "reviewers[]=${reviewer}"`);
     }

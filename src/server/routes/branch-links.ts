@@ -135,11 +135,12 @@ async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<GitH
       }
     }
 
-    // Fetch requested_reviewers via REST API to include Copilot
+    // Fetch requested_reviewers via REST API to include Copilot and teams
     // Normalize Copilot login name to "Copilot" for consistency
     const normalizeCopilot = (login: string) =>
       login.toLowerCase().includes("copilot") ? "Copilot" : login;
     try {
+      // Fetch individual reviewers
       const requestedResult = (await execAsync(
         `gh api repos/${repoId}/pulls/${prNumber}/requested_reviewers --jq '.users[].login'`
       )).trim();
@@ -148,6 +149,18 @@ async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<GitH
           const normalized = normalizeCopilot(login);
           if (normalized && !reviewers.includes(normalized) && !isOtherBot(login)) {
             reviewers.push(normalized);
+          }
+        }
+      }
+      // Fetch team reviewers (prefixed with "team/")
+      const teamResult = (await execAsync(
+        `gh api repos/${repoId}/pulls/${prNumber}/requested_reviewers --jq '.teams[].slug'`
+      )).trim();
+      if (teamResult) {
+        for (const slug of teamResult.split('\n')) {
+          const teamReviewer = `team/${slug}`;
+          if (slug && !reviewers.includes(teamReviewer)) {
+            reviewers.push(teamReviewer);
           }
         }
       }
@@ -723,8 +736,9 @@ branchLinksRouter.post("/detect", async (c) => {
       }
     }
 
-    // Fetch requested_reviewers via REST API to include Copilot
+    // Fetch requested_reviewers via REST API to include Copilot and teams
     try {
+      // Fetch individual reviewers
       const requestedResult = (await execAsync(
         `gh api repos/${input.repoId}/pulls/${data.number}/requested_reviewers --jq '.users[].login'`
       )).trim();
@@ -732,6 +746,18 @@ branchLinksRouter.post("/detect", async (c) => {
         for (const login of requestedResult.split('\n')) {
           if (login && !reviewers.includes(login) && !isOtherBot(login)) {
             reviewers.push(login);
+          }
+        }
+      }
+      // Fetch team reviewers (prefixed with "team/")
+      const teamResult = (await execAsync(
+        `gh api repos/${input.repoId}/pulls/${data.number}/requested_reviewers --jq '.teams[].slug'`
+      )).trim();
+      if (teamResult) {
+        for (const slug of teamResult.split('\n')) {
+          const teamReviewer = `team/${slug}`;
+          if (slug && !reviewers.includes(teamReviewer)) {
+            reviewers.push(teamReviewer);
           }
         }
       }

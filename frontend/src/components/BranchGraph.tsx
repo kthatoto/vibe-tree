@@ -86,6 +86,7 @@ interface LayoutEdge {
   to: LayoutNode;
   isDesigned: boolean;
   isTentative?: boolean;
+  isInferred?: boolean;
 }
 
 const NODE_WIDTH = 200;
@@ -252,11 +253,81 @@ export default function BranchGraph({
   const onEdgeCreateRef = useRef(onEdgeCreate);
   onEdgeCreateRef.current = onEdgeCreate;
 
+  // Auto-scroll constants and ref (shared across all drag operations)
+  const SCROLL_ZONE = 50; // Pixels from edge to trigger scroll
+  const SCROLL_SPEED = 10; // Pixels per frame
+  const autoScrollRef = useRef<{ rafId: number; lastMouseEvent: MouseEvent | null; isActive: boolean }>({
+    rafId: 0,
+    lastMouseEvent: null,
+    isActive: false,
+  });
+
+  // Common auto-scroll function for edge around container boundaries
+  const performAutoScroll = useCallback(() => {
+    if (!autoScrollRef.current.isActive) return;
+
+    const e = autoScrollRef.current.lastMouseEvent;
+    if (!e || !svgRef.current) {
+      autoScrollRef.current.rafId = requestAnimationFrame(performAutoScroll);
+      return;
+    }
+
+    const container = svgRef.current.closest(".graph-container") as HTMLElement | null;
+    if (!container) {
+      autoScrollRef.current.rafId = requestAnimationFrame(performAutoScroll);
+      return;
+    }
+
+    const rect = container.getBoundingClientRect();
+    let scrollX = 0;
+    let scrollY = 0;
+
+    // Horizontal auto-scroll
+    if (e.clientX < rect.left + SCROLL_ZONE) {
+      scrollX = -SCROLL_SPEED;
+    } else if (e.clientX > rect.right - SCROLL_ZONE) {
+      scrollX = SCROLL_SPEED;
+    }
+
+    // Vertical auto-scroll
+    if (e.clientY < rect.top + SCROLL_ZONE) {
+      scrollY = -SCROLL_SPEED;
+    } else if (e.clientY > rect.bottom - SCROLL_ZONE) {
+      scrollY = SCROLL_SPEED;
+    }
+
+    if (scrollX !== 0 || scrollY !== 0) {
+      container.scrollBy(scrollX, scrollY);
+    }
+
+    autoScrollRef.current.rafId = requestAnimationFrame(performAutoScroll);
+  }, []);
+
+  // Start/stop auto-scroll
+  const startAutoScroll = useCallback(() => {
+    autoScrollRef.current.isActive = true;
+    autoScrollRef.current.rafId = requestAnimationFrame(performAutoScroll);
+  }, [performAutoScroll]);
+
+  const stopAutoScroll = useCallback(() => {
+    autoScrollRef.current.isActive = false;
+    cancelAnimationFrame(autoScrollRef.current.rafId);
+    autoScrollRef.current.lastMouseEvent = null;
+  }, []);
+
+  const updateAutoScrollMouseEvent = useCallback((e: MouseEvent) => {
+    autoScrollRef.current.lastMouseEvent = e;
+  }, []);
+
   // Handle drag with document-level events for better UX
   useEffect(() => {
     if (!dragState) return;
 
+    // Start auto-scroll loop
+    startAutoScroll();
+
     const handleDocumentMouseMove = (e: MouseEvent) => {
+      updateAutoScrollMouseEvent(e);
       const coords = getSVGCoords(e);
       setDragState((prev) => prev ? { ...prev, currentX: coords.x, currentY: coords.y } : null);
     };
@@ -277,8 +348,9 @@ export default function BranchGraph({
     return () => {
       document.removeEventListener("mousemove", handleDocumentMouseMove);
       document.removeEventListener("mouseup", handleDocumentMouseUp);
+      stopAutoScroll();
     };
-  }, [dragState, getSVGCoords]);
+  }, [dragState, getSVGCoords, startAutoScroll, stopAutoScroll, updateAutoScrollMouseEvent]);
 
   // Column reorder drag handlers
   const handleColumnDragStart = useCallback((
@@ -456,26 +528,59 @@ export default function BranchGraph({
     });
 
     // Handle orphan nodes (not connected to any root)
+    // Connect them to defaultBranch as children for visual layout
+    const defaultBranchNode = nodeMap.get(defaultBranch);
+    const orphanEdges: { from: LayoutNode; to: LayoutNode }[] = [];
+
     nodes.forEach((node) => {
       if (!nodeMap.has(node.branchName)) {
-        const depth = 0;
-        const col = nextCol++;
-
         const nodeWidth = shouldMinimize(node.branchName) ? MINIMIZED_NODE_WIDTH : NODE_WIDTH;
         const nodeHeight = shouldReduceHeight(node.branchName) ? MINIMIZED_NODE_HEIGHT : NODE_HEIGHT;
 
-        const layoutNode: LayoutNode = {
-          id: node.branchName,
-          x: 0, // Will be calculated in Phase 2
-          y: TOP_PADDING,
-          width: nodeWidth,
-          height: nodeHeight,
-          node,
-          depth,
-          row: col,
-        };
-        layoutNodes.push(layoutNode);
-        nodeMap.set(node.branchName, layoutNode);
+        // If defaultBranch exists, place orphan as its child
+        if (defaultBranchNode) {
+          const depth = defaultBranchNode.depth + 1;
+          const col = nextCol++;
+
+          // Calculate Y position based on defaultBranch
+          const parentY = defaultBranchNode.y;
+          const parentHeight = defaultBranchNode.height;
+          const y = parentY + parentHeight + VERTICAL_GAP;
+
+          const layoutNode: LayoutNode = {
+            id: node.branchName,
+            x: 0, // Will be calculated in Phase 2
+            y,
+            width: nodeWidth,
+            height: nodeHeight,
+            node,
+            depth,
+            row: col,
+            parentBranch: defaultBranch,
+          };
+          layoutNodes.push(layoutNode);
+          nodeMap.set(node.branchName, layoutNode);
+
+          // Track edge for later
+          orphanEdges.push({ from: defaultBranchNode, to: layoutNode });
+        } else {
+          // Fallback: no defaultBranch, place at root level
+          const depth = 0;
+          const col = nextCol++;
+
+          const layoutNode: LayoutNode = {
+            id: node.branchName,
+            x: 0, // Will be calculated in Phase 2
+            y: TOP_PADDING,
+            width: nodeWidth,
+            height: nodeHeight,
+            node,
+            depth,
+            row: col,
+          };
+          layoutNodes.push(layoutNode);
+          nodeMap.set(node.branchName, layoutNode);
+        }
       }
     });
 
@@ -736,6 +841,16 @@ export default function BranchGraph({
     // Add tentative edges
     layoutEdges.push(...tentativeLayoutEdges);
 
+    // Add inferred edges for orphan nodes (visual connection to defaultBranch)
+    orphanEdges.forEach(({ from, to }) => {
+      layoutEdges.push({
+        from,
+        to,
+        isDesigned: false,
+        isInferred: true,
+      });
+    });
+
     // Calculate canvas size (add extra space for badges below nodes)
     const BADGE_HEIGHT = 20; // Space for badges below nodes
     const maxX = Math.max(...layoutNodes.map((n) => n.x + n.width), 0) + RIGHT_PADDING;
@@ -813,7 +928,11 @@ export default function BranchGraph({
     const originalUserSelect = document.body.style.userSelect;
     document.body.style.userSelect = "none";
 
+    // Start auto-scroll for column drag
+    startAutoScroll();
+
     const handleMouseMove = (e: MouseEvent) => {
+      updateAutoScrollMouseEvent(e);
       const dragState = columnDragStateRef.current;
       if (!dragState) return;
 
@@ -1023,9 +1142,10 @@ export default function BranchGraph({
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.userSelect = originalUserSelect;
+      stopAutoScroll();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!columnDragState, getSVGCoords, onSiblingOrderChange, siblingOrder, getColumnBoundsHelper, focusSeparatorIndex, onFocusSeparatorIndexChange, defaultBranch]);
+  }, [!!columnDragState, getSVGCoords, onSiblingOrderChange, siblingOrder, getColumnBoundsHelper, focusSeparatorIndex, onFocusSeparatorIndexChange, defaultBranch, startAutoScroll, stopAutoScroll, updateAutoScrollMouseEvent]);
 
   // Handle separator drag
   useEffect(() => {
@@ -1034,7 +1154,11 @@ export default function BranchGraph({
     const originalUserSelect = document.body.style.userSelect;
     document.body.style.userSelect = "none";
 
+    // Start auto-scroll for separator drag
+    startAutoScroll();
+
     const handleMouseMove = (e: MouseEvent) => {
+      updateAutoScrollMouseEvent(e);
       const coords = getSVGCoords(e);
       const newX = coords.x;
 
@@ -1104,8 +1228,9 @@ export default function BranchGraph({
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.userSelect = originalUserSelect;
+      stopAutoScroll();
     };
-  }, [separatorDragState, getSVGCoords, edges, defaultBranch, layoutNodes, getColumnBoundsHelper, onFocusSeparatorIndexChange]);
+  }, [separatorDragState, getSVGCoords, edges, defaultBranch, layoutNodes, getColumnBoundsHelper, onFocusSeparatorIndexChange, startAutoScroll, stopAutoScroll, updateAutoScrollMouseEvent]);
 
   // Handle rectangle selection drag (multi-select)
   useEffect(() => {
@@ -1114,7 +1239,11 @@ export default function BranchGraph({
     const originalUserSelect = document.body.style.userSelect;
     document.body.style.userSelect = "none";
 
+    // Start auto-scroll for rectangle selection
+    startAutoScroll();
+
     const handleMouseMove = (e: MouseEvent) => {
+      updateAutoScrollMouseEvent(e);
       const coords = getSVGCoords(e);
       setRectangleSelectState(prev => prev ? {
         ...prev,
@@ -1163,8 +1292,9 @@ export default function BranchGraph({
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.userSelect = originalUserSelect;
+      stopAutoScroll();
     };
-  }, [rectangleSelectState, getSVGCoords, layoutNodes, defaultBranch, selectedBranches, onSelectionChange]);
+  }, [rectangleSelectState, getSVGCoords, layoutNodes, defaultBranch, selectedBranches, onSelectionChange, startAutoScroll, stopAutoScroll, updateAutoScrollMouseEvent]);
 
   // Worktree drag effect
   useEffect(() => {
@@ -1173,7 +1303,11 @@ export default function BranchGraph({
     const originalUserSelect = document.body.style.userSelect;
     document.body.style.userSelect = "none";
 
+    // Start auto-scroll for worktree drag
+    startAutoScroll();
+
     const handleMouseMove = (e: MouseEvent) => {
+      updateAutoScrollMouseEvent(e);
       const coords = getSVGCoords(e);
       setWorktreeDragState(prev => prev ? {
         ...prev,
@@ -1212,8 +1346,9 @@ export default function BranchGraph({
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.userSelect = originalUserSelect;
+      stopAutoScroll();
     };
-  }, [worktreeDragState, getSVGCoords, layoutNodes, worktreeDropTarget, onWorktreeMove]);
+  }, [worktreeDragState, getSVGCoords, layoutNodes, worktreeDropTarget, onWorktreeMove, startAutoScroll, stopAutoScroll, updateAutoScrollMouseEvent]);
 
   // Get root siblings (children of default branch) sorted by X position
   const rootSiblings = useMemo(() => {
@@ -1283,9 +1418,9 @@ export default function BranchGraph({
     const cornerY = startY + 20;
     const path = `M ${startX} ${startY} L ${startX} ${cornerY} L ${endX} ${cornerY} L ${endX} ${endY}`;
 
-    // Tentative edges use dashed lines with purple color
-    const strokeColor = edge.isTentative ? "#9c27b0" : edge.isDesigned ? "#9c27b0" : "#4b5563";
-    const strokeDash = edge.isTentative ? "4,4" : undefined;
+    // Tentative/inferred edges use dashed lines, designed edges use purple
+    const strokeColor = edge.isTentative ? "#9c27b0" : edge.isInferred ? "#6b7280" : edge.isDesigned ? "#9c27b0" : "#4b5563";
+    const strokeDash = edge.isTentative ? "4,4" : edge.isInferred ? "6,3" : undefined;
 
     // Check if edge is unfocused (either endpoint is on the right side of separator)
     const edgeUnfocused = isUnfocusedBranch(edge.from.id) || isUnfocusedBranch(edge.to.id);

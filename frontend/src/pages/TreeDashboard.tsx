@@ -1267,6 +1267,29 @@ export default function TreeDashboard() {
       });
     });
 
+    // Node ahead/behind updates from PR refresh
+    const unsubNodeAheadBehind = wsClient.on("node.aheadBehindUpdated", (msg) => {
+      const data = msg.data as {
+        branchName: string;
+        aheadBehind: { ahead: number; behind: number } | null;
+        remoteAheadBehind: { ahead: number; behind: number } | null;
+      };
+      setSnapshot((prev) => {
+        if (!prev) return prev;
+        const updatedNodes = prev.nodes.map((node) => {
+          if (node.branchName === data.branchName) {
+            return {
+              ...node,
+              aheadBehind: data.aheadBehind ?? node.aheadBehind,
+              remoteAheadBehind: data.remoteAheadBehind ?? node.remoteAheadBehind,
+            };
+          }
+          return node;
+        });
+        return { ...prev, nodes: updatedNodes };
+      });
+    });
+
     return () => {
       unsubScan();
       unsubBranches();
@@ -1276,6 +1299,7 @@ export default function TreeDashboard() {
       unsubFetchCompleted();
       unsubFetchError();
       unsubPrUpdated();
+      unsubNodeAheadBehind();
     };
   }, [snapshot?.repoId, selectedPin, triggerScan, addLog]);
 

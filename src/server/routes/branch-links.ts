@@ -570,6 +570,55 @@ branchLinksRouter.delete("/:id", async (c) => {
   return c.json({ success: true });
 });
 
+// Helper: Calculate ahead/behind for a single branch
+async function calculateBranchAheadBehind(
+  localPath: string,
+  branchName: string,
+  parentBranch: string
+): Promise<{ ahead: number; behind: number } | null> {
+  try {
+    const output = await execAsync(
+      `cd "${localPath}" && git rev-list --left-right --count "${parentBranch}"..."${branchName}" 2>/dev/null`
+    );
+    const parts = output.trim().split(/\s+/);
+    const behind = parseInt(parts[0] ?? "0", 10);
+    const ahead = parseInt(parts[1] ?? "0", 10);
+    return { ahead, behind };
+  } catch {
+    return null;
+  }
+}
+
+// Helper: Calculate remote ahead/behind for a single branch
+async function calculateBranchRemoteAheadBehind(
+  localPath: string,
+  branchName: string
+): Promise<{ ahead: number; behind: number } | null> {
+  try {
+    // Check if there's a remote tracking branch
+    const upstream = (await execAsync(
+      `cd "${localPath}" && git rev-parse --abbrev-ref "${branchName}@{upstream}" 2>/dev/null`
+    )).trim();
+
+    if (!upstream) return null;
+
+    // Get ahead/behind count relative to upstream
+    const output = await execAsync(
+      `cd "${localPath}" && git rev-list --left-right --count "${upstream}"..."${branchName}" 2>/dev/null`
+    );
+    const parts = output.trim().split(/\s+/);
+    const behind = parseInt(parts[0] ?? "0", 10);
+    const ahead = parseInt(parts[1] ?? "0", 10);
+
+    if (ahead > 0 || behind > 0) {
+      return { ahead, behind };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // POST /api/branch-links/:id/refresh - Re-fetch data from GitHub
 branchLinksRouter.post("/:id/refresh", async (c) => {
   const id = parseInt(c.req.param("id"), 10);
@@ -665,7 +714,43 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
     });
   }
 
-  return c.json(updated);
+  // Calculate ahead/behind if we have a localPath
+  let aheadBehind: { ahead: number; behind: number } | null = null;
+  let remoteAheadBehind: { ahead: number; behind: number } | null = null;
+
+  // Get localPath from repoPin
+  const [repoPin] = await db
+    .select()
+    .from(schema.repoPins)
+    .where(eq(schema.repoPins.repoId, existing.repoId))
+    .limit(1);
+
+  if (repoPin?.localPath) {
+    const localPath = repoPin.localPath;
+    // Use baseBranch from PR if available, otherwise use repoPin's baseBranch or default
+    const parentBranch = baseBranch || repoPin.baseBranch || "main";
+
+    // Calculate both ahead/behind values in parallel
+    [aheadBehind, remoteAheadBehind] = await Promise.all([
+      calculateBranchAheadBehind(localPath, existing.branchName, parentBranch),
+      calculateBranchRemoteAheadBehind(localPath, existing.branchName),
+    ]);
+
+    // Broadcast node update with ahead/behind info
+    if (aheadBehind || remoteAheadBehind) {
+      broadcast({
+        type: "node.aheadBehindUpdated",
+        repoId: existing.repoId,
+        data: {
+          branchName: existing.branchName,
+          aheadBehind,
+          remoteAheadBehind,
+        },
+      });
+    }
+  }
+
+  return c.json({ ...updated, aheadBehind, remoteAheadBehind });
 });
 
 // POST /api/branch-links/detect - Auto-detect PR for a branch

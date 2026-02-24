@@ -3014,11 +3014,26 @@ export default function TreeDashboard() {
                     localPath={selectedPin.localPath}
                     branchLinks={branchLinks}
                     edges={snapshot.edges}
+                    nodes={snapshot.nodes}
+                    defaultBranch={snapshot.defaultBranch}
                     quickLabels={prQuickLabels}
                     quickReviewers={prQuickReviewers}
                     repoLabels={repoLabels}
                     repoCollaborators={repoCollaborators}
                     onRefreshBranches={() => triggerScan(selectedPin.localPath)}
+                    onBranchesDeleted={(deletedBranches) => {
+                      // Remove deleted branches from snapshot
+                      setSnapshot((prev) => ({
+                        ...prev,
+                        nodes: prev.nodes.filter((n) => !deletedBranches.includes(n.branchName)),
+                        edges: prev.edges.filter(
+                          (e) => !deletedBranches.includes(e.child) && !deletedBranches.includes(e.parent)
+                        ),
+                      }));
+                      // Clear selection
+                      setSelectedBranches(new Set());
+                      setSelectionAnchor(null);
+                    }}
                   />
                 ) : selectedNode && selectedPin ? (
                   <TaskDetailPanel

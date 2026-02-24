@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback } from "react";
-import { api, type BranchLink, type TreeEdge, type RepoLabel, type RepoCollaborator } from "../lib/api";
+import { api, type BranchLink, type TreeEdge, type RepoLabel, type RepoCollaborator, type TreeNode } from "../lib/api";
 import { Dropdown } from "./atoms/Dropdown";
 import { LabelChip, UserChip, TeamChip } from "./atoms/Chips";
 import "./TaskDetailPanel.css";
@@ -22,6 +22,8 @@ interface MultiSelectPanelProps {
   localPath: string;
   branchLinks: Map<string, BranchLink[]>;
   edges: TreeEdge[];
+  nodes: TreeNode[];
+  defaultBranch: string;
   // Quick labels/reviewers (pre-selected in settings)
   quickLabels: string[];
   quickReviewers: string[];
@@ -29,6 +31,7 @@ interface MultiSelectPanelProps {
   repoLabels: RepoLabel[];
   repoCollaborators: RepoCollaborator[];
   onRefreshBranches?: () => void;
+  onBranchesDeleted?: (deletedBranches: string[]) => void;
 }
 
 export default function MultiSelectPanel({
@@ -40,11 +43,14 @@ export default function MultiSelectPanel({
   localPath,
   branchLinks,
   edges,
+  nodes,
+  defaultBranch,
   quickLabels,
   quickReviewers,
   repoLabels,
   repoCollaborators,
   onRefreshBranches,
+  onBranchesDeleted,
 }: MultiSelectPanelProps) {
   const selectedList = useMemo(() => [...selectedBranches], [selectedBranches]);
   const displayLimit = 10;
@@ -75,6 +81,87 @@ export default function MultiSelectPanel({
       return links?.some((l) => l.linkType === "pr" && l.status === "open");
     });
   }, [selectedList, branchLinks]);
+
+  // Get PR URLs for selected branches (sorted)
+  const prUrls = useMemo(() => {
+    return selectedList
+      .map((branch) => {
+        const links = branchLinks.get(branch);
+        const prLink = links?.find((l) => l.linkType === "pr" && l.status === "open");
+        return prLink?.url ?? null;
+      })
+      .filter((url): url is string => url !== null)
+      .sort();
+  }, [selectedList, branchLinks]);
+
+  // Node map for quick lookup
+  const nodeMap = useMemo(() => {
+    const map = new Map<string, TreeNode>();
+    nodes.forEach((n) => map.set(n.branchName, n));
+    return map;
+  }, [nodes]);
+
+  // Check if a branch is deletable:
+  // - Not the default branch
+  // - PR is merged OR no commits (ahead=0) OR no PR attached
+  const isDeletable = useCallback(
+    (branch: string): { deletable: boolean; reason?: string } => {
+      if (branch === defaultBranch) {
+        return { deletable: false, reason: "default branch" };
+      }
+
+      const node = nodeMap.get(branch);
+      if (!node) {
+        return { deletable: false, reason: "not found" };
+      }
+
+      // Check if has worktree
+      if (node.worktree) {
+        return { deletable: false, reason: "has worktree" };
+      }
+
+      const links = branchLinks.get(branch);
+      const prLink = links?.find((l) => l.linkType === "pr");
+
+      // If PR exists and is open, not deletable (unless merged)
+      if (prLink) {
+        if (prLink.status === "merged") {
+          return { deletable: true };
+        }
+        if (prLink.status === "open") {
+          return { deletable: false, reason: "PR is open" };
+        }
+      }
+
+      // No PR or PR is closed - check if has commits
+      if (node.aheadBehind && node.aheadBehind.ahead > 0) {
+        return { deletable: false, reason: "has commits" };
+      }
+
+      return { deletable: true };
+    },
+    [defaultBranch, nodeMap, branchLinks]
+  );
+
+  // Get deletable branches and reasons
+  const deletableInfo = useMemo(() => {
+    const deletable: string[] = [];
+    const notDeletable: { branch: string; reason: string }[] = [];
+
+    selectedList.forEach((branch) => {
+      const result = isDeletable(branch);
+      if (result.deletable) {
+        deletable.push(branch);
+      } else {
+        notDeletable.push({ branch, reason: result.reason || "unknown" });
+      }
+    });
+
+    return { deletable, notDeletable, allDeletable: notDeletable.length === 0 };
+  }, [selectedList, isDeletable]);
+
+  // Delete confirmation state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Get PR link ID for a branch
   const getPRLinkId = useCallback(
@@ -305,6 +392,45 @@ export default function MultiSelectPanel({
     onRefreshBranches?.();
   };
 
+  // Bulk delete branches
+  const handleBulkDelete = async () => {
+    setShowDeleteConfirm(false);
+    const targetBranches = deletableInfo.deletable;
+    if (targetBranches.length === 0) return;
+
+    setProgress({
+      total: targetBranches.length,
+      completed: 0,
+      current: null,
+      results: [],
+      status: "running",
+    });
+
+    const results: BulkOperationProgress["results"] = [];
+    const deletedBranches: string[] = [];
+
+    for (const branch of targetBranches) {
+      setProgress((p) => ({ ...p, current: branch }));
+
+      try {
+        await api.deleteBranch(localPath, branch, true); // force delete
+        results.push({ branch, success: true });
+        deletedBranches.push(branch);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        results.push({ branch, success: false, message });
+      }
+      setProgress((p) => ({ ...p, completed: p.completed + 1, results: [...results] }));
+    }
+
+    setProgress((p) => ({ ...p, current: null, status: "done" }));
+
+    if (deletedBranches.length > 0) {
+      onBranchesDeleted?.(deletedBranches);
+      onRefreshBranches?.();
+    }
+  };
+
   // Reset progress
   const handleResetProgress = () => {
     setProgress({
@@ -462,6 +588,30 @@ export default function MultiSelectPanel({
             )}
           </div>
         </div>
+
+        {/* PR Links textarea */}
+        {prUrls.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8 }}>PR Links ({prUrls.length}):</div>
+            <textarea
+              readOnly
+              value={prUrls.join("\n")}
+              onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+              style={{
+                width: "100%",
+                padding: 8,
+                background: "#0f172a",
+                border: "1px solid #374151",
+                borderRadius: 4,
+                color: "#e5e7eb",
+                fontSize: 12,
+                fontFamily: "monospace",
+                resize: "vertical",
+                minHeight: 60,
+              }}
+            />
+          </div>
+        )}
 
         {/* PR Bulk Operations */}
         {branchesWithPRs.length > 0 && (
@@ -735,6 +885,41 @@ export default function MultiSelectPanel({
               {sortedBranchesForRebase.length > 3 && ` → ...`}
             </div>
           )}
+
+          {/* Bulk Delete */}
+          {deletableInfo.deletable.length > 0 && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={isOperationRunning}
+              style={{
+                width: "100%",
+                marginTop: 12,
+                padding: "8px 12px",
+                background: isOperationRunning ? "#1f2937" : "#7f1d1d",
+                border: `1px solid ${isOperationRunning ? "#374151" : "#ef4444"}`,
+                borderRadius: 6,
+                color: isOperationRunning ? "#6b7280" : "#f87171",
+                cursor: isOperationRunning ? "not-allowed" : "pointer",
+                fontSize: 13,
+                textAlign: "left",
+              }}
+            >
+              <div style={{ fontWeight: 500 }}>
+                Delete Branches ({deletableInfo.deletable.length})
+              </div>
+              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
+                {deletableInfo.allDeletable
+                  ? "All selected branches can be deleted"
+                  : `${deletableInfo.notDeletable.length} cannot be deleted`}
+              </div>
+            </button>
+          )}
+          {deletableInfo.notDeletable.length > 0 && deletableInfo.deletable.length > 0 && (
+            <div style={{ marginTop: 8, fontSize: 11, color: "#6b7280" }}>
+              Cannot delete: {deletableInfo.notDeletable.slice(0, 2).map((d) => d.branch).join(", ")}
+              {deletableInfo.notDeletable.length > 2 && ` (+${deletableInfo.notDeletable.length - 2} more)`}
+            </div>
+          )}
         </div>
 
         {/* Filter Bulk actions */}
@@ -815,6 +1000,77 @@ export default function MultiSelectPanel({
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div
+          className="task-detail-panel__modal-overlay"
+          onClick={() => setShowDeleteConfirm(false)}
+        >
+          <div
+            className="task-detail-panel__modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 400 }}
+          >
+            <h4 style={{ margin: "0 0 12px", color: "#f87171" }}>
+              Delete {deletableInfo.deletable.length} Branches?
+            </h4>
+            <p style={{ margin: "0 0 16px", color: "#9ca3af", fontSize: 13 }}>
+              This will permanently delete the following branches from git and clean up associated data:
+            </p>
+            <div
+              style={{
+                maxHeight: 150,
+                overflowY: "auto",
+                background: "#0f172a",
+                borderRadius: 4,
+                padding: 8,
+                marginBottom: 16,
+              }}
+            >
+              {deletableInfo.deletable.map((branch) => (
+                <div
+                  key={branch}
+                  style={{ fontSize: 12, color: "#e5e7eb", padding: "2px 0" }}
+                >
+                  • {branch}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                style={{
+                  padding: "8px 16px",
+                  background: "#374151",
+                  border: "none",
+                  borderRadius: 6,
+                  color: "#e5e7eb",
+                  cursor: "pointer",
+                  fontSize: 13,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                style={{
+                  padding: "8px 16px",
+                  background: "#dc2626",
+                  border: "none",
+                  borderRadius: 6,
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: 500,
+                }}
+              >
+                Delete {deletableInfo.deletable.length} Branches
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

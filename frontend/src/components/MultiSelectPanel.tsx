@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback } from "react";
 import { api, type BranchLink, type TreeEdge, type RepoLabel, type RepoCollaborator, type TreeNode } from "../lib/api";
 import { Dropdown } from "./atoms/Dropdown";
 import { LabelChip, UserChip, TeamChip } from "./atoms/Chips";
+import { WorktreeSelector } from "./atoms/WorktreeSelector";
 import "./TaskDetailPanel.css";
 
 interface BulkOperationProgress {
@@ -162,6 +163,10 @@ export default function MultiSelectPanel({
 
   // Delete confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Worktree selection state for serial rebase
+  const [selectedWorktree, setSelectedWorktree] = useState<string | null>(null);
+  const [showWorktreeSelector, setShowWorktreeSelector] = useState(false);
 
   // Get PR link ID for a branch
   const getPRLinkId = useCallback(
@@ -371,7 +376,8 @@ export default function MultiSelectPanel({
       }
 
       try {
-        await api.rebase(localPath, branch, parentBranch);
+        // Use selected worktree if available, otherwise use main repo (temporary checkout)
+        await api.rebase(localPath, branch, parentBranch, selectedWorktree ?? undefined);
         results.push({ branch, success: true });
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e);
@@ -859,6 +865,21 @@ export default function MultiSelectPanel({
         {/* Serial Rebase */}
         <div style={{ borderTop: "1px solid #374151", paddingTop: 16, marginBottom: 16 }}>
           <div style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8 }}>Branch operations:</div>
+
+          {/* Worktree selector */}
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ color: "#6b7280", fontSize: 11, marginBottom: 4 }}>Work in:</div>
+            <WorktreeSelector
+              nodes={nodes}
+              selectedWorktree={selectedWorktree}
+              onSelect={setSelectedWorktree}
+              isOpen={showWorktreeSelector}
+              onOpen={() => setShowWorktreeSelector(true)}
+              onClose={() => setShowWorktreeSelector(false)}
+              disabled={isOperationRunning}
+            />
+          </div>
+
           <button
             onClick={handleSerialRebase}
             disabled={isOperationRunning || selectedList.length < 2}

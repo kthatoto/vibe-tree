@@ -1522,23 +1522,21 @@ export function TaskDetailPanel({
                             className={`task-detail-panel__pr-popup-item ${hasReviewer ? "task-detail-panel__pr-popup-item--active" : ""}`}
                             onClick={() => handleToggleReviewer(pr.id, reviewer, reviewers)}
                           >
-                            {isTeam ? (
-                              <span className="task-detail-panel__pr-popup-team-icon">👥</span>
-                            ) : (
-                              <img
-                                src={collaborator?.avatarUrl || `https://github.com/${reviewer}.png?size=32`}
-                                alt={reviewer}
-                                className="task-detail-panel__pr-popup-avatar"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.display = "none";
-                                  const placeholder = document.createElement("span");
-                                  placeholder.className = "task-detail-panel__pr-popup-placeholder";
-                                  placeholder.textContent = (collaborator?.name || reviewer).charAt(0).toUpperCase();
-                                  target.parentElement?.insertBefore(placeholder, target);
-                                }}
-                              />
-                            )}
+                            <img
+                              src={isTeam
+                                ? `https://github.com/identicons/${displayName}.png`
+                                : (collaborator?.avatarUrl || `https://github.com/${reviewer}.png?size=32`)}
+                              alt={isTeam ? displayName : reviewer}
+                              className="task-detail-panel__pr-popup-avatar"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = "none";
+                                const placeholder = document.createElement("span");
+                                placeholder.className = "task-detail-panel__pr-popup-placeholder";
+                                placeholder.textContent = (isTeam ? displayName : (collaborator?.name || reviewer)).charAt(0).toUpperCase();
+                                target.parentElement?.insertBefore(placeholder, target);
+                              }}
+                            />
                             <span className="task-detail-panel__pr-popup-name">
                               {isTeam ? displayName : (collaborator?.name || reviewer)}
                             </span>

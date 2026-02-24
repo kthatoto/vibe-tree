@@ -43,7 +43,7 @@ import { PlanningPanel } from "../components/PlanningPanel";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import MultiSelectPanel from "../components/MultiSelectPanel";
 import { useSmartPolling, INTERVALS, COUNTDOWN_INITIAL_PAUSE } from "../hooks/useSmartPolling";
-import { LabelChip, UserChip, ReviewBadge, CIBadge } from "../components/atoms/Chips";
+import { LabelChip, UserChip, TeamChip, ReviewBadge, CIBadge } from "../components/atoms/Chips";
 import type { PlanningSession, TaskNode, TaskEdge } from "../lib/api";
 
 // Scan progress bar component
@@ -3742,21 +3742,11 @@ export default function TreeDashboard() {
                                 if (isTeam) {
                                   const team = repoTeams.find((t) => `team/${t.slug}` === reviewerName);
                                   return (
-                                    <span
+                                    <TeamChip
                                       key={reviewerName}
-                                      className="chip chip--user"
-                                      style={{ background: "#4f46e530", color: "#a78bfa" }}
-                                    >
-                                      <span style={{ fontSize: 12 }}>👥</span>
-                                      <span className="chip__text">{team?.name || reviewerName.replace("team/", "")}</span>
-                                      <button
-                                        className="chip__remove"
-                                        onClick={() => setPrQuickReviewers(prQuickReviewers.filter((r) => r !== reviewerName))}
-                                        type="button"
-                                      >
-                                        ×
-                                      </button>
-                                    </span>
+                                      slug={team?.name || reviewerName.replace("team/", "")}
+                                      onRemove={() => setPrQuickReviewers(prQuickReviewers.filter((r) => r !== reviewerName))}
+                                    />
                                   );
                                 }
                                 const collaborator = repoCollaborators.find((c) => c.login === reviewerName);
@@ -3805,15 +3795,11 @@ export default function TreeDashboard() {
                                   return team.name.toLowerCase().includes(search) || team.slug.toLowerCase().includes(search);
                                 })
                                 .map((team) => (
-                                  <span
+                                  <TeamChip
                                     key={team.slug}
-                                    className="chip chip--user chip--clickable"
+                                    slug={team.name}
                                     onClick={() => setPrQuickReviewers([...prQuickReviewers, `team/${team.slug}`])}
-                                    title={team.description || team.name}
-                                  >
-                                    <span style={{ fontSize: 12 }}>👥</span>
-                                    <span className="chip__text">{team.name}</span>
-                                  </span>
+                                  />
                                 ))}
                             </div>
                           </div>

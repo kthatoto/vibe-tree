@@ -5,7 +5,7 @@ import { api, type TaskInstruction, type ChatMessage, type TreeNode, type Branch
 import { wsClient } from "../lib/ws";
 import { computeSimpleDiff, type DiffLine } from "../lib/diff";
 import { linkifyPreContent } from "../lib/linkify";
-import { ReviewBadge, CIBadge, LabelChip, UserChip } from "./atoms/Chips";
+import { ReviewBadge, CIBadge, LabelChip, UserChip, TeamChip } from "./atoms/Chips";
 import "./TaskDetailPanel.css";
 
 // Helper to parse saved chunk content
@@ -1469,12 +1469,7 @@ export function TaskDetailPanel({
                   {reviewers.map((r, i) => {
                     const isTeam = r.startsWith("team/");
                     if (isTeam) {
-                      return (
-                        <span key={i} className="chip chip--user">
-                          <span style={{ fontSize: 12 }}>👥</span>
-                          <span className="chip__text">{r.replace("team/", "@")}</span>
-                        </span>
-                      );
+                      return <TeamChip key={i} slug={r.replace("team/", "")} />;
                     }
                     return <UserChip key={i} login={r} />;
                   })}
@@ -1518,7 +1513,7 @@ export function TaskDetailPanel({
                         // Skip copilot if already shown above
                         if (reviewer === "copilot-pull-request-reviewer[bot]" || reviewer === "copilot") return null;
                         const isTeam = reviewer.startsWith("team/");
-                        const displayName = isTeam ? reviewer.replace("team/", "@") : reviewer;
+                        const displayName = isTeam ? reviewer.replace("team/", "") : reviewer;
                         const hasReviewer = reviewers.includes(reviewer);
                         const collaborator = !isTeam ? repoCollaborators.find((c) => c.login === reviewer) : null;
                         return (

@@ -515,93 +515,49 @@ export default function MultiSelectPanel({
         </button>
       </div>
 
-      <div style={{ padding: "16px", flex: 1 }}>
-        {/* Progress display */}
-        {progress.status !== "idle" && (
-          <div
-            style={{
-              marginBottom: 16,
-              padding: 12,
-              background: progress.status === "error" ? "#7f1d1d" : "#1e3a5f",
-              borderRadius: 6,
-              border: `1px solid ${progress.status === "error" ? "#ef4444" : "#3b82f6"}`,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div style={{ color: "#e5e7eb", fontSize: 13, fontWeight: 500 }}>
-                {progress.status === "running"
-                  ? "Processing..."
-                  : progress.status === "done"
-                  ? "Completed"
-                  : "Error"}
-              </div>
-              {progress.status !== "running" && (
-                <button
-                  onClick={handleResetProgress}
-                  style={{
-                    padding: "2px 8px",
-                    background: "#374151",
-                    border: "none",
-                    borderRadius: 4,
-                    color: "#9ca3af",
-                    fontSize: 11,
-                    cursor: "pointer",
-                  }}
-                >
-                  Dismiss
-                </button>
-              )}
-            </div>
-
-            {/* Progress bar */}
-            <div style={{ background: "#374151", borderRadius: 4, height: 8, marginBottom: 8 }}>
-              <div
-                style={{
-                  background: progress.status === "error" ? "#ef4444" : "#3b82f6",
-                  borderRadius: 4,
-                  height: "100%",
-                  width: `${(progress.completed / progress.total) * 100}%`,
-                  transition: "width 0.3s",
-                }}
-              />
-            </div>
-
-            <div style={{ color: "#9ca3af", fontSize: 11 }}>
-              {progress.completed} / {progress.total}
-              {progress.current && (
-                <span style={{ marginLeft: 8, color: "#6b7280" }}>Current: {progress.current}</span>
-              )}
-            </div>
-
-            {/* Results */}
-            {progress.results.length > 0 && (
-              <div style={{ marginTop: 8, maxHeight: 100, overflowY: "auto" }}>
-                {progress.results.map((r, i) => (
-                  <div
-                    key={i}
+      <div style={{ padding: "16px", flex: 1, overflowY: "auto" }}>
+        {/* Selected branches list with inline progress */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <div style={{ color: "#9ca3af", fontSize: 12 }}>Selected branches:</div>
+            {progress.status !== "idle" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {progress.status === "running" && (
+                  <span style={{ color: "#3b82f6", fontSize: 11 }}>
+                    {progress.completed}/{progress.total}
+                  </span>
+                )}
+                {progress.status === "done" && (
+                  <span style={{ color: "#4ade80", fontSize: 11 }}>Done</span>
+                )}
+                {progress.status === "error" && (
+                  <span style={{ color: "#f87171", fontSize: 11 }}>Error</span>
+                )}
+                {progress.status !== "running" && (
+                  <button
+                    onClick={handleResetProgress}
                     style={{
-                      fontSize: 11,
-                      color: r.success ? "#4ade80" : "#f87171",
-                      display: "flex",
-                      gap: 4,
+                      padding: "2px 6px",
+                      background: "#374151",
+                      border: "none",
+                      borderRadius: 3,
+                      color: "#9ca3af",
+                      fontSize: 10,
+                      cursor: "pointer",
                     }}
                   >
-                    <span>{r.success ? "✓" : "✗"}</span>
-                    <span>{r.branch}</span>
-                    {r.message && <span style={{ color: "#6b7280" }}>- {r.message}</span>}
-                  </div>
-                ))}
+                    ×
+                  </button>
+                )}
               </div>
             )}
           </div>
-        )}
-
-        {/* Selected branches list */}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8 }}>Selected branches:</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {displayedBranches.map((branch) => {
               const hasPR = branchLinks.get(branch)?.some((l) => l.linkType === "pr" && l.status === "open");
+              // Find result for this branch (may match branch name or branch (label) format)
+              const result = progress.results.find((r) => r.branch === branch || r.branch.startsWith(branch + " "));
+              const isProcessing = progress.status === "running" && progress.current === branch;
               return (
                 <div
                   key={branch}
@@ -619,12 +575,30 @@ export default function MultiSelectPanel({
                     gap: 6,
                   }}
                 >
+                  {/* Status indicator */}
+                  {result ? (
+                    <span
+                      style={{
+                        color: result.success ? "#4ade80" : "#f87171",
+                        fontSize: 12,
+                        width: 14,
+                        flexShrink: 0,
+                      }}
+                      title={result.message}
+                    >
+                      {result.success ? "✓" : "✗"}
+                    </span>
+                  ) : isProcessing ? (
+                    <span style={{ color: "#3b82f6", fontSize: 12, width: 14, flexShrink: 0 }}>●</span>
+                  ) : progress.status === "running" ? (
+                    <span style={{ color: "#6b7280", fontSize: 12, width: 14, flexShrink: 0 }}>○</span>
+                  ) : null}
                   {hasPR && (
                     <span style={{ color: "#22c55e", fontSize: 10 }} title="Has open PR">
                       PR
                     </span>
                   )}
-                  {branch}
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{branch}</span>
                 </div>
               );
             })}

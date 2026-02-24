@@ -350,6 +350,45 @@ export default function MultiSelectPanel({
     onRefreshBranches?.();
   };
 
+  // Refresh all PRs
+  const handleRefreshPRs = async () => {
+    const targetBranches = branchesWithPRs;
+    if (targetBranches.length === 0) return;
+
+    setProgress({
+      total: targetBranches.length,
+      completed: 0,
+      current: null,
+      results: [],
+      status: "running",
+    });
+
+    const results: BulkOperationProgress["results"] = [];
+
+    for (const branch of targetBranches) {
+      setProgress((p) => ({ ...p, current: branch }));
+
+      const linkId = getPRLinkId(branch);
+      if (!linkId) {
+        results.push({ branch, success: false, message: "No PR found" });
+        setProgress((p) => ({ ...p, completed: p.completed + 1, results: [...results] }));
+        continue;
+      }
+
+      try {
+        await api.refreshBranchLink(linkId);
+        results.push({ branch, success: true });
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        results.push({ branch, success: false, message });
+      }
+      setProgress((p) => ({ ...p, completed: p.completed + 1, results: [...results] }));
+    }
+
+    setProgress((p) => ({ ...p, current: null, status: "done" }));
+    onRefreshBranches?.();
+  };
+
   // Serial rebase
   const handleSerialRebase = async () => {
     const targetBranches = sortedBranchesForRebase;
@@ -626,6 +665,25 @@ export default function MultiSelectPanel({
               PR operations ({branchesWithPRs.length} branches with PRs):
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {/* Refresh PRs */}
+              <button
+                onClick={handleRefreshPRs}
+                disabled={isOperationRunning}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  background: isOperationRunning ? "#1f2937" : "#0c4a6e",
+                  border: `1px solid ${isOperationRunning ? "#374151" : "#0ea5e9"}`,
+                  borderRadius: 6,
+                  color: isOperationRunning ? "#6b7280" : "#7dd3fc",
+                  cursor: isOperationRunning ? "not-allowed" : "pointer",
+                  fontSize: 13,
+                  textAlign: "left",
+                }}
+              >
+                ↻ Refresh All PRs
+              </button>
+
               {/* Add Label */}
               <Dropdown
                 isOpen={showLabelDropdown}

@@ -1,6 +1,7 @@
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import type { TreeNode, TreeEdge, TaskNode, TaskEdge, BranchLink, RepoLabel } from "../lib/api";
 import { CIBadge, ReviewBadge, LabelChip, UserChip, TeamChip } from "./atoms/Chips";
+import { Dropdown } from "./atoms/Dropdown";
 
 interface BranchGraphProps {
   nodes: TreeNode[];
@@ -145,6 +146,8 @@ export default function BranchGraph({
   // Highlight filter state
   const [highlightLabels, setHighlightLabels] = useState<Set<string>>(new Set());
   const [highlightReviewers, setHighlightReviewers] = useState<Set<string>>(new Set());
+  const [showLabelDropdown, setShowLabelDropdown] = useState(false);
+  const [showReviewerDropdown, setShowReviewerDropdown] = useState(false);
 
   // Collect all unique labels and reviewers from branchLinks
   const { allLabels, allReviewers } = useMemo(() => {
@@ -1739,8 +1742,10 @@ export default function BranchGraph({
     // Check if node is unfocused (to the right of separator)
     const nodeUnfocused = isUnfocusedBranch(id);
     const baseNodeOpacity = isTentative ? 0.8 : isDragging ? 0.5 : isMerged ? 0.6 : 1;
-    // Apply highlight filter dimming: if filters active and this node doesn't match, dim it
-    const highlightDim = highlightMatchingBranches !== null && !highlightMatchingBranches.has(id) ? 0.25 : 1;
+    // Apply highlight filter: matching nodes are bright, others are dimmed
+    const isHighlightMatch = highlightMatchingBranches !== null && highlightMatchingBranches.has(id);
+    const isHighlightDimmed = highlightMatchingBranches !== null && !highlightMatchingBranches.has(id);
+    const highlightDim = isHighlightDimmed ? 0.2 : 1;
     const nodeOpacity = (nodeUnfocused ? baseNodeOpacity * 0.3 : baseNodeOpacity) * highlightDim;
 
     // Determine cursor style
@@ -1768,6 +1773,22 @@ export default function BranchGraph({
         }}
         onMouseDown={handleNodeMouseDown}
       >
+        {/* Highlight glow effect (yellow/golden) */}
+        {isHighlightMatch && (
+          <rect
+            x={x - 4}
+            y={y - 4}
+            width={nodeWidth + 8}
+            height={nodeHeight + 8}
+            rx={10}
+            ry={10}
+            fill="none"
+            stroke="#fbbf24"
+            strokeWidth={2}
+            opacity={0.8}
+            pointerEvents="none"
+          />
+        )}
         {/* Selection glow effect */}
         {isSelected && (
           <rect
@@ -2374,101 +2395,217 @@ export default function BranchGraph({
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 12,
-            padding: "8px 12px",
+            gap: 8,
+            padding: "6px 12px",
             background: "#1e293b",
             borderBottom: "1px solid #334155",
             flexShrink: 0,
-            overflowX: "auto",
           }}
         >
-          {/* Labels section */}
+          <span style={{ color: "#6b7280", fontSize: 11 }}>Highlight:</span>
+
+          {/* Labels Dropdown */}
           {allLabels.length > 0 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ color: "#6b7280", fontSize: 11, whiteSpace: "nowrap" }}>Labels:</span>
-              <div style={{ display: "flex", gap: 4, flexWrap: "nowrap" }}>
-                {allLabels.map((label) => {
-                  const isActive = highlightLabels.has(label.name);
-                  return (
-                    <div
-                      key={label.name}
-                      onClick={() => toggleHighlightLabel(label.name)}
-                      style={{
-                        cursor: "pointer",
-                        opacity: isActive ? 1 : 0.5,
-                        transform: isActive ? "scale(1.05)" : "scale(1)",
-                        transition: "opacity 0.15s, transform 0.15s",
-                      }}
-                    >
-                      <LabelChip name={label.name} color={label.color || "6b7280"} />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <Dropdown
+              isOpen={showLabelDropdown}
+              onClose={() => setShowLabelDropdown(false)}
+              width={200}
+              trigger={
+                <button
+                  onClick={() => setShowLabelDropdown(!showLabelDropdown)}
+                  style={{
+                    padding: "4px 8px",
+                    background: highlightLabels.size > 0 ? "#374151" : "#1f2937",
+                    border: "1px solid #4b5563",
+                    borderRadius: 4,
+                    color: "#e5e7eb",
+                    fontSize: 11,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  <span>Labels</span>
+                  {highlightLabels.size > 0 && (
+                    <span style={{ background: "#3b82f6", borderRadius: 8, padding: "0 5px", fontSize: 10 }}>
+                      {highlightLabels.size}
+                    </span>
+                  )}
+                  <span style={{ marginLeft: 2, fontSize: 8 }}>▼</span>
+                </button>
+              }
+            >
+              {allLabels.map((label) => {
+                const isActive = highlightLabels.has(label.name);
+                return (
+                  <button
+                    key={label.name}
+                    onClick={() => toggleHighlightLabel(label.name)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      width: "100%",
+                      padding: "6px 10px",
+                      background: isActive ? "#374151" : "transparent",
+                      border: "none",
+                      color: "#e5e7eb",
+                      fontSize: 12,
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "#2d3748"; }}
+                    onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
+                  >
+                    <span style={{
+                      width: 14, height: 14, borderRadius: 3,
+                      border: isActive ? "none" : "1px solid #4b5563",
+                      background: isActive ? "#3b82f6" : "transparent",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 9, color: "#fff",
+                    }}>
+                      {isActive && "✓"}
+                    </span>
+                    <LabelChip name={label.name} color={label.color || "6b7280"} />
+                  </button>
+                );
+              })}
+            </Dropdown>
           )}
 
-          {/* Divider */}
-          {allLabels.length > 0 && allReviewers.length > 0 && (
-            <div style={{ width: 1, height: 20, background: "#475569" }} />
-          )}
-
-          {/* Reviewers section */}
+          {/* Reviewers Dropdown */}
           {allReviewers.length > 0 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ color: "#6b7280", fontSize: 11, whiteSpace: "nowrap" }}>Reviewers:</span>
-              <div style={{ display: "flex", gap: 4, flexWrap: "nowrap" }}>
-                {allReviewers.map((reviewer) => {
-                  const isTeam = reviewer.startsWith("team/");
-                  const isActive = highlightReviewers.has(reviewer);
-                  return (
-                    <div
-                      key={reviewer}
-                      onClick={() => toggleHighlightReviewer(reviewer)}
-                      style={{
-                        cursor: "pointer",
-                        opacity: isActive ? 1 : 0.5,
-                        transform: isActive ? "scale(1.05)" : "scale(1)",
-                        transition: "opacity 0.15s, transform 0.15s",
-                      }}
-                    >
-                      {isTeam ? (
-                        <TeamChip slug={reviewer.replace("team/", "")} />
-                      ) : (
-                        <UserChip login={reviewer} />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+            <Dropdown
+              isOpen={showReviewerDropdown}
+              onClose={() => setShowReviewerDropdown(false)}
+              width={200}
+              trigger={
+                <button
+                  onClick={() => setShowReviewerDropdown(!showReviewerDropdown)}
+                  style={{
+                    padding: "4px 8px",
+                    background: highlightReviewers.size > 0 ? "#374151" : "#1f2937",
+                    border: "1px solid #4b5563",
+                    borderRadius: 4,
+                    color: "#e5e7eb",
+                    fontSize: 11,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  <span>Reviewers</span>
+                  {highlightReviewers.size > 0 && (
+                    <span style={{ background: "#3b82f6", borderRadius: 8, padding: "0 5px", fontSize: 10 }}>
+                      {highlightReviewers.size}
+                    </span>
+                  )}
+                  <span style={{ marginLeft: 2, fontSize: 8 }}>▼</span>
+                </button>
+              }
+            >
+              {allReviewers.map((reviewer) => {
+                const isTeam = reviewer.startsWith("team/");
+                const isActive = highlightReviewers.has(reviewer);
+                return (
+                  <button
+                    key={reviewer}
+                    onClick={() => toggleHighlightReviewer(reviewer)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      width: "100%",
+                      padding: "6px 10px",
+                      background: isActive ? "#374151" : "transparent",
+                      border: "none",
+                      color: "#e5e7eb",
+                      fontSize: 12,
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "#2d3748"; }}
+                    onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
+                  >
+                    <span style={{
+                      width: 14, height: 14, borderRadius: 3,
+                      border: isActive ? "none" : "1px solid #4b5563",
+                      background: isActive ? "#3b82f6" : "transparent",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 9, color: "#fff",
+                    }}>
+                      {isActive && "✓"}
+                    </span>
+                    {isTeam ? (
+                      <TeamChip slug={reviewer.replace("team/", "")} />
+                    ) : (
+                      <UserChip login={reviewer} />
+                    )}
+                  </button>
+                );
+              })}
+            </Dropdown>
+          )}
+
+          {/* Selected chips */}
+          {hasHighlightFilters && (
+            <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
+              {Array.from(highlightLabels).map((name) => {
+                const label = allLabels.find((l) => l.name === name);
+                return label ? (
+                  <LabelChip
+                    key={name}
+                    name={label.name}
+                    color={label.color}
+                    onRemove={() => toggleHighlightLabel(name)}
+                  />
+                ) : null;
+              })}
+              {Array.from(highlightReviewers).map((reviewer) => {
+                const isTeam = reviewer.startsWith("team/");
+                return isTeam ? (
+                  <TeamChip
+                    key={reviewer}
+                    slug={reviewer.replace("team/", "")}
+                    onRemove={() => toggleHighlightReviewer(reviewer)}
+                  />
+                ) : (
+                  <UserChip
+                    key={reviewer}
+                    login={reviewer}
+                    onRemove={() => toggleHighlightReviewer(reviewer)}
+                  />
+                );
+              })}
             </div>
           )}
+
+          <div style={{ flex: 1 }} />
 
           {/* Clear button */}
           {hasHighlightFilters && (
-            <>
-              <div style={{ flex: 1 }} />
-              <button
-                onClick={clearHighlights}
-                style={{
-                  padding: "4px 8px",
-                  background: "#374151",
-                  border: "none",
-                  borderRadius: 4,
-                  color: "#9ca3af",
-                  fontSize: 11,
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Clear
-              </button>
-            </>
+            <button
+              onClick={clearHighlights}
+              style={{
+                padding: "4px 8px",
+                background: "#374151",
+                border: "none",
+                borderRadius: 4,
+                color: "#9ca3af",
+                fontSize: 11,
+                cursor: "pointer",
+              }}
+            >
+              Clear
+            </button>
           )}
         </div>
       )}
 
-      <svg
+      <div style={{ flex: 1, overflow: "auto" }}>
+        <svg
         ref={svgRef}
         className="branch-graph__svg"
         style={{
@@ -2821,7 +2958,8 @@ export default function BranchGraph({
             </g>
           );
         })()}
-      </svg>
+        </svg>
+      </div>
     </div>
   );
 }

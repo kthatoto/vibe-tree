@@ -104,7 +104,8 @@ export default function MultiSelectPanel({
 
   // Check if a branch is deletable:
   // - Not the default branch
-  // - PR is merged OR no commits (ahead=0) OR no PR attached
+  // - PR is merged OR closed OR no commits (ahead=0) OR no PR attached
+  // - Branch not in local git but has DB data → deletable (cleanup only)
   const isDeletable = useCallback(
     (branch: string): { deletable: boolean; reason?: string } => {
       if (branch === defaultBranch) {
@@ -112,7 +113,15 @@ export default function MultiSelectPanel({
       }
 
       const node = nodeMap.get(branch);
+      const links = branchLinks.get(branch);
+      const prLink = links?.find((l) => l.linkType === "pr");
+
+      // If branch doesn't exist locally but has DB data, allow cleanup
       if (!node) {
+        // If there's any data to clean up (links, etc.), allow deletion
+        if (links && links.length > 0) {
+          return { deletable: true };
+        }
         return { deletable: false, reason: "not found" };
       }
 
@@ -121,12 +130,13 @@ export default function MultiSelectPanel({
         return { deletable: false, reason: "has worktree" };
       }
 
-      const links = branchLinks.get(branch);
-      const prLink = links?.find((l) => l.linkType === "pr");
-
-      // If PR exists and is open, not deletable (unless merged)
+      // If PR exists and is open, not deletable
       if (prLink) {
         if (prLink.status === "merged") {
+          return { deletable: true };
+        }
+        if (prLink.status === "closed") {
+          // Closed PR (not merged) - allow deletion
           return { deletable: true };
         }
         if (prLink.status === "open") {
@@ -134,7 +144,7 @@ export default function MultiSelectPanel({
         }
       }
 
-      // No PR or PR is closed - check if has commits
+      // No PR - check if has commits
       if (node.aheadBehind && node.aheadBehind.ahead > 0) {
         return { deletable: false, reason: "has commits" };
       }

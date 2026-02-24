@@ -1094,83 +1094,94 @@ branchRouter.post("/delete", async (c) => {
     throw new BadRequestError(`Local path does not exist: ${localPath}`);
   }
 
-  // Check if branch exists
+  // Check if branch exists in git
+  let branchExistsInGit = false;
   try {
     const existingBranches = (await execAsync(
       `cd "${localPath}" && git branch --list "${branchName}"`
     )).trim();
-    if (!existingBranches) {
-      throw new BadRequestError(`Branch does not exist: ${branchName}`);
-    }
-  } catch (err) {
-    if (err instanceof BadRequestError) throw err;
-    throw new BadRequestError(`Failed to check branch: ${err instanceof Error ? err.message : String(err)}`);
+    branchExistsInGit = existingBranches.length > 0;
+  } catch {
+    // Assume branch doesn't exist if check fails
+    branchExistsInGit = false;
   }
 
-  // Check if currently on this branch
-  try {
-    const currentBranch = (await execAsync(
-      `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`
-    )).trim();
-    if (currentBranch === branchName) {
-      throw new BadRequestError("Cannot delete the currently checked out branch");
-    }
-  } catch (err) {
-    if (err instanceof BadRequestError) throw err;
-    // Ignore other errors
-  }
-
-  // Remove worktree if it exists for this branch
-  const worktreePath = await getWorktreePath(localPath, branchName);
-  if (worktreePath) {
-    // Get worktree settings before removal for custom command
-    const repoIdForWorktree = await getRepoId(localPath);
-    const wtSettings = await getWorktreeSettings(repoIdForWorktree ?? "");
-
+  // If branch exists in git, perform git operations
+  if (branchExistsInGit) {
+    // Check if currently on this branch
     try {
-      const removed = await removeWorktree(localPath, branchName);
-      if (!removed) {
-        console.warn(`Failed to remove worktree for branch ${branchName}`);
-      } else {
-        // Run custom worktree delete command if configured
-        if (wtSettings.worktreeDeleteCommand && repoIdForWorktree) {
-          runCustomCommand(wtSettings.worktreeDeleteCommand, {
-            repoId: repoIdForWorktree,
-            branchName,
-            worktreePath,
-          }, "worktreeDeleteCommand");
-        }
-
-        // Run post-delete script if configured
-        if (wtSettings.postDeleteScript) {
-          runPostDeleteScript(localPath, wtSettings.postDeleteScript);
-        }
+      const currentBranch = (await execAsync(
+        `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`
+      )).trim();
+      if (currentBranch === branchName) {
+        throw new BadRequestError("Cannot delete the currently checked out branch");
       }
     } catch (err) {
-      console.error(`Error removing worktree for branch ${branchName}:`, err);
-      // Continue with branch deletion even if worktree removal fails
+      if (err instanceof BadRequestError) throw err;
+      // Ignore other errors
+    }
+
+    // Remove worktree if it exists for this branch
+    const worktreePath = await getWorktreePath(localPath, branchName);
+    if (worktreePath) {
+      // Get worktree settings before removal for custom command
+      const repoIdForWorktree = await getRepoId(localPath);
+      const wtSettings = await getWorktreeSettings(repoIdForWorktree ?? "");
+
+      try {
+        const removed = await removeWorktree(localPath, branchName);
+        if (!removed) {
+          console.warn(`Failed to remove worktree for branch ${branchName}`);
+        } else {
+          // Run custom worktree delete command if configured
+          if (wtSettings.worktreeDeleteCommand && repoIdForWorktree) {
+            runCustomCommand(wtSettings.worktreeDeleteCommand, {
+              repoId: repoIdForWorktree,
+              branchName,
+              worktreePath,
+            }, "worktreeDeleteCommand");
+          }
+
+          // Run post-delete script if configured
+          if (wtSettings.postDeleteScript) {
+            runPostDeleteScript(localPath, wtSettings.postDeleteScript);
+          }
+        }
+      } catch (err) {
+        console.error(`Error removing worktree for branch ${branchName}:`, err);
+        // Continue with branch deletion even if worktree removal fails
+      }
+    }
+
+    // Delete the branch from git
+    try {
+      const flag = force ? "-D" : "-d";
+      await execAsync(
+        `cd "${localPath}" && git branch ${flag} "${branchName}"`
+      );
+
+      // Also delete remote branch if it exists
+      try {
+        await execAsync(
+          `cd "${localPath}" && git push origin --delete "${branchName}" 2>/dev/null || true`
+        );
+      } catch {
+        // Ignore errors deleting remote branch
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("not fully merged")) {
+        throw new BadRequestError(
+          `Branch "${branchName}" is not fully merged. Use force delete if you're sure.`
+        );
+      }
+      throw new BadRequestError(`Failed to delete branch: ${message}`);
     }
   }
 
-  // Delete the branch
-  try {
-    const flag = force ? "-D" : "-d";
-    await execAsync(
-      `cd "${localPath}" && git branch ${flag} "${branchName}"`
-    );
-
-    // Also delete remote branch if it exists
-    try {
-      await execAsync(
-        `cd "${localPath}" && git push origin --delete "${branchName}" 2>/dev/null || true`
-      );
-    } catch {
-      // Ignore errors deleting remote branch
-    }
-
-    // Reparent children of deleted branch in both treeSpecs and planningSessions
-    const repoId = await getRepoId(localPath);
-    if (repoId) {
+  // Always clean up DB data (even if branch doesn't exist in git)
+  const repoId = await getRepoId(localPath);
+  if (repoId) {
       // 1. Update treeSpecs (Branch Graph structure - highest priority)
       try {
         const treeSpecs = await db
@@ -1258,7 +1269,6 @@ branchRouter.post("/delete", async (c) => {
       } catch (err) {
         console.error("Failed to update planning session edges:", err);
       }
-    }
 
     // Clean up related data for the deleted branch
     try {
@@ -1331,20 +1341,12 @@ branchRouter.post("/delete", async (c) => {
       console.error("Failed to clean up branch data:", err);
       // Don't fail the request, branch is already deleted
     }
-
-    return c.json({
-      success: true,
-      branchName,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (message.includes("not fully merged")) {
-      throw new BadRequestError(
-        `Branch "${branchName}" is not fully merged. Use force delete if you're sure.`
-      );
-    }
-    throw new BadRequestError(`Failed to delete branch: ${message}`);
   }
+
+  return c.json({
+    success: true,
+    branchName,
+  });
 });
 
 // POST /api/branch/cleanup-orphaned - Clean up data for branches that no longer exist

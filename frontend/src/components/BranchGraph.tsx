@@ -1,6 +1,6 @@
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
-import type { TreeNode, TreeEdge, TaskNode, TaskEdge, BranchLink } from "../lib/api";
-import { CIBadge, ReviewBadge } from "./atoms/Chips";
+import type { TreeNode, TreeEdge, TaskNode, TaskEdge, BranchLink, RepoLabel } from "../lib/api";
+import { CIBadge, ReviewBadge, LabelChip, UserChip, TeamChip } from "./atoms/Chips";
 
 interface BranchGraphProps {
   nodes: TreeNode[];
@@ -43,6 +43,8 @@ interface BranchGraphProps {
   onWorktreeMove?: (worktreePath: string, fromBranch: string, toBranch: string) => void;
   // Branches currently refreshing their status (for loading indicator)
   refreshingBranches?: Set<string>;
+  // Repo labels for highlight feature (with colors)
+  repoLabels?: RepoLabel[];
 }
 
 interface DragState {
@@ -134,10 +136,75 @@ export default function BranchGraph({
   highlightedBranch = null,
   onWorktreeMove,
   refreshingBranches = new Set(),
+  repoLabels = [],
 }: BranchGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+
+  // Highlight filter state
+  const [highlightLabels, setHighlightLabels] = useState<Set<string>>(new Set());
+  const [highlightReviewers, setHighlightReviewers] = useState<Set<string>>(new Set());
+
+  // Collect all unique labels and reviewers from branchLinks
+  const { allLabels, allReviewers } = useMemo(() => {
+    const labelsSet = new Set<string>();
+    const reviewersSet = new Set<string>();
+    branchLinks.forEach((links) => {
+      links.forEach((link) => {
+        if (link.labels) {
+          try {
+            const parsed = JSON.parse(link.labels) as string[];
+            parsed.forEach((l) => labelsSet.add(l));
+          } catch {}
+        }
+        if (link.reviewers) {
+          try {
+            const parsed = JSON.parse(link.reviewers) as string[];
+            parsed.forEach((r) => reviewersSet.add(r));
+          } catch {}
+        }
+      });
+    });
+    return {
+      allLabels: Array.from(labelsSet).sort(),
+      allReviewers: Array.from(reviewersSet).sort(),
+    };
+  }, [branchLinks]);
+
+  // Calculate which branches match highlight criteria
+  const highlightMatchingBranches = useMemo(() => {
+    // If no highlights selected, no special highlighting (all visible)
+    if (highlightLabels.size === 0 && highlightReviewers.size === 0) {
+      return null; // null means no filtering
+    }
+    const matching = new Set<string>();
+    branchLinks.forEach((links, branchName) => {
+      const hasMatchingLabel = links.some((link) => {
+        if (!link.labels) return false;
+        try {
+          const parsed = JSON.parse(link.labels) as string[];
+          return parsed.some((l) => highlightLabels.has(l));
+        } catch {
+          return false;
+        }
+      });
+      const hasMatchingReviewer = links.some((link) => {
+        if (!link.reviewers) return false;
+        try {
+          const parsed = JSON.parse(link.reviewers) as string[];
+          return parsed.some((r) => highlightReviewers.has(r));
+        } catch {
+          return false;
+        }
+      });
+      if (hasMatchingLabel || hasMatchingReviewer) {
+        matching.add(branchName);
+      }
+    });
+    return matching;
+  }, [branchLinks, highlightLabels, highlightReviewers]);
+
   const [worktreeDragState, setWorktreeDragState] = useState<WorktreeDragState | null>(null);
   const [worktreeDropTarget, setWorktreeDropTarget] = useState<string | null>(null);
 
@@ -1672,7 +1739,9 @@ export default function BranchGraph({
     // Check if node is unfocused (to the right of separator)
     const nodeUnfocused = isUnfocusedBranch(id);
     const baseNodeOpacity = isTentative ? 0.8 : isDragging ? 0.5 : isMerged ? 0.6 : 1;
-    const nodeOpacity = nodeUnfocused ? baseNodeOpacity * 0.3 : baseNodeOpacity;
+    // Apply highlight filter dimming: if filters active and this node doesn't match, dim it
+    const highlightDim = highlightMatchingBranches !== null && !highlightMatchingBranches.has(id) ? 0.25 : 1;
+    const nodeOpacity = (nodeUnfocused ? baseNodeOpacity * 0.3 : baseNodeOpacity) * highlightDim;
 
     // Determine cursor style
     const getCursorStyle = () => {
@@ -2264,8 +2333,142 @@ export default function BranchGraph({
     );
   }
 
+  // Toggle highlight filter
+  const toggleHighlightLabel = (label: string) => {
+    setHighlightLabels((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) {
+        next.delete(label);
+      } else {
+        next.add(label);
+      }
+      return next;
+    });
+  };
+
+  const toggleHighlightReviewer = (reviewer: string) => {
+    setHighlightReviewers((prev) => {
+      const next = new Set(prev);
+      if (next.has(reviewer)) {
+        next.delete(reviewer);
+      } else {
+        next.add(reviewer);
+      }
+      return next;
+    });
+  };
+
+  const clearHighlights = () => {
+    setHighlightLabels(new Set());
+    setHighlightReviewers(new Set());
+  };
+
+  const hasHighlightFilters = highlightLabels.size > 0 || highlightReviewers.size > 0;
+
   return (
-    <div className="branch-graph" style={{ width: "100%", height: "100%" }}>
+    <div className="branch-graph" style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
+      {/* Highlight Filter Header */}
+      {(allLabels.length > 0 || allReviewers.length > 0) && (
+        <div
+          className="branch-graph__highlight-header"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "8px 12px",
+            background: "#1e293b",
+            borderBottom: "1px solid #334155",
+            flexShrink: 0,
+            overflowX: "auto",
+          }}
+        >
+          {/* Labels section */}
+          {allLabels.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ color: "#6b7280", fontSize: 11, whiteSpace: "nowrap" }}>Labels:</span>
+              <div style={{ display: "flex", gap: 4, flexWrap: "nowrap" }}>
+                {allLabels.map((label) => {
+                  const labelInfo = repoLabels.find((l) => l.name === label);
+                  const isActive = highlightLabels.has(label);
+                  return (
+                    <div
+                      key={label}
+                      onClick={() => toggleHighlightLabel(label)}
+                      style={{
+                        cursor: "pointer",
+                        opacity: isActive ? 1 : 0.5,
+                        transform: isActive ? "scale(1.05)" : "scale(1)",
+                        transition: "opacity 0.15s, transform 0.15s",
+                      }}
+                    >
+                      <LabelChip name={label} color={labelInfo?.color || "6b7280"} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Divider */}
+          {allLabels.length > 0 && allReviewers.length > 0 && (
+            <div style={{ width: 1, height: 20, background: "#475569" }} />
+          )}
+
+          {/* Reviewers section */}
+          {allReviewers.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ color: "#6b7280", fontSize: 11, whiteSpace: "nowrap" }}>Reviewers:</span>
+              <div style={{ display: "flex", gap: 4, flexWrap: "nowrap" }}>
+                {allReviewers.map((reviewer) => {
+                  const isTeam = reviewer.startsWith("team/");
+                  const isActive = highlightReviewers.has(reviewer);
+                  return (
+                    <div
+                      key={reviewer}
+                      onClick={() => toggleHighlightReviewer(reviewer)}
+                      style={{
+                        cursor: "pointer",
+                        opacity: isActive ? 1 : 0.5,
+                        transform: isActive ? "scale(1.05)" : "scale(1)",
+                        transition: "opacity 0.15s, transform 0.15s",
+                      }}
+                    >
+                      {isTeam ? (
+                        <TeamChip slug={reviewer.replace("team/", "")} />
+                      ) : (
+                        <UserChip login={reviewer} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Clear button */}
+          {hasHighlightFilters && (
+            <>
+              <div style={{ flex: 1 }} />
+              <button
+                onClick={clearHighlights}
+                style={{
+                  padding: "4px 8px",
+                  background: "#374151",
+                  border: "none",
+                  borderRadius: 4,
+                  color: "#9ca3af",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Clear
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       <svg
         ref={svgRef}
         className="branch-graph__svg"

@@ -2986,6 +2986,7 @@ export default function TreeDashboard() {
                         setPendingWorktreeMove({ worktreePath, fromBranch, toBranch });
                       }}
                       refreshingBranches={refreshingBranches}
+                      repoLabels={repoLabels}
                     />
                   </div>
                 </div>

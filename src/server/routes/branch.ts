@@ -688,6 +688,8 @@ branchRouter.post("/rebase", async (c) => {
 
   // Determine which path to use for rebase
   let rebasePath: string | null = null;
+  let needsCheckout = false;
+  let originalBranch: string | null = null;
 
   if (worktreePath && existsSync(worktreePath)) {
     rebasePath = worktreePath;
@@ -698,6 +700,11 @@ branchRouter.post("/rebase", async (c) => {
         `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`
       )).trim();
       if (currentBranch === branchName) {
+        rebasePath = localPath;
+      } else {
+        // Need to temporarily checkout the branch
+        originalBranch = currentBranch;
+        needsCheckout = true;
         rebasePath = localPath;
       }
     } catch {
@@ -722,6 +729,26 @@ branchRouter.post("/rebase", async (c) => {
     throw new BadRequestError(`Failed to check git status: ${err instanceof Error ? err.message : String(err)}`);
   }
 
+  // Checkout target branch if needed
+  if (needsCheckout) {
+    try {
+      await execAsync(`cd "${rebasePath}" && git checkout "${branchName}"`);
+    } catch (err) {
+      throw new BadRequestError(`Failed to checkout branch: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Helper to restore original branch
+  const restoreOriginalBranch = async () => {
+    if (needsCheckout && originalBranch) {
+      try {
+        await execAsync(`cd "${rebasePath}" && git checkout "${originalBranch}"`);
+      } catch {
+        console.warn(`Failed to restore original branch: ${originalBranch}`);
+      }
+    }
+  };
+
   // Check if remote branch exists
   let useRemote = false;
   try {
@@ -739,6 +766,10 @@ branchRouter.post("/rebase", async (c) => {
     const output = await execAsync(
       `cd "${rebasePath}" && git rebase "${rebaseTarget}"`
     );
+
+    // Restore original branch after successful rebase
+    await restoreOriginalBranch();
+
     return c.json({
       success: true,
       branchName,
@@ -753,6 +784,10 @@ branchRouter.post("/rebase", async (c) => {
     } catch {
       // Ignore
     }
+
+    // Restore original branch after failed rebase
+    await restoreOriginalBranch();
+
     if (message.includes("conflict")) {
       throw new BadRequestError("Rebase failed due to conflicts. Rebase has been aborted.");
     }

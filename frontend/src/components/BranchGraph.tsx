@@ -2643,11 +2643,13 @@ export default function BranchGraph({
         </div>
       )}
 
-      <div style={{ flex: 1, overflow: "auto" }}>
+      <div style={{ flex: 1, overflow: "auto", position: "relative" }}>
         <svg
         ref={svgRef}
         className="branch-graph__svg"
         style={{
+          minWidth: "100%",
+          minHeight: "100%",
           width: width * zoom,
           height: height * zoom,
           cursor: rectangleSelectState ? "crosshair" : dragState ? "grabbing" : undefined,

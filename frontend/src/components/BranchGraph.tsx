@@ -2135,10 +2135,8 @@ export default function BranchGraph({
         ref={svgRef}
         className="branch-graph__svg"
         style={{
-          width: "100%",
-          height: "100%",
-          minWidth: width * zoom,
-          minHeight: height * zoom,
+          width: width * zoom,
+          height: height * zoom,
           cursor: rectangleSelectState ? "crosshair" : dragState ? "grabbing" : undefined,
           userSelect: (dragState || rectangleSelectState) ? "none" : undefined,
         }}

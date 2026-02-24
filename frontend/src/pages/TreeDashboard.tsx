@@ -4658,6 +4658,7 @@ export default function TreeDashboard() {
         .graph-container {
           flex: 1;
           overflow: auto;
+          overscroll-behavior: contain;
           background: #1f2937;
           border-radius: 4px;
           min-height: 150px;

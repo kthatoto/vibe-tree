@@ -148,14 +148,14 @@ export default function BranchGraph({
 
   // Collect all unique labels and reviewers from branchLinks
   const { allLabels, allReviewers } = useMemo(() => {
-    const labelsSet = new Set<string>();
+    const labelsMap = new Map<string, { name: string; color: string }>();
     const reviewersSet = new Set<string>();
     branchLinks.forEach((links) => {
       links.forEach((link) => {
         if (link.labels) {
           try {
-            const parsed = JSON.parse(link.labels) as string[];
-            parsed.forEach((l) => labelsSet.add(l));
+            const parsed = JSON.parse(link.labels) as Array<{ name: string; color: string }>;
+            parsed.forEach((l) => labelsMap.set(l.name, l));
           } catch {}
         }
         if (link.reviewers) {
@@ -167,7 +167,7 @@ export default function BranchGraph({
       });
     });
     return {
-      allLabels: Array.from(labelsSet).sort(),
+      allLabels: Array.from(labelsMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
       allReviewers: Array.from(reviewersSet).sort(),
     };
   }, [branchLinks]);
@@ -183,8 +183,8 @@ export default function BranchGraph({
       const hasMatchingLabel = links.some((link) => {
         if (!link.labels) return false;
         try {
-          const parsed = JSON.parse(link.labels) as string[];
-          return parsed.some((l) => highlightLabels.has(l));
+          const parsed = JSON.parse(link.labels) as Array<{ name: string; color: string }>;
+          return parsed.some((l) => highlightLabels.has(l.name));
         } catch {
           return false;
         }
@@ -2388,12 +2388,11 @@ export default function BranchGraph({
               <span style={{ color: "#6b7280", fontSize: 11, whiteSpace: "nowrap" }}>Labels:</span>
               <div style={{ display: "flex", gap: 4, flexWrap: "nowrap" }}>
                 {allLabels.map((label) => {
-                  const labelInfo = repoLabels.find((l) => l.name === label);
-                  const isActive = highlightLabels.has(label);
+                  const isActive = highlightLabels.has(label.name);
                   return (
                     <div
-                      key={label}
-                      onClick={() => toggleHighlightLabel(label)}
+                      key={label.name}
+                      onClick={() => toggleHighlightLabel(label.name)}
                       style={{
                         cursor: "pointer",
                         opacity: isActive ? 1 : 0.5,
@@ -2401,7 +2400,7 @@ export default function BranchGraph({
                         transition: "opacity 0.15s, transform 0.15s",
                       }}
                     >
-                      <LabelChip name={label} color={labelInfo?.color || "6b7280"} />
+                      <LabelChip name={label.name} color={label.color || "6b7280"} />
                     </div>
                   );
                 })}

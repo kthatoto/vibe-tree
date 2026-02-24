@@ -653,7 +653,9 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
     existing.checksStatus !== checksStatus ||
     existing.reviewDecision !== reviewDecision ||
     existing.status !== status ||
-    existing.title !== title;
+    existing.title !== title ||
+    existing.labels !== labels ||
+    existing.reviewers !== reviewers;
 
   if (hasChanges) {
     broadcast({

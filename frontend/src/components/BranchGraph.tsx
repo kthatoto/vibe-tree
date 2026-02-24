@@ -7,6 +7,8 @@ interface BranchGraphProps {
   nodes: TreeNode[];
   edges: TreeEdge[];
   defaultBranch: string;
+  // Repo identifier for localStorage
+  repoId?: string;
   // Multi-select state
   selectedBranches: Set<string>;
   onSelectionChange: (branches: Set<string>, anchor?: string) => void;
@@ -114,6 +116,7 @@ export default function BranchGraph({
   nodes,
   edges,
   defaultBranch,
+  repoId,
   selectedBranches,
   onSelectionChange,
   selectionAnchor = null,
@@ -143,11 +146,41 @@ export default function BranchGraph({
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
-  // Highlight filter state
-  const [highlightLabels, setHighlightLabels] = useState<Set<string>>(new Set());
-  const [highlightReviewers, setHighlightReviewers] = useState<Set<string>>(new Set());
+  // Highlight filter state - persisted to localStorage
+  const getHighlightStorageKey = (type: "labels" | "reviewers") =>
+    `vibe-tree-highlight-${type}${repoId ? `-${repoId}` : ""}`;
+
+  const [highlightLabels, setHighlightLabels] = useState<Set<string>>(() => {
+    if (!repoId) return new Set();
+    try {
+      const stored = localStorage.getItem(getHighlightStorageKey("labels"));
+      return stored ? new Set(JSON.parse(stored) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const [highlightReviewers, setHighlightReviewers] = useState<Set<string>>(() => {
+    if (!repoId) return new Set();
+    try {
+      const stored = localStorage.getItem(getHighlightStorageKey("reviewers"));
+      return stored ? new Set(JSON.parse(stored) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
   const [showLabelDropdown, setShowLabelDropdown] = useState(false);
   const [showReviewerDropdown, setShowReviewerDropdown] = useState(false);
+
+  // Save highlight filters to localStorage when they change
+  useEffect(() => {
+    if (!repoId) return;
+    localStorage.setItem(getHighlightStorageKey("labels"), JSON.stringify([...highlightLabels]));
+  }, [highlightLabels, repoId]);
+
+  useEffect(() => {
+    if (!repoId) return;
+    localStorage.setItem(getHighlightStorageKey("reviewers"), JSON.stringify([...highlightReviewers]));
+  }, [highlightReviewers, repoId]);
 
   // Collect all unique labels and reviewers from branchLinks
   const { allLabels, allReviewers } = useMemo(() => {

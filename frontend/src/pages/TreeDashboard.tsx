@@ -2887,6 +2887,7 @@ export default function TreeDashboard() {
                       nodes={snapshot.nodes}
                       edges={snapshot.edges}
                       defaultBranch={snapshot.defaultBranch}
+                      repoId={snapshot.repoId}
                       selectedBranches={selectedBranches}
                       onSelectionChange={(branches, anchor) => {
                         setSelectedBranches(branches);

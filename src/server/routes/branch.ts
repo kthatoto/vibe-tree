@@ -1182,6 +1182,12 @@ branchRouter.post("/delete", async (c) => {
   // Always clean up DB data (even if branch doesn't exist in git)
   const repoId = await getRepoId(localPath);
   if (repoId) {
+      // 0. Invalidate cached snapshot (will be rebuilt on next scan)
+      await db
+        .update(schema.repoPins)
+        .set({ cachedSnapshotJson: null })
+        .where(eq(schema.repoPins.repoId, repoId));
+
       // 1. Update treeSpecs (Branch Graph structure - highest priority)
       try {
         const treeSpecs = await db

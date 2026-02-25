@@ -209,7 +209,10 @@ export default function MultiSelectPanel({
     const getDepth = (branch: string): number => {
       let depth = 0;
       let current = branch;
+      const visited = new Set<string>();
       while (parentMap.has(current)) {
+        if (visited.has(current)) break; // Prevent infinite loop on circular refs
+        visited.add(current);
         current = parentMap.get(current)!;
         depth++;
       }

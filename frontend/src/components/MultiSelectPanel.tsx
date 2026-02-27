@@ -85,6 +85,56 @@ export default function MultiSelectPanel({
     });
   }, [selectedList, branchLinks]);
 
+  // Get common labels across selected PRs (for remove mode)
+  const commonLabels = useMemo(() => {
+    if (branchesWithPRs.length === 0) return new Set<string>();
+
+    const labelSets = branchesWithPRs.map((branch) => {
+      const links = branchLinks.get(branch);
+      const prLink = links?.find((l) => l.linkType === "pr" && l.status === "open");
+      if (!prLink?.labels) return new Set<string>();
+      try {
+        const parsed = JSON.parse(prLink.labels) as Array<{ name: string }>;
+        return new Set(parsed.map((l) => l.name));
+      } catch {
+        return new Set<string>();
+      }
+    });
+
+    // Intersection of all label sets
+    if (labelSets.length === 0) return new Set<string>();
+    let common = labelSets[0];
+    for (let i = 1; i < labelSets.length; i++) {
+      common = new Set([...common].filter((l) => labelSets[i].has(l)));
+    }
+    return common;
+  }, [branchesWithPRs, branchLinks]);
+
+  // Get common reviewers across selected PRs (for remove mode)
+  const commonReviewers = useMemo(() => {
+    if (branchesWithPRs.length === 0) return new Set<string>();
+
+    const reviewerSets = branchesWithPRs.map((branch) => {
+      const links = branchLinks.get(branch);
+      const prLink = links?.find((l) => l.linkType === "pr" && l.status === "open");
+      if (!prLink?.reviewers) return new Set<string>();
+      try {
+        const parsed = JSON.parse(prLink.reviewers) as string[];
+        return new Set(parsed);
+      } catch {
+        return new Set<string>();
+      }
+    });
+
+    // Intersection of all reviewer sets
+    if (reviewerSets.length === 0) return new Set<string>();
+    let common = reviewerSets[0];
+    for (let i = 1; i < reviewerSets.length; i++) {
+      common = new Set([...common].filter((r) => reviewerSets[i].has(r)));
+    }
+    return common;
+  }, [branchesWithPRs, branchLinks]);
+
   // Get PR URLs for selected branches (sorted)
   const prUrls = useMemo(() => {
     return selectedList
@@ -321,14 +371,15 @@ export default function MultiSelectPanel({
     onRefreshBranches?.();
   };
 
-  // Apply reviewers
+  // Apply reviewers (add or remove based on mode)
   const handleApplyReviewers = async () => {
     if (pendingReviewers.size === 0) return;
     setShowReviewerDropdown(false);
 
     const targetBranches = branchesWithPRs;
-    const reviewersToAdd = [...pendingReviewers];
-    const totalOps = targetBranches.length * reviewersToAdd.length;
+    const reviewersToApply = [...pendingReviewers];
+    const totalOps = targetBranches.length * reviewersToApply.length;
+    const isRemove = reviewerMode === "remove";
 
     setProgress({
       total: totalOps,
@@ -344,7 +395,7 @@ export default function MultiSelectPanel({
     for (const branch of targetBranches) {
       const linkId = getPRLinkId(branch);
       if (!linkId) {
-        for (const reviewer of reviewersToAdd) {
+        for (const reviewer of reviewersToApply) {
           results.push({ branch: `${branch} (${reviewer})`, success: false, message: "No PR found" });
           completed++;
         }
@@ -352,10 +403,14 @@ export default function MultiSelectPanel({
         continue;
       }
 
-      for (const reviewer of reviewersToAdd) {
-        setProgress((p) => ({ ...p, current: `${branch}: ${reviewer}` }));
+      for (const reviewer of reviewersToApply) {
+        setProgress((p) => ({ ...p, current: `${branch}: ${isRemove ? "-" : "+"}${reviewer}` }));
         try {
-          await api.addPrReviewer(linkId, reviewer);
+          if (isRemove) {
+            await api.removePrReviewer(linkId, reviewer);
+          } else {
+            await api.addPrReviewer(linkId, reviewer);
+          }
           results.push({ branch: `${branch} (${reviewer})`, success: true });
         } catch (e) {
           results.push({ branch: `${branch} (${reviewer})`, success: false, message: String(e) });
@@ -742,7 +797,12 @@ export default function MultiSelectPanel({
                   </div>
                   {/* Label list with checkboxes */}
                   <div style={{ maxHeight: 180, overflowY: "auto" }}>
-                    {quickLabels.map((labelName) => {
+                    {(labelMode === "remove" && commonLabels.size === 0) && (
+                      <div style={{ padding: "12px", color: "#6b7280", fontSize: 12, textAlign: "center" }}>
+                        No common labels
+                      </div>
+                    )}
+                    {(labelMode === "remove" ? [...commonLabels] : quickLabels).map((labelName) => {
                       const label = getLabelInfo(labelName);
                       const isSelected = pendingLabels.has(labelName);
                       return (
@@ -824,7 +884,7 @@ export default function MultiSelectPanel({
                 </div>
               </Dropdown>
 
-              {/* Add Reviewer */}
+              {/* Add/Remove Reviewer */}
               <Dropdown
                 isOpen={showReviewerDropdown}
                 onClose={closeReviewerDropdown}
@@ -845,7 +905,7 @@ export default function MultiSelectPanel({
                       opacity: isOperationRunning ? 0.5 : 1,
                     }}
                   >
-                    + Add Reviewers to All PRs
+                    ± Reviewers
                     {quickReviewers.length === 0 && (
                       <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>(no quick reviewers)</span>
                     )}
@@ -853,9 +913,47 @@ export default function MultiSelectPanel({
                 }
               >
                 <div style={{ display: "flex", flexDirection: "column" }}>
+                  {/* Add/Remove toggle */}
+                  <div style={{ display: "flex", borderBottom: "1px solid #374151" }}>
+                    <button
+                      onClick={() => setReviewerMode("add")}
+                      style={{
+                        flex: 1,
+                        padding: "8px",
+                        background: reviewerMode === "add" ? "#374151" : "transparent",
+                        border: "none",
+                        color: reviewerMode === "add" ? "#10b981" : "#9ca3af",
+                        fontSize: 12,
+                        fontWeight: reviewerMode === "add" ? 600 : 400,
+                        cursor: "pointer",
+                      }}
+                    >
+                      + Add
+                    </button>
+                    <button
+                      onClick={() => setReviewerMode("remove")}
+                      style={{
+                        flex: 1,
+                        padding: "8px",
+                        background: reviewerMode === "remove" ? "#374151" : "transparent",
+                        border: "none",
+                        color: reviewerMode === "remove" ? "#ef4444" : "#9ca3af",
+                        fontSize: 12,
+                        fontWeight: reviewerMode === "remove" ? 600 : 400,
+                        cursor: "pointer",
+                      }}
+                    >
+                      − Remove
+                    </button>
+                  </div>
                   {/* Reviewer list with checkboxes */}
                   <div style={{ maxHeight: 180, overflowY: "auto" }}>
-                    {quickReviewers.map((reviewerName) => {
+                    {(reviewerMode === "remove" && commonReviewers.size === 0) && (
+                      <div style={{ padding: "12px", color: "#6b7280", fontSize: 12, textAlign: "center" }}>
+                        No common reviewers
+                      </div>
+                    )}
+                    {(reviewerMode === "remove" ? [...commonReviewers] : quickReviewers).map((reviewerName) => {
                       const info = getReviewerInfo(reviewerName);
                       const isSelected = pendingReviewers.has(reviewerName);
                       return (
@@ -929,7 +1027,7 @@ export default function MultiSelectPanel({
                       disabled={pendingReviewers.size === 0}
                       style={{
                         padding: "6px 16px",
-                        background: pendingReviewers.size === 0 ? "#374151" : "#3b82f6",
+                        background: pendingReviewers.size === 0 ? "#374151" : reviewerMode === "remove" ? "#ef4444" : "#10b981",
                         border: "none",
                         borderRadius: 4,
                         color: pendingReviewers.size === 0 ? "#6b7280" : "#fff",
@@ -938,7 +1036,7 @@ export default function MultiSelectPanel({
                         cursor: pendingReviewers.size === 0 ? "not-allowed" : "pointer",
                       }}
                     >
-                      Apply
+                      {reviewerMode === "remove" ? "Remove" : "Add"}
                     </button>
                   </div>
                 </div>

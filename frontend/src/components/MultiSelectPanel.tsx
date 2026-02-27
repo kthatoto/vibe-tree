@@ -70,6 +70,8 @@ export default function MultiSelectPanel({
   // Dropdown states
   const [showLabelDropdown, setShowLabelDropdown] = useState(false);
   const [showReviewerDropdown, setShowReviewerDropdown] = useState(false);
+  const [labelMode, setLabelMode] = useState<"add" | "remove">("add");
+  const [reviewerMode, setReviewerMode] = useState<"add" | "remove">("add");
 
   // Selected items in dropdowns (before applying)
   const [pendingLabels, setPendingLabels] = useState<Set<string>>(new Set());
@@ -265,14 +267,15 @@ export default function MultiSelectPanel({
     });
   };
 
-  // Apply labels
+  // Apply labels (add or remove based on mode)
   const handleApplyLabels = async () => {
     if (pendingLabels.size === 0) return;
     setShowLabelDropdown(false);
 
     const targetBranches = branchesWithPRs;
-    const labelsToAdd = [...pendingLabels];
-    const totalOps = targetBranches.length * labelsToAdd.length;
+    const labelsToApply = [...pendingLabels];
+    const totalOps = targetBranches.length * labelsToApply.length;
+    const isRemove = labelMode === "remove";
 
     setProgress({
       total: totalOps,
@@ -288,7 +291,7 @@ export default function MultiSelectPanel({
     for (const branch of targetBranches) {
       const linkId = getPRLinkId(branch);
       if (!linkId) {
-        for (const label of labelsToAdd) {
+        for (const label of labelsToApply) {
           results.push({ branch: `${branch} (${label})`, success: false, message: "No PR found" });
           completed++;
         }
@@ -296,10 +299,14 @@ export default function MultiSelectPanel({
         continue;
       }
 
-      for (const label of labelsToAdd) {
-        setProgress((p) => ({ ...p, current: `${branch}: ${label}` }));
+      for (const label of labelsToApply) {
+        setProgress((p) => ({ ...p, current: `${branch}: ${isRemove ? "-" : "+"}${label}` }));
         try {
-          await api.addPrLabel(linkId, label);
+          if (isRemove) {
+            await api.removePrLabel(linkId, label);
+          } else {
+            await api.addPrLabel(linkId, label);
+          }
           results.push({ branch: `${branch} (${label})`, success: true });
         } catch (e) {
           results.push({ branch: `${branch} (${label})`, success: false, message: String(e) });
@@ -671,7 +678,7 @@ export default function MultiSelectPanel({
                 ↻ Refresh All PRs
               </button>
 
-              {/* Add Label */}
+              {/* Add/Remove Label */}
               <Dropdown
                 isOpen={showLabelDropdown}
                 onClose={closeLabelDropdown}
@@ -692,7 +699,7 @@ export default function MultiSelectPanel({
                       opacity: isOperationRunning ? 0.5 : 1,
                     }}
                   >
-                    + Add Labels to All PRs
+                    ± Labels
                     {quickLabels.length === 0 && (
                       <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>(no quick labels)</span>
                     )}
@@ -700,6 +707,39 @@ export default function MultiSelectPanel({
                 }
               >
                 <div style={{ display: "flex", flexDirection: "column" }}>
+                  {/* Add/Remove toggle */}
+                  <div style={{ display: "flex", borderBottom: "1px solid #374151" }}>
+                    <button
+                      onClick={() => setLabelMode("add")}
+                      style={{
+                        flex: 1,
+                        padding: "8px",
+                        background: labelMode === "add" ? "#374151" : "transparent",
+                        border: "none",
+                        color: labelMode === "add" ? "#10b981" : "#9ca3af",
+                        fontSize: 12,
+                        fontWeight: labelMode === "add" ? 600 : 400,
+                        cursor: "pointer",
+                      }}
+                    >
+                      + Add
+                    </button>
+                    <button
+                      onClick={() => setLabelMode("remove")}
+                      style={{
+                        flex: 1,
+                        padding: "8px",
+                        background: labelMode === "remove" ? "#374151" : "transparent",
+                        border: "none",
+                        color: labelMode === "remove" ? "#ef4444" : "#9ca3af",
+                        fontSize: 12,
+                        fontWeight: labelMode === "remove" ? 600 : 400,
+                        cursor: "pointer",
+                      }}
+                    >
+                      − Remove
+                    </button>
+                  </div>
                   {/* Label list with checkboxes */}
                   <div style={{ maxHeight: 180, overflowY: "auto" }}>
                     {quickLabels.map((labelName) => {
@@ -769,7 +809,7 @@ export default function MultiSelectPanel({
                       disabled={pendingLabels.size === 0}
                       style={{
                         padding: "6px 16px",
-                        background: pendingLabels.size === 0 ? "#374151" : "#3b82f6",
+                        background: pendingLabels.size === 0 ? "#374151" : labelMode === "remove" ? "#ef4444" : "#10b981",
                         border: "none",
                         borderRadius: 4,
                         color: pendingLabels.size === 0 ? "#6b7280" : "#fff",
@@ -778,7 +818,7 @@ export default function MultiSelectPanel({
                         cursor: pendingLabels.size === 0 ? "not-allowed" : "pointer",
                       }}
                     >
-                      Apply
+                      {labelMode === "remove" ? "Remove" : "Add"}
                     </button>
                   </div>
                 </div>

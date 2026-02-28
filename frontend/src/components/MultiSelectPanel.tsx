@@ -85,54 +85,42 @@ export default function MultiSelectPanel({
     });
   }, [selectedList, branchLinks]);
 
-  // Get common labels across selected PRs (for remove mode)
-  const commonLabels = useMemo(() => {
-    if (branchesWithPRs.length === 0) return new Set<string>();
+  // Get label counts across selected PRs (label → number of PRs that have it)
+  const labelCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (branchesWithPRs.length === 0) return counts;
 
-    const labelSets = branchesWithPRs.map((branch) => {
+    for (const branch of branchesWithPRs) {
       const links = branchLinks.get(branch);
       const prLink = links?.find((l) => l.linkType === "pr" && l.status === "open");
-      if (!prLink?.labels) return new Set<string>();
+      if (!prLink?.labels) continue;
       try {
         const parsed = JSON.parse(prLink.labels) as Array<{ name: string }>;
-        return new Set(parsed.map((l) => l.name));
-      } catch {
-        return new Set<string>();
-      }
-    });
-
-    // Intersection of all label sets
-    if (labelSets.length === 0) return new Set<string>();
-    let common = labelSets[0];
-    for (let i = 1; i < labelSets.length; i++) {
-      common = new Set([...common].filter((l) => labelSets[i].has(l)));
+        for (const l of parsed) {
+          counts.set(l.name, (counts.get(l.name) ?? 0) + 1);
+        }
+      } catch { /* ignore */ }
     }
-    return common;
+    return counts;
   }, [branchesWithPRs, branchLinks]);
 
-  // Get common reviewers across selected PRs (for remove mode)
-  const commonReviewers = useMemo(() => {
-    if (branchesWithPRs.length === 0) return new Set<string>();
+  // Get reviewer counts across selected PRs (reviewer → number of PRs that have it)
+  const reviewerCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (branchesWithPRs.length === 0) return counts;
 
-    const reviewerSets = branchesWithPRs.map((branch) => {
+    for (const branch of branchesWithPRs) {
       const links = branchLinks.get(branch);
       const prLink = links?.find((l) => l.linkType === "pr" && l.status === "open");
-      if (!prLink?.reviewers) return new Set<string>();
+      if (!prLink?.reviewers) continue;
       try {
         const parsed = JSON.parse(prLink.reviewers) as string[];
-        return new Set(parsed);
-      } catch {
-        return new Set<string>();
-      }
-    });
-
-    // Intersection of all reviewer sets
-    if (reviewerSets.length === 0) return new Set<string>();
-    let common = reviewerSets[0];
-    for (let i = 1; i < reviewerSets.length; i++) {
-      common = new Set([...common].filter((r) => reviewerSets[i].has(r)));
+        for (const r of parsed) {
+          counts.set(r, (counts.get(r) ?? 0) + 1);
+        }
+      } catch { /* ignore */ }
     }
-    return common;
+    return counts;
   }, [branchesWithPRs, branchLinks]);
 
   // Get PR URLs for selected branches (sorted)
@@ -797,14 +785,18 @@ export default function MultiSelectPanel({
                   </div>
                   {/* Label list with checkboxes */}
                   <div style={{ maxHeight: 180, overflowY: "auto" }}>
-                    {(labelMode === "remove" && commonLabels.size === 0) && (
+                    {(labelMode === "remove" && labelCounts.size === 0) && (
                       <div style={{ padding: "12px", color: "#6b7280", fontSize: 12, textAlign: "center" }}>
-                        No common labels
+                        No labels found
                       </div>
                     )}
-                    {(labelMode === "remove" ? [...commonLabels] : quickLabels).map((labelName) => {
+                    {(labelMode === "remove" ? [...labelCounts.keys()] : quickLabels).map((labelName) => {
                       const label = getLabelInfo(labelName);
                       const isSelected = pendingLabels.has(labelName);
+                      const count = labelCounts.get(labelName) ?? 0;
+                      const total = branchesWithPRs.length;
+                      const isPartial = count > 0 && count < total;
+                      const isAll = count === total;
                       return (
                         <button
                           key={labelName}
@@ -847,6 +839,18 @@ export default function MultiSelectPanel({
                             {isSelected && "✓"}
                           </span>
                           <LabelChip name={labelName} color={label?.color || "6b7280"} />
+                          {count > 0 && (
+                            <span
+                              style={{
+                                marginLeft: "auto",
+                                fontSize: 10,
+                                color: isAll ? "#4ade80" : isPartial ? "#f59e0b" : "#6b7280",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {count}/{total}
+                            </span>
+                          )}
                         </button>
                       );
                     })}
@@ -948,14 +952,18 @@ export default function MultiSelectPanel({
                   </div>
                   {/* Reviewer list with checkboxes */}
                   <div style={{ maxHeight: 180, overflowY: "auto" }}>
-                    {(reviewerMode === "remove" && commonReviewers.size === 0) && (
+                    {(reviewerMode === "remove" && reviewerCounts.size === 0) && (
                       <div style={{ padding: "12px", color: "#6b7280", fontSize: 12, textAlign: "center" }}>
-                        No common reviewers
+                        No reviewers found
                       </div>
                     )}
-                    {(reviewerMode === "remove" ? [...commonReviewers] : quickReviewers).map((reviewerName) => {
+                    {(reviewerMode === "remove" ? [...reviewerCounts.keys()] : quickReviewers).map((reviewerName) => {
                       const info = getReviewerInfo(reviewerName);
                       const isSelected = pendingReviewers.has(reviewerName);
+                      const count = reviewerCounts.get(reviewerName) ?? 0;
+                      const total = branchesWithPRs.length;
+                      const isPartial = count > 0 && count < total;
+                      const isAll = count === total;
                       return (
                         <button
                           key={reviewerName}
@@ -1004,6 +1012,18 @@ export default function MultiSelectPanel({
                               login={info.login}
                               avatarUrl={"avatarUrl" in info ? info.avatarUrl : undefined}
                             />
+                          )}
+                          {count > 0 && (
+                            <span
+                              style={{
+                                marginLeft: "auto",
+                                fontSize: 10,
+                                color: isAll ? "#4ade80" : isPartial ? "#f59e0b" : "#6b7280",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {count}/{total}
+                            </span>
                           )}
                         </button>
                       );

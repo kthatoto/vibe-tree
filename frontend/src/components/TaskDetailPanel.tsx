@@ -233,13 +233,11 @@ export function TaskDetailPanel({
   const [instructionDraft, setInstructionDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Popup state for Labels/Reviewers/BaseBranch
+  // Popup state for Labels/Reviewers
   const [showLabelPopup, setShowLabelPopup] = useState<number | null>(null); // PR id
   const [showReviewerPopup, setShowReviewerPopup] = useState<number | null>(null); // PR id
-  const [showBaseBranchPopup, setShowBaseBranchPopup] = useState<number | null>(null); // PR id
   const labelPopupRef = useRef<HTMLDivElement>(null);
   const reviewerPopupRef = useRef<HTMLDivElement>(null);
-  const baseBranchPopupRef = useRef<HTMLDivElement>(null);
 
   // Get suggested parent from Branch Graph edges
   const suggestedParent = edges?.find((e) => e.child === branchName)?.parent || null;
@@ -253,13 +251,10 @@ export function TaskDetailPanel({
       if (showReviewerPopup !== null && reviewerPopupRef.current && !reviewerPopupRef.current.contains(e.target as Node)) {
         setShowReviewerPopup(null);
       }
-      if (showBaseBranchPopup !== null && baseBranchPopupRef.current && !baseBranchPopupRef.current.contains(e.target as Node)) {
-        setShowBaseBranchPopup(null);
-      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showLabelPopup, showReviewerPopup, showBaseBranchPopup]);
+  }, [showLabelPopup, showReviewerPopup]);
 
   // Copilot as a fixed reviewer option
   const COPILOT_REVIEWER: RepoCollaborator = {
@@ -1448,69 +1443,18 @@ export function TaskDetailPanel({
                 <div className="task-detail-panel__pr-row">
                   <span className="task-detail-panel__pr-row-label">Base:</span>
                   <div className="task-detail-panel__pr-row-items">
-                    <span style={{ color: "#e5e7eb", fontSize: 12 }}>
-                      {pr.baseBranch}
-                      {suggestedParent && pr.baseBranch !== suggestedParent && (
-                        <span style={{ color: "#f59e0b", fontSize: 11, marginLeft: 6 }}>
-                          (Graph: {suggestedParent})
-                        </span>
-                      )}
-                    </span>
-                    {pr.status === "open" && (
+                    <span style={{ color: "#e5e7eb", fontSize: 12 }}>{pr.baseBranch}</span>
+                    {pr.status === "open" && suggestedParent && pr.baseBranch !== suggestedParent && (
                       <button
                         className="task-detail-panel__pr-add-btn"
-                        onClick={() => setShowBaseBranchPopup(showBaseBranchPopup === pr.id ? null : pr.id)}
-                        title="Change base branch"
+                        onClick={() => handleChangeBaseBranch(pr.id, suggestedParent)}
+                        title={`Change to ${suggestedParent} (from Branch Graph)`}
+                        style={{ color: "#f59e0b" }}
                       >
-                        Edit
+                        → {suggestedParent}
                       </button>
                     )}
                   </div>
-                  {/* Base Branch Popup */}
-                  {showBaseBranchPopup === pr.id && (
-                    <div className="task-detail-panel__pr-popup" ref={baseBranchPopupRef}>
-                      <div className="task-detail-panel__pr-popup-header">
-                        <span>Select Base Branch</span>
-                        <button onClick={() => setShowBaseBranchPopup(null)}>×</button>
-                      </div>
-                      <div className="task-detail-panel__pr-popup-items" style={{ maxHeight: 200 }}>
-                        {/* Suggested parent from Branch Graph (if different from current) */}
-                        {suggestedParent && suggestedParent !== pr.baseBranch && (
-                          <button
-                            className="task-detail-panel__pr-popup-item"
-                            onClick={() => handleChangeBaseBranch(pr.id, suggestedParent)}
-                            style={{ background: "rgba(245, 158, 11, 0.15)" }}
-                          >
-                            <span className="task-detail-panel__pr-popup-name" style={{ color: "#f59e0b" }}>
-                              {suggestedParent}
-                            </span>
-                            <span style={{ fontSize: 10, color: "#9ca3af", marginLeft: 8 }}>(from Graph)</span>
-                          </button>
-                        )}
-                        {/* Other branches from edges */}
-                        {(() => {
-                          const branchesFromEdges = new Set<string>();
-                          edges?.forEach((e) => {
-                            branchesFromEdges.add(e.parent);
-                            branchesFromEdges.add(e.child);
-                          });
-                          if (defaultBranch) branchesFromEdges.add(defaultBranch);
-                          return [...branchesFromEdges]
-                            .filter((b) => b !== branchName && b !== pr.baseBranch && b !== suggestedParent)
-                            .sort()
-                            .map((branch) => (
-                              <button
-                                key={branch}
-                                className="task-detail-panel__pr-popup-item"
-                                onClick={() => handleChangeBaseBranch(pr.id, branch)}
-                              >
-                                <span className="task-detail-panel__pr-popup-name">{branch}</span>
-                              </button>
-                            ));
-                        })()}
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
               {/* Labels Row */}

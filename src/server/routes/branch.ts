@@ -691,25 +691,20 @@ branchRouter.post("/rebase", async (c) => {
   let needsCheckout = false;
   let originalBranch: string | null = null;
 
-  if (worktreePath && existsSync(worktreePath)) {
-    rebasePath = worktreePath;
-  } else {
-    // Check if the main repo is on this branch
-    try {
-      const currentBranch = (await execAsync(
-        `cd "${localPath}" && git rev-parse --abbrev-ref HEAD`
-      )).trim();
-      if (currentBranch === branchName) {
-        rebasePath = localPath;
-      } else {
-        // Need to temporarily checkout the branch
-        originalBranch = currentBranch;
-        needsCheckout = true;
-        rebasePath = localPath;
-      }
-    } catch {
-      // Ignore
+  const targetPath = (worktreePath && existsSync(worktreePath)) ? worktreePath : localPath;
+  try {
+    const currentBranch = (await execAsync(
+      `cd "${targetPath}" && git rev-parse --abbrev-ref HEAD`
+    )).trim();
+    if (currentBranch === branchName) {
+      rebasePath = targetPath;
+    } else {
+      originalBranch = currentBranch;
+      needsCheckout = true;
+      rebasePath = targetPath;
     }
+  } catch {
+    // Ignore
   }
 
   if (!rebasePath) {

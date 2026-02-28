@@ -1315,3 +1315,46 @@ branchLinksRouter.post("/:id/reviewers/remove", async (c) => {
     throw new BadRequestError(`Failed to remove reviewer: ${err instanceof Error ? err.message : String(err)}`);
   }
 });
+
+// PATCH /branch-links/:id/base-branch - Change PR base branch
+branchLinksRouter.patch("/:id/base-branch", async (c) => {
+  const id = parseInt(c.req.param("id"), 10);
+  const body = await c.req.json();
+  const { baseBranch } = body as { baseBranch: string };
+
+  if (!baseBranch) {
+    throw new BadRequestError("baseBranch is required");
+  }
+
+  // Get the branch link
+  const [link] = await db.select().from(schema.branchLinks).where(eq(schema.branchLinks.id, id)).limit(1);
+  if (!link) {
+    throw new NotFoundError("Branch link not found");
+  }
+  if (link.linkType !== "pr" || !link.number) {
+    throw new BadRequestError("Can only change base branch for PRs");
+  }
+  if (link.status !== "open") {
+    throw new BadRequestError("Can only change base branch for open PRs");
+  }
+
+  try {
+    // Change base branch via gh CLI
+    await execAsync(`gh pr edit ${link.number} --repo ${link.repoId} --base "${baseBranch}"`);
+
+    // Update DB
+    const now = new Date().toISOString();
+    await db
+      .update(schema.branchLinks)
+      .set({ baseBranch, updatedAt: now })
+      .where(eq(schema.branchLinks.id, id));
+
+    // Broadcast update
+    const [updated] = await db.select().from(schema.branchLinks).where(eq(schema.branchLinks.id, id)).limit(1);
+    broadcast({ type: "branchLink.updated", repoId: link.repoId, data: updated });
+
+    return c.json({ success: true, baseBranch });
+  } catch (err) {
+    throw new BadRequestError(`Failed to change base branch: ${err instanceof Error ? err.message : String(err)}`);
+  }
+});

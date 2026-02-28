@@ -1250,6 +1250,14 @@ export const api = {
         body: JSON.stringify({ reviewer }),
       }
     ),
+  changePrBaseBranch: (linkId: number, baseBranch: string) =>
+    fetchJson<{ success: boolean; baseBranch: string }>(
+      `${API_BASE}/branch-links/${linkId}/base-branch`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ baseBranch }),
+      }
+    ),
   createBranchLink: (data: {
     repoId: string;
     branchName: string;

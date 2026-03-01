@@ -12,6 +12,7 @@ import {
   type Plan,
   type ScanSnapshot,
   type TreeNode,
+  type TreeEdge,
   type RepoPin,
   type TreeSpecNode,
   type TreeSpecEdge,
@@ -3048,14 +3049,43 @@ export default function TreeDashboard() {
                     repoCollaborators={repoCollaborators}
                     onRefreshBranches={() => triggerScan(selectedPin.localPath)}
                     onBranchesDeleted={(deletedBranches) => {
-                      // Remove deleted branches from snapshot
-                      setSnapshot((prev) => ({
-                        ...prev,
-                        nodes: prev.nodes.filter((n) => !deletedBranches.includes(n.branchName)),
-                        edges: prev.edges.filter(
-                          (e) => !deletedBranches.includes(e.child) && !deletedBranches.includes(e.parent)
-                        ),
-                      }));
+                      const deletedSet = new Set(deletedBranches);
+                      // Remove deleted branches from snapshot, reparenting children
+                      setSnapshot((prev) => {
+                        if (!prev) return prev;
+                        // Build parent map for deleted branches
+                        const parentOf = new Map<string, string>();
+                        for (const e of prev.edges) {
+                          parentOf.set(e.child, e.parent);
+                        }
+                        // Find grandparent for each deleted branch
+                        const getGrandparent = (branch: string): string | null => {
+                          let current = branch;
+                          while (deletedSet.has(current)) {
+                            const parent = parentOf.get(current);
+                            if (!parent) return null;
+                            current = parent;
+                          }
+                          return current;
+                        };
+
+                        const updatedEdges = prev.edges
+                          .filter((e) => !deletedSet.has(e.child))
+                          .map((e) => {
+                            if (deletedSet.has(e.parent)) {
+                              const grandparent = getGrandparent(e.parent);
+                              return grandparent ? { ...e, parent: grandparent } : null;
+                            }
+                            return e;
+                          })
+                          .filter((e): e is TreeEdge => e !== null);
+
+                        return {
+                          ...prev,
+                          nodes: prev.nodes.filter((n) => !deletedSet.has(n.branchName)),
+                          edges: updatedEdges,
+                        };
+                      });
                       // Clear selection
                       setSelectedBranches(new Set());
                       setSelectionAnchor(null);
@@ -3112,15 +3142,26 @@ export default function TreeDashboard() {
                       setBranchLinks((prev) => new Map(prev).set(branch, links));
                     }}
                     onBranchDeleted={(deletedBranch) => {
-                      // Immediately remove branch from graph
+                      // Immediately remove branch from graph, reparenting children
                       setSnapshot((prev) => {
                         if (!prev) return prev;
+                        // Find deleted branch's parent
+                        const parentEdge = prev.edges.find((e) => e.child === deletedBranch);
+                        const grandparent = parentEdge?.parent ?? prev.defaultBranch;
+
+                        const updatedEdges = prev.edges
+                          .filter((e) => e.child !== deletedBranch)
+                          .map((e) => {
+                            if (e.parent === deletedBranch && grandparent) {
+                              return { ...e, parent: grandparent };
+                            }
+                            return e;
+                          });
+
                         return {
                           ...prev,
                           nodes: prev.nodes.filter((n) => n.branchName !== deletedBranch),
-                          edges: prev.edges.filter(
-                            (e) => e.child !== deletedBranch && e.parent !== deletedBranch
-                          ),
+                          edges: updatedEdges,
                         };
                       });
                       // Also update snapshotRef

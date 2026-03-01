@@ -123,6 +123,29 @@ export default function MultiSelectPanel({
     return counts;
   }, [branchesWithPRs, branchLinks]);
 
+  // Detect PRs whose baseBranch differs from Graph parent
+  const mismatchedBaseBranches = useMemo(() => {
+    const parentMap = new Map<string, string>();
+    edges.forEach((e) => parentMap.set(e.child, e.parent));
+
+    const mismatches: { branch: string; linkId: number; currentBase: string; suggestedBase: string }[] = [];
+    for (const branch of branchesWithPRs) {
+      const links = branchLinks.get(branch);
+      const prLink = links?.find((l) => l.linkType === "pr" && l.status === "open");
+      if (!prLink?.baseBranch) continue;
+      const graphParent = parentMap.get(branch);
+      if (graphParent && prLink.baseBranch !== graphParent) {
+        mismatches.push({
+          branch,
+          linkId: prLink.id,
+          currentBase: prLink.baseBranch,
+          suggestedBase: graphParent,
+        });
+      }
+    }
+    return mismatches;
+  }, [branchesWithPRs, branchLinks, edges]);
+
   // Get PR URLs for selected branches (sorted)
   const prUrls = useMemo(() => {
     return selectedList
@@ -410,6 +433,36 @@ export default function MultiSelectPanel({
 
     setProgress((p) => ({ ...p, current: null, status: "done" }));
     setPendingReviewers(new Set());
+    onRefreshBranches?.();
+  };
+
+  // Sync base branches to match Graph parent
+  const handleSyncBaseBranches = async () => {
+    if (mismatchedBaseBranches.length === 0) return;
+
+    setProgress({
+      total: mismatchedBaseBranches.length,
+      completed: 0,
+      current: null,
+      results: [],
+      status: "running",
+    });
+
+    const results: BulkOperationProgress["results"] = [];
+
+    for (const { branch, linkId, suggestedBase } of mismatchedBaseBranches) {
+      setProgress((p) => ({ ...p, current: `${branch}: → ${suggestedBase}` }));
+      try {
+        await api.changePrBaseBranch(linkId, suggestedBase);
+        results.push({ branch, success: true });
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        results.push({ branch, success: false, message });
+      }
+      setProgress((p) => ({ ...p, completed: p.completed + 1, results: [...results] }));
+    }
+
+    setProgress((p) => ({ ...p, current: null, status: "done" }));
     onRefreshBranches?.();
   };
 
@@ -720,6 +773,32 @@ export default function MultiSelectPanel({
               >
                 ↻ Refresh All PRs
               </button>
+
+              {/* Sync Base Branches */}
+              {mismatchedBaseBranches.length > 0 && (
+                <button
+                  onClick={handleSyncBaseBranches}
+                  disabled={isOperationRunning}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: isOperationRunning ? "#1f2937" : "#78350f",
+                    border: `1px solid ${isOperationRunning ? "#374151" : "#f59e0b"}`,
+                    borderRadius: 6,
+                    color: isOperationRunning ? "#6b7280" : "#fbbf24",
+                    cursor: isOperationRunning ? "not-allowed" : "pointer",
+                    fontSize: 13,
+                    textAlign: "left",
+                  }}
+                >
+                  <div style={{ fontWeight: 500 }}>
+                    Sync Base Branches ({mismatchedBaseBranches.length})
+                  </div>
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
+                    Align PR base branches with Graph
+                  </div>
+                </button>
+              )}
 
               {/* Add/Remove Label */}
               <Dropdown

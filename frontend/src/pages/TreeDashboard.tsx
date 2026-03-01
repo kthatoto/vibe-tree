@@ -3020,7 +3020,7 @@ export default function TreeDashboard() {
 
               {/* Right: Details */}
               <div className="tree-view__details">
-                {selectedBranches.size > 1 ? (
+                {selectedBranches.size > 1 && selectedPin ? (
                   <MultiSelectPanel
                     selectedBranches={selectedBranches}
                     checkedBranches={checkedBranches}
@@ -3141,19 +3141,34 @@ export default function TreeDashboard() {
                     onBranchLinksChange={(branch, links) => {
                       setBranchLinks((prev) => new Map(prev).set(branch, links));
                     }}
-                    onBranchDeleted={(deletedBranch) => {
+                    onBranchDeleted={(deletedBranch, reparentedEdges) => {
                       // Immediately remove branch from graph, reparenting children
                       setSnapshot((prev) => {
                         if (!prev) return prev;
-                        // Find deleted branch's parent
-                        const parentEdge = prev.edges.find((e) => e.child === deletedBranch);
-                        const grandparent = parentEdge?.parent ?? prev.defaultBranch;
+
+                        // Use backend-provided reparented edges if available
+                        const reparentMap = new Map<string, string>();
+                        if (reparentedEdges) {
+                          for (const re of reparentedEdges) {
+                            reparentMap.set(re.child, re.newParent);
+                          }
+                        } else {
+                          // Fallback: compute grandparent locally
+                          const parentEdge = prev.edges.find((e) => e.child === deletedBranch);
+                          const grandparent = parentEdge?.parent ?? prev.defaultBranch;
+                          for (const e of prev.edges) {
+                            if (e.parent === deletedBranch && grandparent) {
+                              reparentMap.set(e.child, grandparent);
+                            }
+                          }
+                        }
 
                         const updatedEdges = prev.edges
                           .filter((e) => e.child !== deletedBranch)
                           .map((e) => {
-                            if (e.parent === deletedBranch && grandparent) {
-                              return { ...e, parent: grandparent };
+                            const newParent = reparentMap.get(e.child);
+                            if (newParent) {
+                              return { ...e, parent: newParent, source: "designed" as const };
                             }
                             return e;
                           });
@@ -3166,12 +3181,24 @@ export default function TreeDashboard() {
                       });
                       // Also update snapshotRef
                       if (snapshotRef.current) {
+                        const reparentMap = new Map<string, string>();
+                        if (reparentedEdges) {
+                          for (const re of reparentedEdges) {
+                            reparentMap.set(re.child, re.newParent);
+                          }
+                        }
                         snapshotRef.current = {
                           ...snapshotRef.current,
                           nodes: snapshotRef.current.nodes.filter((n) => n.branchName !== deletedBranch),
-                          edges: snapshotRef.current.edges.filter(
-                            (e) => e.child !== deletedBranch && e.parent !== deletedBranch
-                          ),
+                          edges: snapshotRef.current.edges
+                            .filter((e) => e.child !== deletedBranch)
+                            .map((e) => {
+                              const newParent = reparentMap.get(e.child);
+                              if (newParent) {
+                                return { ...e, parent: newParent, source: "designed" as const };
+                              }
+                              return e;
+                            }),
                         };
                       }
                     }}

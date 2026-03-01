@@ -1176,6 +1176,7 @@ branchRouter.post("/delete", async (c) => {
 
   // Always clean up DB data (even if branch doesn't exist in git)
   const repoId = await getRepoId(localPath);
+  const reparentedEdges: Array<{ child: string; newParent: string }> = [];
   if (repoId) {
       // 0. Invalidate cached snapshot (will be rebuilt on next scan)
       await db
@@ -1206,6 +1207,7 @@ branchRouter.post("/delete", async (c) => {
             .map((e) => {
               if (e.parent === branchName) {
                 // Reparent child to grandparent
+                reparentedEdges.push({ child: e.child, newParent: parentBranch });
                 return { ...e, parent: parentBranch };
               }
               return e;
@@ -1347,6 +1349,7 @@ branchRouter.post("/delete", async (c) => {
   return c.json({
     success: true,
     branchName,
+    reparentedEdges,
   });
 });
 

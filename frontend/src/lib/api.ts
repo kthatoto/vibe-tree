@@ -1107,7 +1107,7 @@ export const api = {
 
   // Delete branch
   deleteBranch: (localPath: string, branchName: string, force?: boolean) =>
-    fetchJson<{ success: boolean; branchName: string }>(
+    fetchJson<{ success: boolean; branchName: string; reparentedEdges?: Array<{ child: string; newParent: string }> }>(
       `${API_BASE}/branch/delete`,
       {
         method: "POST",

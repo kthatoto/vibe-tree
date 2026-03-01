@@ -183,7 +183,7 @@ interface TaskDetailPanelProps {
   branchLinksFromParent?: BranchLink[];
   onBranchLinksChange?: (branchName: string, links: BranchLink[]) => void;
   // Callback when branch is deleted (for immediate UI update)
-  onBranchDeleted?: (branchName: string) => void;
+  onBranchDeleted?: (branchName: string, reparentedEdges?: Array<{ child: string; newParent: string }>) => void;
   // For partial status refresh (instead of full scan)
   edges?: { parent: string; child: string }[];
   onBranchStatusRefresh?: (updates: Record<string, BranchStatusUpdate>) => void;
@@ -704,8 +704,8 @@ export function TaskDetailPanel({
     setDeleting(true);
     setError(null);
     try {
-      await api.deleteBranch(localPath, branchName);
-      onBranchDeleted?.(branchName); // Immediately remove from graph
+      const result = await api.deleteBranch(localPath, branchName);
+      onBranchDeleted?.(branchName, result.reparentedEdges); // Immediately remove from graph
       onClose(); // Close panel
       onWorktreeCreated?.(); // Rescan to sync
     } catch (err) {
@@ -944,8 +944,6 @@ export function TaskDetailPanel({
   };
 
   const handleChangeBaseBranch = async (linkId: number, newBaseBranch: string) => {
-    setShowBaseBranchPopup(null);
-
     // Optimistically update UI
     const optimisticLink = branchLinks.find((l) => l.id === linkId);
     if (optimisticLink) {
@@ -1981,11 +1979,18 @@ export function TaskDetailPanel({
           <div className="task-detail-panel__modal task-detail-panel__modal--delete" onClick={(e) => e.stopPropagation()}>
             <h4>ブランチを削除しますか？</h4>
             <p className="task-detail-panel__modal-branch-name">{branchName}</p>
-            {isDeletable && !isMerged ? (
-              <p className="task-detail-panel__modal-info">このブランチにはコミットがなく、リモートにもプッシュされていません。</p>
-            ) : (
-              <p className="task-detail-panel__modal-warning">ローカルとリモートの両方から削除されます。この操作は取り消せません。</p>
-            )}
+            {(() => {
+              const pr = branchLinks.find((l) => l.linkType === "pr");
+              if (pr?.status === "merged") {
+                return <p className="task-detail-panel__modal-info">このブランチのPRはマージ済みです。安全に削除できます。</p>;
+              } else if (pr?.status === "closed") {
+                return <p className="task-detail-panel__modal-info">このブランチのPRはクローズされています。</p>;
+              } else if (isDeletable && !isMerged) {
+                return <p className="task-detail-panel__modal-info">このブランチにはコミットがありません。</p>;
+              } else {
+                return <p className="task-detail-panel__modal-warning">ローカルとリモートの両方から削除されます。この操作は取り消せません。</p>;
+              }
+            })()}
             <div className="task-detail-panel__modal-actions">
               <button
                 className="task-detail-panel__modal-cancel"

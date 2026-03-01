@@ -69,6 +69,7 @@ function setupTestDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       repo_id TEXT NOT NULL,
       base_branch TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
       spec_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL

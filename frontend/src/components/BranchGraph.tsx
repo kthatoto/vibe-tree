@@ -757,9 +757,7 @@ export default function BranchGraph({
 
       // Build parent-child map from tentativeEdges
       const tentativeParentMap = new Map<string, string>(); // childId -> parentId
-      console.log("[BranchGraph] tentativeEdges:", tentativeEdges);
       tentativeEdges.forEach((edge) => {
-        console.log("[BranchGraph] Edge:", edge.parent, "->", edge.child);
         tentativeParentMap.set(edge.child, edge.parent);
       });
 
@@ -790,7 +788,6 @@ export default function BranchGraph({
 
       // Calculate depths for all tasks
       tentativeNodes.forEach((task) => getDepth(task.id));
-      console.log("[BranchGraph] tentativeDepths:", Object.fromEntries(tentativeDepths));
 
       // Build children map for tentative nodes
       const tentativeChildrenMap = new Map<string, string[]>(); // parentId -> childIds
@@ -800,7 +797,6 @@ export default function BranchGraph({
         }
         tentativeChildrenMap.get(edge.parent)!.push(edge.child);
       });
-      console.log("[BranchGraph] tentativeChildrenMap:", Object.fromEntries(tentativeChildrenMap));
 
       // Group tasks by depth for horizontal positioning
       const tasksByDepth = new Map<number, typeof tentativeNodes>();
@@ -814,9 +810,6 @@ export default function BranchGraph({
       const rootTentativeNodes = tentativeNodes.filter(
         (task) => !tentativeParentMap.has(task.id)
       );
-      console.log("[BranchGraph] tentativeNodes count:", tentativeNodes.length);
-      console.log("[BranchGraph] rootTentativeNodes count:", rootTentativeNodes.length);
-      console.log("[BranchGraph] rootTentativeNodes:", rootTentativeNodes.map(t => t.title));
 
       // Track column assignments for tentative nodes
       const taskIdToCol = new Map<string, number>();
@@ -824,20 +817,13 @@ export default function BranchGraph({
       // Layout tentative tree recursively - children are placed below parent in same column
       const layoutTentativeSubtree = (taskId: string, col: number): number => {
         const task = tentativeNodes.find((t) => t.id === taskId);
-        if (!task) {
-          console.log("[BranchGraph] layoutTentativeSubtree: task not found for", taskId);
-          return col;
-        }
+        if (!task) return col;
 
         const branchName = taskIdToBranchMap.get(task.id)!;
-        if (nodeMap.has(branchName)) {
-          console.log("[BranchGraph] layoutTentativeSubtree: branch already exists", branchName);
-          return col;
-        }
+        if (nodeMap.has(branchName)) return col;
 
         const tentDepth = tentativeDepths.get(task.id)!;
         const children = tentativeChildrenMap.get(taskId) || [];
-        console.log("[BranchGraph] layoutTentativeSubtree:", task.title, "depth:", tentDepth, "col:", col, "children:", children.length);
         taskIdToCol.set(taskId, col);
 
         const tentDummyNode: TreeNode = {
@@ -879,13 +865,20 @@ export default function BranchGraph({
         return Math.max(col, currentCol);
       };
 
-      // Layout each root tentative node tree - start AFTER all existing branches to avoid overlap
-      // Calculate max column used by existing nodes
-      const maxExistingCol = layoutNodes.reduce((max, n) => Math.max(max, n.row), -1);
-      let tentativeCol = maxExistingCol + 1; // Start tentative nodes after all existing branches
+      // Layout tentative nodes on the LEFT side, shifting existing nodes right
+      let tentativeCol = 0;
       rootTentativeNodes.forEach((task) => {
         tentativeCol = layoutTentativeSubtree(task.id, tentativeCol) + 1;
       });
+
+      // Shift existing (non-tentative) nodes to the right to make room
+      if (tentativeCol > 0) {
+        layoutNodes.forEach((n) => {
+          if (!n.isTentative) {
+            n.row += tentativeCol;
+          }
+        });
+      }
 
       // Recalculate column widths and X positions after adding tentative nodes
       columnMaxWidths.clear();
@@ -922,6 +915,10 @@ export default function BranchGraph({
         const branchName = taskIdToBranchMap.get(task.id)!;
         const toNode = nodeMap.get(branchName);
         if (!toNode) return;
+
+        // Skip creating tentative edges for nodes that already exist in the real graph
+        // (they already have real edges connecting them, duplicating would look like a loop)
+        if (!toNode.isTentative) return;
 
         const parentTaskId = tentativeParentMap.get(task.id);
         let fromNode: LayoutNode | undefined;

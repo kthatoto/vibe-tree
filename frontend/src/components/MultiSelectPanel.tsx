@@ -20,6 +20,7 @@ interface MultiSelectPanelProps {
   onUncheckAll: () => void;
   onClearSelection: () => void;
   // For bulk operations
+  repoId: string;
   localPath: string;
   branchLinks: Map<string, BranchLink[]>;
   edges: TreeEdge[];
@@ -41,6 +42,7 @@ export default function MultiSelectPanel({
   onCheckAll,
   onUncheckAll,
   onClearSelection,
+  repoId,
   localPath,
   branchLinks,
   edges,
@@ -84,6 +86,15 @@ export default function MultiSelectPanel({
       return links?.some((l) => l.linkType === "pr" && l.status === "open");
     });
   }, [selectedList, branchLinks]);
+
+  // Get branches without PR links
+  const branchesWithoutPRs = useMemo(() => {
+    return selectedList.filter((branch) => {
+      if (branch === defaultBranch) return false;
+      const links = branchLinks.get(branch);
+      return !links?.some((l) => l.linkType === "pr");
+    });
+  }, [selectedList, branchLinks, defaultBranch]);
 
   // Get label counts across selected PRs (label → number of PRs that have it)
   const labelCounts = useMemo(() => {
@@ -505,6 +516,41 @@ export default function MultiSelectPanel({
     onRefreshBranches?.();
   };
 
+  // Detect PRs for branches without PR links
+  const handleDetectPRs = async () => {
+    if (branchesWithoutPRs.length === 0) return;
+
+    setProgress({
+      total: branchesWithoutPRs.length,
+      completed: 0,
+      current: null,
+      results: [],
+      status: "running",
+    });
+
+    const results: BulkOperationProgress["results"] = [];
+
+    for (const branch of branchesWithoutPRs) {
+      setProgress((p) => ({ ...p, current: branch }));
+
+      try {
+        const result = await api.detectPr(repoId, branch);
+        if (result.found) {
+          results.push({ branch, success: true, message: `PR #${result.link?.number}` });
+        } else {
+          results.push({ branch, success: true, message: "No PR found" });
+        }
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        results.push({ branch, success: false, message });
+      }
+      setProgress((p) => ({ ...p, completed: p.completed + 1, results: [...results] }));
+    }
+
+    setProgress((p) => ({ ...p, current: null, status: "done" }));
+    onRefreshBranches?.();
+  };
+
   // Serial rebase
   const handleSerialRebase = async () => {
     const targetBranches = sortedBranchesForRebase;
@@ -745,6 +791,34 @@ export default function MultiSelectPanel({
                 minHeight: 60,
               }}
             />
+          </div>
+        )}
+
+        {/* Detect PRs for branches without PR links */}
+        {branchesWithoutPRs.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <button
+              onClick={handleDetectPRs}
+              disabled={isOperationRunning}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                background: isOperationRunning ? "#1f2937" : "#14532d",
+                border: `1px solid ${isOperationRunning ? "#374151" : "#22c55e"}`,
+                borderRadius: 6,
+                color: isOperationRunning ? "#6b7280" : "#4ade80",
+                cursor: isOperationRunning ? "not-allowed" : "pointer",
+                fontSize: 13,
+                textAlign: "left",
+              }}
+            >
+              <div style={{ fontWeight: 500 }}>
+                Detect PRs ({branchesWithoutPRs.length})
+              </div>
+              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
+                Find existing PRs for branches without links
+              </div>
+            </button>
           </div>
         )}
 

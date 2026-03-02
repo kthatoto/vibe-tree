@@ -716,7 +716,7 @@ export default function MultiSelectPanel({
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {displayedBranches.map((branch) => {
-              const hasPR = branchLinks.get(branch)?.some((l) => l.linkType === "pr" && l.status === "open");
+              const prLink = branchLinks.get(branch)?.find((l) => l.linkType === "pr" && l.status === "open");
               // Find result for this branch (may match branch name or branch (label) format)
               const result = progress.results.find((r) => r.branch === branch || r.branch.startsWith(branch + " "));
               const isProcessing = progress.status === "running" && progress.current === branch;
@@ -755,10 +755,17 @@ export default function MultiSelectPanel({
                   ) : progress.status === "running" ? (
                     <span style={{ color: "#6b7280", fontSize: 12, width: 14, flexShrink: 0 }}>○</span>
                   ) : null}
-                  {hasPR && (
-                    <span style={{ color: "#22c55e", fontSize: 10 }} title="Has open PR">
+                  {prLink && (
+                    <a
+                      href={prLink.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ color: "#22c55e", fontSize: 10, textDecoration: "none", flexShrink: 0 }}
+                      title={prLink.url}
+                    >
                       PR
-                    </span>
+                    </a>
                   )}
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{branch}</span>
                 </div>

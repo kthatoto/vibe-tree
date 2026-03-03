@@ -699,9 +699,28 @@ branchRouter.post("/rebase", async (c) => {
     if (currentBranch === branchName) {
       rebasePath = targetPath;
     } else {
-      originalBranch = currentBranch;
-      needsCheckout = true;
-      rebasePath = targetPath;
+      // Branch is not checked out at targetPath - check if it's in another worktree
+      try {
+        const wtOutput = await execAsync(`cd "${localPath}" && git worktree list --porcelain`);
+        const worktrees = wtOutput.split("\n\n").filter(Boolean);
+        for (const wt of worktrees) {
+          const lines = wt.split("\n");
+          const wtPath = lines.find(l => l.startsWith("worktree "))?.slice("worktree ".length);
+          const wtBranch = lines.find(l => l.startsWith("branch "))?.slice("branch ".length).replace(/^refs\/heads\//, "");
+          if (wtBranch === branchName && wtPath) {
+            rebasePath = wtPath;
+            break;
+          }
+        }
+      } catch {
+        // Ignore worktree list errors
+      }
+
+      if (!rebasePath) {
+        originalBranch = currentBranch;
+        needsCheckout = true;
+        rebasePath = targetPath;
+      }
     }
   } catch {
     // Ignore

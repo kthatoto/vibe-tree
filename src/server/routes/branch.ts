@@ -763,19 +763,27 @@ branchRouter.post("/rebase", async (c) => {
     }
   };
 
-  // Check if remote branch exists
-  let useRemote = false;
+  // Determine rebase target: prefer local branch (which may have been recently rebased
+  // in a serial rebase), but use remote if it's strictly ahead of local
+  let rebaseTarget = parentBranch;
   try {
     await execAsync(`cd "${rebasePath}" && git fetch origin "${parentBranch}"`);
-    // Verify remote ref exists
-    await execAsync(`cd "${rebasePath}" && git rev-parse "origin/${parentBranch}" 2>/dev/null`);
-    useRemote = true;
+    // Check if remote is strictly ahead of local (local is ancestor of remote)
+    const localRef = (await execAsync(`cd "${rebasePath}" && git rev-parse "${parentBranch}" 2>/dev/null`)).trim();
+    const remoteRef = (await execAsync(`cd "${rebasePath}" && git rev-parse "origin/${parentBranch}" 2>/dev/null`)).trim();
+    if (localRef && remoteRef && localRef !== remoteRef) {
+      // Check if local is ancestor of remote (remote is ahead)
+      try {
+        await execAsync(`cd "${rebasePath}" && git merge-base --is-ancestor "${localRef}" "${remoteRef}"`);
+        // Local is ancestor of remote → remote is strictly ahead → use remote
+        rebaseTarget = `origin/${parentBranch}`;
+      } catch {
+        // Local is NOT ancestor of remote → local has diverged or is ahead → use local
+      }
+    }
   } catch {
-    // Remote doesn't exist, use local branch
+    // Remote doesn't exist or fetch failed, use local branch
   }
-
-  // Rebase onto remote or local parent
-  const rebaseTarget = useRemote ? `origin/${parentBranch}` : parentBranch;
   try {
     const output = await execAsync(
       `cd "${rebasePath}" && git rebase "${rebaseTarget}"`

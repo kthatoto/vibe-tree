@@ -129,9 +129,11 @@ async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<GitH
     const reviewers: string[] = [];
 
     // gh CLI doesn't include Copilot in reviewRequests, so we also fetch via REST API
+    // Note: Team reviewers appear here with login as "org/slug" format - skip them
+    // as they'll be properly captured by the REST API below with "team/" prefix
     if (data.reviewRequests) {
       for (const r of data.reviewRequests) {
-        if (r.login && !isOtherBot(r.login)) reviewers.push(r.login);
+        if (r.login && !r.login.includes("/") && !isOtherBot(r.login)) reviewers.push(r.login);
       }
     }
 
@@ -814,12 +816,13 @@ branchLinksRouter.post("/detect", async (c) => {
     const checks = Array.from(checksMap.values());
 
     // Extract reviewers (include Copilot, filter out other bots)
+    // Note: Team reviewers appear in reviewRequests with login as "org/slug" - skip them
     const isOtherBot = (login: string) =>
       login.endsWith("[bot]") && !login.toLowerCase().includes("copilot");
     const reviewers: string[] = [];
     if (data.reviewRequests) {
       for (const r of data.reviewRequests) {
-        if (r.login && !isOtherBot(r.login)) reviewers.push(r.login);
+        if (r.login && !r.login.includes("/") && !isOtherBot(r.login)) reviewers.push(r.login);
       }
     }
 

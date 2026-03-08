@@ -2523,12 +2523,13 @@ export default function BranchGraph({
                       fontSize: 12,
                       cursor: "pointer",
                       textAlign: "left",
+                      whiteSpace: "nowrap",
                     }}
                     onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "#2d3748"; }}
                     onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
                   >
                     <span style={{
-                      width: 14, height: 14, borderRadius: 3,
+                      width: 14, height: 14, minWidth: 14, borderRadius: 3,
                       border: isActive ? "none" : "1px solid #4b5563",
                       background: isActive ? "#3b82f6" : "transparent",
                       display: "flex", alignItems: "center", justifyContent: "center",
@@ -2594,12 +2595,13 @@ export default function BranchGraph({
                       fontSize: 12,
                       cursor: "pointer",
                       textAlign: "left",
+                      whiteSpace: "nowrap",
                     }}
                     onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "#2d3748"; }}
                     onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
                   >
                     <span style={{
-                      width: 14, height: 14, borderRadius: 3,
+                      width: 14, height: 14, minWidth: 14, borderRadius: 3,
                       border: isActive ? "none" : "1px solid #4b5563",
                       background: isActive ? "#3b82f6" : "transparent",
                       display: "flex", alignItems: "center", justifyContent: "center",

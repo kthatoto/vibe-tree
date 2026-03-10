@@ -161,8 +161,13 @@ export async function getPRs(repoPath: string): Promise<PRInfo[]> {
 
       // Get reviewers - supports both User (login) and Team (name/slug)
       // Note: Include Copilot as a reviewer
+      // Team reviewers get "team/" prefix; skip login for teams (contains "/")
       const reviewersFromRequests = (pr.reviewRequests ?? [])
-        .map((r) => r.login || r.slug || r.name) // User has login, Team has slug/name
+        .map((r) => {
+          if (r.slug) return `team/${r.slug}`;
+          if (r.login && !r.login.includes("/")) return r.login;
+          return null;
+        })
         .filter((name): name is string => !!name && !isOtherBot(name));
 
       // Check if there are any human reviews submitted (exclude all bots and COMMENTED-only)

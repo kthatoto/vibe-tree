@@ -2147,7 +2147,7 @@ async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<{
     const reviewers: string[] = [];
     if (data.reviewRequests) {
       for (const r of data.reviewRequests) {
-        if (r.login && !isBot(r.login)) reviewers.push(r.login);
+        if (r.login && !r.login.includes("/") && !isBot(r.login)) reviewers.push(r.login);
       }
     }
     if (data.reviews) {

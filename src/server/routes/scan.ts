@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { db, schema } from "../../db";
-import { eq, and, notInArray, inArray } from "drizzle-orm";
+import { eq, ne, and, notInArray, inArray } from "drizzle-orm";
 import { existsSync } from "fs";
 import { broadcast } from "../ws";
 import { expandTilde, getRepoId, execAsync } from "../utils";
@@ -785,11 +785,15 @@ scanRouter.post("/", async (c) => {
         const worktreeBranchSet = new Set(worktrees.map(w => w.branch).filter(Boolean) as string[]);
 
         // Build a map of fresh PRs for quick lookup (only for LOCAL branches)
-        const freshPrMap = new Map(
-          freshPrs
-            .filter(pr => localBranchSet.has(pr.branch))
-            .map(pr => [pr.branch, pr])
-        );
+        // Prefer open PRs over closed/merged ones for the same branch
+        const freshPrMap = new Map<string, typeof freshPrs[0]>();
+        for (const pr of freshPrs) {
+          if (!localBranchSet.has(pr.branch)) continue;
+          const existing = freshPrMap.get(pr.branch);
+          if (!existing || (existing.state.toLowerCase() !== "open" && pr.state.toLowerCase() === "open")) {
+            freshPrMap.set(pr.branch, pr);
+          }
+        }
 
         // Build cache lookup for updatedAt
         const cacheMap = new Map(
@@ -834,6 +838,18 @@ scanRouter.post("/", async (c) => {
           const totalPrs = relevantPrs.length;
           let processedPrs = 0;
           for (const pr of relevantPrs) {
+            // If this is an open PR, remove any other PR links for this branch
+            // (e.g., old closed PRs that were previously linked)
+            if (pr.state.toLowerCase() === "open") {
+              await db.delete(schema.branchLinks)
+                .where(and(
+                  eq(schema.branchLinks.repoId, repoId),
+                  eq(schema.branchLinks.branchName, pr.branch),
+                  eq(schema.branchLinks.linkType, "pr"),
+                  ne(schema.branchLinks.number, pr.number)
+                ));
+            }
+
             const existing = await db.select().from(schema.branchLinks)
               .where(and(
                 eq(schema.branchLinks.repoId, repoId),

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { db, schema } from "../../db";
 import { execAsync } from "../utils";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, ne, and, desc } from "drizzle-orm";
 import { broadcast } from "../ws";
 import { z } from "zod";
 import { validateOrThrow } from "../../shared/validation";
@@ -767,16 +767,41 @@ branchLinksRouter.post("/detect", async (c) => {
   const now = new Date().toISOString();
 
   // Try to find PR for this branch
+  // Prefer open PRs; fall back to latest closed/merged PR
   try {
-    const result = (await execAsync(
-      `gh pr view "${input.branchName}" --repo "${input.repoId}" --json number,title,state,url,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems,baseRefName`
+    // First try to find an open PR
+    let result = (await execAsync(
+      `gh pr list --head "${input.branchName}" --repo "${input.repoId}" --state open --json number,title,state,url,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems,baseRefName --limit 1`
     )).trim();
+    let data: Record<string, unknown> | null = null;
+    const parsed = result ? JSON.parse(result) : [];
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      data = parsed[0];
+    } else {
+      // Fall back to gh pr view which returns the latest PR (may be closed/merged)
+      result = (await execAsync(
+        `gh pr view "${input.branchName}" --repo "${input.repoId}" --json number,title,state,url,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems,baseRefName`
+      )).trim();
+      data = result ? JSON.parse(result) : null;
+    }
 
-    if (!result) {
+    if (!data) {
       return c.json({ found: false });
     }
 
-    const data = JSON.parse(result);
+    // If this is an open PR, remove any other (closed) PR links for this branch
+    const prState = (data.state as string)?.toLowerCase();
+    if (prState === "open") {
+      await db.delete(schema.branchLinks)
+        .where(
+          and(
+            eq(schema.branchLinks.repoId, input.repoId),
+            eq(schema.branchLinks.branchName, input.branchName),
+            eq(schema.branchLinks.linkType, "pr"),
+            ne(schema.branchLinks.number, data.number as number)
+          )
+        );
+    }
 
     // Check if link already exists
     const [existing] = await db

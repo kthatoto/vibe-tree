@@ -329,6 +329,8 @@ export function TaskDetailPanel({
   const [pushing, setPushing] = useState(false);
   const [clearingChat, setClearingChat] = useState(false);
   const [checkingPR, setCheckingPR] = useState(false);
+  const [reassigningPR, setReassigningPR] = useState(false);
+  const [reassignPRNumber, setReassignPRNumber] = useState("");
 
   // Deletable branch check (no commits + not on remote)
   const [isDeletable, setIsDeletable] = useState(false);
@@ -1408,7 +1410,116 @@ export function TaskDetailPanel({
                 >
                   {refreshingLink === pr.id ? "..." : "↻"}
                 </button>
+                <button
+                  className="task-detail-panel__refresh-btn"
+                  onClick={() => { setReassigningPR(true); setReassignPRNumber(""); }}
+                  title="Reassign PR"
+                  style={{ fontSize: 11 }}
+                >
+                  ⇄
+                </button>
               </div>
+              {reassigningPR && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0" }}>
+                  <input
+                    type="number"
+                    placeholder="PR #"
+                    value={reassignPRNumber}
+                    onChange={(e) => setReassignPRNumber(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === "Enter" && reassignPRNumber) {
+                        const prNum = parseInt(reassignPRNumber);
+                        if (!prNum) return;
+                        setCheckingPR(true);
+                        try {
+                          await api.deleteBranchLink(pr.id);
+                          const prUrl = `https://github.com/${repoId}/pull/${prNum}`;
+                          const newLink = await api.createBranchLink({
+                            repoId,
+                            branchName,
+                            linkType: "pr",
+                            url: prUrl,
+                            number: prNum,
+                          });
+                          onBranchLinksChange?.(branchName, [
+                            ...branchLinks.filter((l) => l.id !== pr.id),
+                            newLink,
+                          ]);
+                          // Refresh to fetch full PR info
+                          await api.refreshBranchLink(newLink.id).then((refreshed) => {
+                            onBranchLinksChange?.(branchName, [
+                              ...branchLinks.filter((l) => l.id !== pr.id),
+                              refreshed,
+                            ]);
+                          }).catch(() => {});
+                        } catch (err) {
+                          console.error("Failed to reassign PR:", err);
+                        } finally {
+                          setCheckingPR(false);
+                          setReassigningPR(false);
+                        }
+                      } else if (e.key === "Escape") {
+                        setReassigningPR(false);
+                      }
+                    }}
+                    autoFocus
+                    style={{
+                      width: 80,
+                      padding: "3px 6px",
+                      background: "#1f2937",
+                      border: "1px solid #374151",
+                      borderRadius: 4,
+                      color: "#e5e7eb",
+                      fontSize: 12,
+                    }}
+                  />
+                  <button
+                    className="task-detail-panel__refresh-btn"
+                    onClick={async () => {
+                      const prNum = parseInt(reassignPRNumber);
+                      if (!prNum) return;
+                      setCheckingPR(true);
+                      try {
+                        await api.deleteBranchLink(pr.id);
+                        const prUrl = `https://github.com/${repoId}/pull/${prNum}`;
+                        const newLink = await api.createBranchLink({
+                          repoId,
+                          branchName,
+                          linkType: "pr",
+                          url: prUrl,
+                          number: prNum,
+                        });
+                        onBranchLinksChange?.(branchName, [
+                          ...branchLinks.filter((l) => l.id !== pr.id),
+                          newLink,
+                        ]);
+                        await api.refreshBranchLink(newLink.id).then((refreshed) => {
+                          onBranchLinksChange?.(branchName, [
+                            ...branchLinks.filter((l) => l.id !== pr.id),
+                            refreshed,
+                          ]);
+                        }).catch(() => {});
+                      } catch (err) {
+                        console.error("Failed to reassign PR:", err);
+                      } finally {
+                        setCheckingPR(false);
+                        setReassigningPR(false);
+                      }
+                    }}
+                    disabled={!reassignPRNumber || checkingPR}
+                    style={{ padding: "2px 8px", fontSize: 11 }}
+                  >
+                    {checkingPR ? "..." : "OK"}
+                  </button>
+                  <button
+                    className="task-detail-panel__refresh-btn"
+                    onClick={() => setReassigningPR(false)}
+                    style={{ padding: "2px 6px", fontSize: 11 }}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
               <div className="task-detail-panel__link-meta">
                 {(totalChecks > 0 || computedChecksStatus) && (
                   <CIBadge

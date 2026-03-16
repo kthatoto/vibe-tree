@@ -2,7 +2,7 @@
 // MCP server runs as STDIO, so we can't directly access WebSocket clients
 // Instead, we POST to an internal endpoint that broadcasts to clients
 
-const API_BASE = process.env.VIBE_TREE_API || "http://localhost:3000";
+const API_BASE = process.env.VIBE_TREE_API || "http://localhost:9000";
 
 interface BroadcastMessage {
   type: string;

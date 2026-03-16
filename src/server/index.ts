@@ -45,7 +45,7 @@ app.use("*", errorHandler);
 app.use(
   "/api/*",
   cors({
-    origin: ["http://localhost:5173", "http://localhost:3000"],
+    origin: ["http://localhost:9001", "http://localhost:9000"],
     credentials: true,
   })
 );
@@ -106,7 +106,7 @@ app.notFound((c) => {
   return c.json({ error: "Not found", code: "NOT_FOUND" }, 404);
 });
 
-const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 9000;
 
 console.log(`Starting Vibe Tree server...`);
 

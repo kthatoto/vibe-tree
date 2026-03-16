@@ -47,7 +47,7 @@ export function Terminal({ sessionId, onClose, taskContext, autoRunClaude }: Ter
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//localhost:3000/ws/term?sessionId=${sessionId}`);
+    const ws = new WebSocket(`${protocol}//localhost:9000/ws/term?sessionId=${sessionId}`);
     wsRef.current = ws;
 
     ws.onopen = () => {

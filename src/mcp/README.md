@@ -25,7 +25,7 @@ Add the following to your Claude Code MCP settings:
       "cwd": "/path/to/vibe-tree",
       "env": {
         "VIBE_TREE_DB": "/path/to/.vibetree/vibetree.sqlite",
-        "VIBE_TREE_API": "http://localhost:3000"
+        "VIBE_TREE_API": "http://localhost:9000"
       }
     }
   }
@@ -43,7 +43,7 @@ Add the following to your Claude Code MCP settings:
       "cwd": "/path/to/vibe-tree",
       "env": {
         "VIBE_TREE_DB": "/path/to/.vibetree/vibetree.sqlite",
-        "VIBE_TREE_API": "http://localhost:3000"
+        "VIBE_TREE_API": "http://localhost:9000"
       }
     }
   }

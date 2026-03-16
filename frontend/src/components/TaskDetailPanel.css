@@ -1218,13 +1218,17 @@
 
 .task-detail-panel__link-main {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
 }
 
 .task-detail-panel__link-main .task-detail-panel__link-url {
   flex: 1;
   line-height: 1.4;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
 }
 
 .task-detail-panel__link-main .task-detail-panel__link-delete-btn {

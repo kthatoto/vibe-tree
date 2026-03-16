@@ -1382,25 +1382,31 @@ export default function BranchGraph({
         const minY = Math.min(dragState.startY, dragState.currentY);
         const maxY = Math.max(dragState.startY, dragState.currentY);
 
-        // Find all nodes within the selection rectangle
-        const nodesInRect = layoutNodes.filter(node => {
-          if (node.id === defaultBranch || node.isTentative) return false;
-          const nodeX = node.x;
-          const nodeY = node.y;
-          const nodeRight = nodeX + node.width;
-          const nodeBottom = nodeY + node.height;
+        // Ignore clicks with no drag (clicking empty space should not deselect)
+        const dragDistance = Math.abs(dragState.currentX - dragState.startX) + Math.abs(dragState.currentY - dragState.startY);
+        if (dragDistance > 3) {
+          // Find all nodes within the selection rectangle
+          const nodesInRect = layoutNodes.filter(node => {
+            if (node.id === defaultBranch || node.isTentative) return false;
+            const nodeX = node.x;
+            const nodeY = node.y;
+            const nodeRight = nodeX + node.width;
+            const nodeBottom = nodeY + node.height;
 
-          // Check if node overlaps with selection rectangle
-          return !(nodeRight < minX || nodeX > maxX || nodeBottom < minY || nodeY > maxY);
-        }).map(n => n.id);
+            // Check if node overlaps with selection rectangle
+            return !(nodeRight < minX || nodeX > maxX || nodeBottom < minY || nodeY > maxY);
+          }).map(n => n.id);
 
-        // Update selection based on whether Shift was held
-        if (dragState.addToSelection) {
-          // Add to existing selection
-          onSelectionChange(new Set([...selectedBranches, ...nodesInRect]));
-        } else {
-          // Replace selection
-          onSelectionChange(new Set(nodesInRect));
+          // Update selection based on whether Shift was held
+          if (dragState.addToSelection) {
+            // Add to existing selection
+            onSelectionChange(new Set([...selectedBranches, ...nodesInRect]));
+          } else {
+            // Replace selection (only if something was selected by the rectangle)
+            if (nodesInRect.length > 0) {
+              onSelectionChange(new Set(nodesInRect));
+            }
+          }
         }
       }
       setRectangleSelectState(null);

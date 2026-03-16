@@ -348,8 +348,9 @@ export function TaskDetailPanel({
   // The working path is either the worktree path or localPath if checked out
   const workingPath = worktreePath || (checkedOut ? localPath : null);
 
-  // Check if PR is merged
+  // Check if PR is merged or closed
   const isMerged = branchLinks.some((l) => l.linkType === "pr" && l.status === "merged");
+  const isClosed = branchLinks.some((l) => l.linkType === "pr" && l.status === "closed");
 
 
   // Planning mode can work without workingPath (uses localPath), Execution requires workingPath
@@ -706,7 +707,8 @@ export function TaskDetailPanel({
     setDeleting(true);
     setError(null);
     try {
-      const result = await api.deleteBranch(localPath, branchName);
+      const forceDelete = isMerged || isClosed;
+      const result = await api.deleteBranch(localPath, branchName, forceDelete);
       onBranchDeleted?.(branchName, result.reparentedEdges); // Immediately remove from graph
       onClose(); // Close panel
       onWorktreeCreated?.(); // Rescan to sync
@@ -1177,7 +1179,7 @@ export function TaskDetailPanel({
                   {pushing ? "Pushing..." : `Push (↑${node.remoteAheadBehind.ahead})`}
                 </button>
               )}
-              {isMerged && (
+              {(isMerged || isClosed) && (
                 <span className="task-detail-panel__tooltip-wrapper" data-tooltip="Checkout another branch first">
                   <button
                     className="task-detail-panel__delete-btn"
@@ -1187,7 +1189,7 @@ export function TaskDetailPanel({
                   </button>
                 </span>
               )}
-              {isDeletable && !isMerged && (
+              {isDeletable && !isMerged && !isClosed && (
                 <span className="task-detail-panel__tooltip-wrapper" data-tooltip="Checkout another branch first">
                   <button
                     className="task-detail-panel__delete-btn"
@@ -1217,7 +1219,7 @@ export function TaskDetailPanel({
                 {pulling ? "Pulling..." : `Pull (↓${node.remoteAheadBehind.behind})`}
               </button>
             )}
-            {isMerged && (
+            {(isMerged || isClosed) && (
               <button
                 className="task-detail-panel__delete-btn"
                 onClick={() => setShowDeleteBranchModal(true)}
@@ -1226,7 +1228,7 @@ export function TaskDetailPanel({
                 {deleting ? "Deleting..." : "Delete Branch"}
               </button>
             )}
-            {isDeletable && !isMerged && (
+            {isDeletable && !isMerged && !isClosed && (
               <button
                 className="task-detail-panel__delete-btn task-detail-panel__delete-btn--empty"
                 onClick={() => setShowDeleteBranchModal(true)}

@@ -308,11 +308,11 @@ export function mergeNodeAttributesWithTimestamps(
   }
 
   // Merge with timestamp-based protection
-  const mergedNodes = current.nodes.map((currentNode) => {
-    const incomingNode = incomingMap.get(currentNode.branchName);
-    if (!incomingNode) {
-      return currentNode;
-    }
+  // Only keep nodes that exist in incoming (deleted branches should disappear)
+  const mergedNodes = current.nodes
+    .filter((currentNode) => incomingMap.has(currentNode.branchName))
+    .map((currentNode) => {
+    const incomingNode = incomingMap.get(currentNode.branchName)!;
 
     const timestamps = fieldTimestamps.get(currentNode.branchName);
 
@@ -363,10 +363,16 @@ export function mergeNodeAttributesWithTimestamps(
 
   const finalNodes = [...mergedNodes, ...newNodes];
 
+  // Filter out edges referencing branches that no longer exist
+  const finalBranches = new Set(finalNodes.map((n) => n.branchName));
+  const finalEdges = current.edges.filter(
+    (e) => finalBranches.has(e.child) && finalBranches.has(e.parent)
+  );
+
   return {
     ...current,
     nodes: finalNodes,
-    edges: current.edges,
+    edges: finalEdges,
     warnings: incoming.warnings,
     worktrees: incoming.worktrees,
     rules: incoming.rules,

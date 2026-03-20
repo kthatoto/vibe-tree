@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, type BranchLink, type TaskInstruction } from "../lib/api";
 import { wsClient } from "../lib/ws";
-import { CIBadge, ReviewBadge, UserChip } from "./atoms/Chips";
+import { CIBadge, ReviewBadge, UserChip, TeamChip } from "./atoms/Chips";
 import "./ExecuteBranchDetail.css";
 
 interface ExecuteBranchDetailProps {
@@ -200,9 +200,12 @@ export function ExecuteBranchDetail({
                 )}
                 {reviewers.length > 0 && (
                   <span className="execute-branch-detail__reviewers">
-                    {reviewers.map((r, i) => (
-                      <UserChip key={i} login={r} />
-                    ))}
+                    {reviewers.map((r, i) => {
+                      if (r.startsWith("team/")) {
+                        return <TeamChip key={i} slug={r.replace("team/", "")} />;
+                      }
+                      return <UserChip key={i} login={r} />;
+                    })}
                   </span>
                 )}
               </div>

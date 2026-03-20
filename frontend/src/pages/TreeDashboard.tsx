@@ -2370,10 +2370,17 @@ export default function TreeDashboard() {
                         case "reviewers": {
                           const newReviewers = (data.new as string)?.split(",").filter(r => r.trim()) || [];
                           const oldReviewers = (data.old as string)?.split(",").filter(r => r.trim()) || [];
+                          const renderReviewerChip = (r: string, i: number, removed?: boolean) => {
+                            const trimmed = r.trim();
+                            if (trimmed.startsWith("team/")) {
+                              return <TeamChip key={`${removed ? "r" : "a"}-${i}`} slug={trimmed.replace("team/", "")} removed={removed} />;
+                            }
+                            return <UserChip key={`${removed ? "r" : "a"}-${i}`} login={trimmed} removed={removed} />;
+                          };
                           return (
                             <>
-                              {newReviewers.map((r, i) => <UserChip key={`a-${i}`} login={r.trim()} />)}
-                              {oldReviewers.map((r, i) => <UserChip key={`r-${i}`} login={r.trim()} removed />)}
+                              {newReviewers.map((r, i) => renderReviewerChip(r, i))}
+                              {oldReviewers.map((r, i) => renderReviewerChip(r, i, true))}
                             </>
                           );
                         }
@@ -2539,10 +2546,17 @@ export default function TreeDashboard() {
                     case "reviewers": {
                       const newReviewers = (data.new as string)?.split(",").filter(r => r.trim()) || [];
                       const oldReviewers = (data.old as string)?.split(",").filter(r => r.trim()) || [];
+                      const renderChip = (r: string, i: number, removed?: boolean) => {
+                        const trimmed = r.trim();
+                        if (trimmed.startsWith("team/")) {
+                          return <TeamChip key={`${removed ? "r" : "a"}-${i}`} slug={trimmed.replace("team/", "")} removed={removed} />;
+                        }
+                        return <UserChip key={`${removed ? "r" : "a"}-${i}`} login={trimmed} removed={removed} />;
+                      };
                       return (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                          {newReviewers.map((r, i) => <UserChip key={`a-${i}`} login={r.trim()} />)}
-                          {oldReviewers.map((r, i) => <UserChip key={`r-${i}`} login={r.trim()} removed />)}
+                          {newReviewers.map((r, i) => renderChip(r, i))}
+                          {oldReviewers.map((r, i) => renderChip(r, i, true))}
                         </div>
                       );
                     }

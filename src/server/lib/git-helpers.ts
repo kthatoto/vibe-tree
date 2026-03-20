@@ -162,9 +162,13 @@ export async function getPRs(repoPath: string): Promise<PRInfo[]> {
       // Get reviewers - supports both User (login) and Team (name/slug)
       // Note: Include Copilot as a reviewer
       // Team reviewers get "team/" prefix; skip login for teams (contains "/")
+      // GraphQL returns team slug as "org/slug" format, strip org prefix to match REST API
       const reviewersFromRequests = (pr.reviewRequests ?? [])
         .map((r) => {
-          if (r.slug) return `team/${r.slug}`;
+          if (r.slug) {
+            const slug = r.slug.includes("/") ? r.slug.split("/").pop()! : r.slug;
+            return `team/${slug}`;
+          }
           if (r.login && !r.login.includes("/")) return r.login;
           return null;
         })

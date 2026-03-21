@@ -1205,10 +1205,12 @@ branchRouter.post("/delete", async (c) => {
   const repoId = await getRepoId(localPath);
   const reparentedEdges: Array<{ child: string; newParent: string }> = [];
   if (repoId) {
-      // 0. Invalidate cached snapshot (will be rebuilt on next scan)
+      // 0. Invalidate cached snapshot AND branches (will be rebuilt on next scan)
+      // Must clear cachedBranchesJson too, otherwise the fallback snapshot builder
+      // would re-include the deleted branch from the stale branch list
       await db
         .update(schema.repoPins)
-        .set({ cachedSnapshotJson: null })
+        .set({ cachedSnapshotJson: null, cachedBranchesJson: null })
         .where(eq(schema.repoPins.repoId, repoId));
 
       // 1. Update treeSpecs (Branch Graph structure - highest priority)
@@ -1240,12 +1242,18 @@ branchRouter.post("/delete", async (c) => {
               return e;
             });
 
-          // Only update if edges changed
-          if (JSON.stringify(specJson.edges) !== JSON.stringify(updatedEdges)) {
+          // Also remove the deleted branch from nodes
+          const updatedNodes = (specJson.nodes as Array<{ branchName?: string }>)
+            .filter((n) => n.branchName !== branchName);
+
+          // Update if edges or nodes changed
+          const edgesChanged = JSON.stringify(specJson.edges) !== JSON.stringify(updatedEdges);
+          const nodesChanged = updatedNodes.length !== (specJson.nodes as unknown[]).length;
+          if (edgesChanged || nodesChanged) {
             await db
               .update(schema.treeSpecs)
               .set({
-                specJson: JSON.stringify({ ...specJson, edges: updatedEdges }),
+                specJson: JSON.stringify({ ...specJson, nodes: updatedNodes, edges: updatedEdges }),
                 updatedAt: new Date().toISOString(),
               })
               .where(eq(schema.treeSpecs.id, spec.id));
@@ -1269,6 +1277,7 @@ branchRouter.post("/delete", async (c) => {
 
         for (const session of sessions) {
           const edges = JSON.parse(session.edgesJson) as Array<{ from: string; to: string }>;
+          const nodes = JSON.parse(session.nodesJson) as Array<{ id: string; branchName?: string }>;
 
           // Find the deleted branch's parent
           const parentEdge = edges.find((e) => e.to === branchName);
@@ -1285,12 +1294,18 @@ branchRouter.post("/delete", async (c) => {
               return e;
             });
 
-          // Only update if edges changed
-          if (JSON.stringify(edges) !== JSON.stringify(updatedEdges)) {
+          // Remove deleted branch from nodes
+          const updatedNodes = nodes.filter((n) => n.branchName !== branchName);
+
+          // Update if edges or nodes changed
+          const edgesChanged = JSON.stringify(edges) !== JSON.stringify(updatedEdges);
+          const nodesChanged = updatedNodes.length !== nodes.length;
+          if (edgesChanged || nodesChanged) {
             await db
               .update(schema.planningSessions)
               .set({
                 edgesJson: JSON.stringify(updatedEdges),
+                nodesJson: JSON.stringify(updatedNodes),
                 updatedAt: new Date().toISOString(),
               })
               .where(eq(schema.planningSessions.id, session.id));

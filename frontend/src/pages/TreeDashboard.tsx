@@ -866,22 +866,26 @@ export default function TreeDashboard() {
     }
   }, [snapshot, selectedBranches, selectionAnchor]);
 
-  // Escape key to clear selection
+  // Keyboard shortcuts for selection (Escape to clear, R to refresh)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't handle if user is typing in an input/textarea
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
+        return;
+      }
       if (e.key === "Escape" && selectedBranches.size > 0) {
-        // Don't deselect if user is typing in an input/textarea
-        const target = e.target as HTMLElement;
-        if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
-          return;
-        }
         setSelectedBranches(new Set());
         setSelectionAnchor(null);
+      }
+      if (e.key === "r" && selectedBranches.size > 0 && selectedPin && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        triggerScan(selectedPin.localPath);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selectedBranches.size]);
+  }, [selectedBranches.size, selectedPin, triggerScan]);
 
   // Load instruction when selectedNode changes (with caching)
   useEffect(() => {

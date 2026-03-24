@@ -2696,7 +2696,7 @@ export default function BranchGraph({
           width: width * zoom,
           height: height * zoom,
           cursor: rectangleSelectState ? "crosshair" : dragState ? "grabbing" : undefined,
-          userSelect: (dragState || rectangleSelectState) ? "none" : undefined,
+          userSelect: "none",
         }}
         onMouseDown={(e) => {
           // Start rectangle selection (only when not in edit mode and clicking on SVG background)

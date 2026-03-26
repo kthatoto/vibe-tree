@@ -2753,12 +2753,23 @@ export default function TreeDashboard() {
 
                               branchesWithDesc.sort((a, b) => a.desc.localeCompare(b.desc));
 
-                              // Build linear chain: defaultBranch → first → second → ...
+                              // Group by prefix (e.g. "tp09" from "tp09-02")
+                              // Chain linearly within each group, each group starts from defaultBranch
+                              const groups = new Map<string, { branch: string; desc: string }[]>();
+                              for (const item of branchesWithDesc) {
+                                const lastDash = item.desc.lastIndexOf("-");
+                                const group = lastDash > 0 ? item.desc.slice(0, lastDash) : item.desc;
+                                if (!groups.has(group)) groups.set(group, []);
+                                groups.get(group)!.push(item);
+                              }
+
                               const newEdges: Array<{ parent: string; child: string }> = [];
-                              let prevBranch = defaultBranch;
-                              for (const { branch } of branchesWithDesc) {
-                                newEdges.push({ parent: prevBranch, child: branch });
-                                prevBranch = branch;
+                              for (const members of groups.values()) {
+                                let prevBranch = defaultBranch;
+                                for (const { branch } of members) {
+                                  newEdges.push({ parent: prevBranch, child: branch });
+                                  prevBranch = branch;
+                                }
                               }
 
                               // Keep edges for branches without descriptions

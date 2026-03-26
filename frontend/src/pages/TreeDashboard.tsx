@@ -2737,6 +2737,65 @@ export default function TreeDashboard() {
                       {branchGraphEditMode ? (
                         <>
                           <button
+                            className="btn-icon"
+                            onClick={() => {
+                              // Chain: sort branches by description and create linear chain
+                              const defaultBranch = snapshot.defaultBranch;
+                              const branchesWithDesc: { branch: string; desc: string }[] = [];
+                              for (const node of snapshot.nodes) {
+                                if (node.branchName === defaultBranch) continue;
+                                const desc = branchDescriptions.get(node.branchName);
+                                if (desc) {
+                                  branchesWithDesc.push({ branch: node.branchName, desc });
+                                }
+                              }
+                              if (branchesWithDesc.length === 0) return;
+
+                              branchesWithDesc.sort((a, b) => a.desc.localeCompare(b.desc));
+
+                              // Build linear chain: defaultBranch → first → second → ...
+                              const newEdges: Array<{ parent: string; child: string }> = [];
+                              let prevBranch = defaultBranch;
+                              for (const { branch } of branchesWithDesc) {
+                                newEdges.push({ parent: prevBranch, child: branch });
+                                prevBranch = branch;
+                              }
+
+                              // Keep edges for branches without descriptions
+                              const chainedBranches = new Set(branchesWithDesc.map((b) => b.branch));
+                              for (const node of snapshot.nodes) {
+                                if (node.branchName === defaultBranch || chainedBranches.has(node.branchName)) continue;
+                                const existingEdge = snapshot.edges.find((e) => e.child === node.branchName);
+                                if (existingEdge) {
+                                  newEdges.push({ parent: existingEdge.parent, child: node.branchName });
+                                }
+                              }
+
+                              setSnapshot((s) => {
+                                if (!s) return s;
+                                return {
+                                  ...s,
+                                  edges: newEdges.map((e) => ({
+                                    parent: e.parent,
+                                    child: e.child,
+                                    confidence: "high" as const,
+                                    isDesigned: true,
+                                  })),
+                                  treeSpec: s.treeSpec ? {
+                                    ...s.treeSpec,
+                                    specJson: {
+                                      ...s.treeSpec.specJson,
+                                      edges: newEdges,
+                                    },
+                                  } : s.treeSpec,
+                                };
+                              });
+                            }}
+                            title="Sort branches by description and chain linearly"
+                          >
+                            Chain
+                          </button>
+                          <button
                             className="btn-icon btn-icon--danger"
                             onClick={() => {
                               // Discard: restore original state (frontend only, no DB call)

@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { api, type BranchLink, type TreeEdge, type RepoLabel, type RepoCollaborator, type TreeNode } from "../lib/api";
 import { Dropdown } from "./atoms/Dropdown";
 import { LabelChip, UserChip, TeamChip } from "./atoms/Chips";
@@ -157,17 +157,47 @@ export default function MultiSelectPanel({
     return mismatches;
   }, [branchesWithPRs, branchLinks, edges]);
 
-  // Get PR URLs for selected branches (sorted)
-  const prUrls = useMemo(() => {
+  // Get PR info for selected branches (sorted by branch name)
+  const prInfoList = useMemo(() => {
     return selectedList
       .map((branch) => {
         const links = branchLinks.get(branch);
         const prLink = links?.find((l) => l.linkType === "pr" && l.status === "open");
-        return prLink?.url ?? null;
+        return { branch, url: prLink?.url ?? null, title: prLink?.title ?? null };
       })
-      .filter((url): url is string => url !== null)
-      .sort();
+      .sort((a, b) => a.branch.localeCompare(b.branch));
   }, [selectedList, branchLinks]);
+
+  const prUrls = useMemo(() => {
+    return prInfoList.filter((p) => p.url).map((p) => p.url!);
+  }, [prInfoList]);
+
+  // Build copy text: <PR URL> <branch> <title> per line
+  const copyText = useMemo(() => {
+    return prInfoList
+      .map((p) => [p.url, p.branch, p.title].filter(Boolean).join(" "))
+      .join("\n");
+  }, [prInfoList]);
+
+  // Cmd+C to copy branch info
+  const [showCopied, setShowCopied] = useState(false);
+  useEffect(() => {
+    const handleCopy = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "c" && copyText) {
+        const target = e.target as HTMLElement;
+        if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+        // Don't override if user has text selected
+        const selection = window.getSelection();
+        if (selection && selection.toString().length > 0) return;
+        e.preventDefault();
+        navigator.clipboard.writeText(copyText);
+        setShowCopied(true);
+        setTimeout(() => setShowCopied(false), 1500);
+      }
+    };
+    document.addEventListener("keydown", handleCopy);
+    return () => document.removeEventListener("keydown", handleCopy);
+  }, [copyText]);
 
   // Node map for quick lookup
   const nodeMap = useMemo(() => {
@@ -777,29 +807,33 @@ export default function MultiSelectPanel({
           </div>
         </div>
 
-        {/* PR Links textarea */}
-        {prUrls.length > 0 && (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8 }}>PR Links ({prUrls.length}):</div>
-            <textarea
-              readOnly
-              value={prUrls.join("\n")}
-              onClick={(e) => (e.target as HTMLTextAreaElement).select()}
-              style={{
-                width: "100%",
-                padding: 8,
-                background: "#0f172a",
-                border: "1px solid #374151",
-                borderRadius: 4,
-                color: "#e5e7eb",
-                fontSize: 12,
-                fontFamily: "monospace",
-                resize: "vertical",
-                minHeight: 60,
-              }}
-            />
+        {/* Copy info textarea */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{ color: "#9ca3af", fontSize: 12 }}>
+              {prUrls.length > 0 ? `Branches & PRs (${selectedList.length})` : `Branches (${selectedList.length})`}
+            </span>
+            {showCopied && <span style={{ color: "#22c55e", fontSize: 11 }}>Copied!</span>}
+            <span style={{ color: "#6b7280", fontSize: 10, marginLeft: "auto" }}>Cmd+C</span>
           </div>
-        )}
+          <textarea
+            readOnly
+            value={copyText}
+            onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+            style={{
+              width: "100%",
+              padding: 8,
+              background: "#0f172a",
+              border: "1px solid #374151",
+              borderRadius: 4,
+              color: "#e5e7eb",
+              fontSize: 12,
+              fontFamily: "monospace",
+              resize: "vertical",
+              minHeight: 60,
+            }}
+          />
+        </div>
 
         {/* Detect PRs for branches without PR links */}
         {branchesWithoutPRs.length > 0 && (

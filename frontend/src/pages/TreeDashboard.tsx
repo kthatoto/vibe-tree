@@ -267,6 +267,8 @@ export default function TreeDashboard() {
   const [selectedBranches, setSelectedBranches] = useState<Set<string>>(new Set());
   // Selection anchor for Shift+click range selection
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
+  // Multi-select mode: true when selection was via rectangle drag or shift+click (show MultiSelectPanel even for 1 branch)
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -877,6 +879,7 @@ export default function TreeDashboard() {
       if (e.key === "Escape" && selectedBranches.size > 0) {
         setSelectedBranches(new Set());
         setSelectionAnchor(null);
+        setMultiSelectMode(false);
       }
       if (e.key === "r" && selectedBranches.size > 0 && selectedPin && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
@@ -3007,6 +3010,8 @@ export default function TreeDashboard() {
                         if (anchor !== undefined) {
                           setSelectionAnchor(anchor);
                         }
+                        // Single click (has anchor) → normal mode; drag/shift select → multi-select mode
+                        setMultiSelectMode(anchor === undefined);
                       }}
                       selectionAnchor={selectionAnchor}
                       tentativeNodes={tentativeNodes}
@@ -3108,7 +3113,7 @@ export default function TreeDashboard() {
 
               {/* Right: Details */}
               <div className="tree-view__details">
-                {selectedBranches.size > 1 && selectedPin ? (
+                {(selectedBranches.size > 1 || (selectedBranches.size === 1 && multiSelectMode)) && selectedPin ? (
                   <MultiSelectPanel
                     selectedBranches={selectedBranches}
                     checkedBranches={checkedBranches}

@@ -1321,7 +1321,7 @@ export default function TreeDashboard() {
       if (Notification.permission === "granted") {
         new Notification(`${data.label} ${success ? "completed" : "failed"}`, {
           body: success ? "Command finished successfully" : data.stderr.slice(0, 100),
-          icon: success ? undefined : undefined,
+          requireInteraction: true,
         });
       }
     });

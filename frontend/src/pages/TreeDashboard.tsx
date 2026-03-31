@@ -23,6 +23,7 @@ import {
   type BranchLink,
   type RepoCollaborator,
   type RepoTeam,
+  type ActionRun,
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import { diff, formatDiffSummary } from "../lib/scanDiff";
@@ -419,6 +420,13 @@ export default function TreeDashboard() {
     return () => document.removeEventListener("click", handleClickOutside);
   }, [showMoreMenu]);
 
+  useEffect(() => {
+    if (!showRunMenu) return;
+    const handleClickOutside = () => setShowRunMenu(false);
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [showRunMenu]);
+
   // Create branch dialog
   const [createBranchBase, setCreateBranchBase] = useState<string | null>(null);
   const [createBranchName, setCreateBranchName] = useState("");
@@ -477,6 +485,11 @@ export default function TreeDashboard() {
   // Custom commands
   const [customCommands, setCustomCommands] = useState<Array<{ label: string; command: string }>>([]);
   const [runningCommand, setRunningCommand] = useState<string | null>(null);
+  const [showRunMenu, setShowRunMenu] = useState(false);
+  // GitHub Actions
+  const [actionRuns, setActionRuns] = useState<ActionRun[]>([]);
+  const [actionsLoading, setActionsLoading] = useState(false);
+  const [bottomTab, setBottomTab] = useState<"logs" | "actions">("logs");
   // PR settings search filters
   const [labelSearch, setLabelSearch] = useState("");
   const [reviewerSearch, setReviewerSearch] = useState("");
@@ -1342,6 +1355,26 @@ export default function TreeDashboard() {
   }, [snapshot?.repoId, selectedPin, triggerScan, addLog]);
 
   // No need to update checkedBranches when nodes change - start with all unchecked
+
+  // Poll GitHub Actions
+  const fetchActions = useCallback(async () => {
+    if (!snapshot?.repoId) return;
+    setActionsLoading(true);
+    try {
+      const data = await api.getActionRuns(snapshot.repoId);
+      setActionRuns(data.runs);
+    } catch {
+      // ignore
+    } finally {
+      setActionsLoading(false);
+    }
+  }, [snapshot?.repoId]);
+
+  useEffect(() => {
+    fetchActions();
+    const interval = setInterval(fetchActions, 60000); // Poll every 60s
+    return () => clearInterval(interval);
+  }, [fetchActions]);
 
   // Load branchLinks when snapshot is available
   // DB is the single source of truth for PR info
@@ -2274,8 +2307,23 @@ export default function TreeDashboard() {
             color: "#6b7280",
             marginBottom: 4,
             fontWeight: 500,
+            display: "flex",
+            gap: 12,
           }}>
-            Logs
+            <button
+              onClick={() => setBottomTab("logs")}
+              style={{ background: "none", border: "none", color: bottomTab === "logs" ? "#e5e7eb" : "#6b7280", cursor: "pointer", fontWeight: 500, fontSize: 11, padding: 0 }}
+            >
+              Logs
+            </button>
+            <button
+              onClick={() => { setBottomTab("actions"); fetchActions(); }}
+              style={{ background: "none", border: "none", color: bottomTab === "actions" ? "#e5e7eb" : "#6b7280", cursor: "pointer", fontWeight: 500, fontSize: 11, padding: 0, display: "flex", alignItems: "center", gap: 4 }}
+            >
+              Actions
+              {actionsLoading && <span style={{ color: "#f59e0b" }}>⟳</span>}
+              {actionRuns.some(r => r.status === "in_progress" || r.status === "queued") && <span style={{ color: "#f59e0b" }}>●</span>}
+            </button>
           </div>
           <div style={{
             flex: 1,
@@ -2284,7 +2332,54 @@ export default function TreeDashboard() {
             fontFamily: "monospace",
             overflow: "auto",
           }}>
-            {(() => {
+            {bottomTab === "actions" ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {actionRuns.length === 0 && !actionsLoading && (
+                  <div style={{ color: "#6b7280", padding: 8 }}>No recent runs</div>
+                )}
+                {actionRuns.map((run) => {
+                  const statusIcon = run.status === "completed"
+                    ? (run.conclusion === "success" ? "✓" : run.conclusion === "failure" ? "✗" : "○")
+                    : run.status === "in_progress" ? "⏳" : "⏸";
+                  const statusColor = run.status === "completed"
+                    ? (run.conclusion === "success" ? "#22c55e" : run.conclusion === "failure" ? "#ef4444" : "#6b7280")
+                    : run.status === "in_progress" ? "#f59e0b" : "#6b7280";
+                  const timeAgo = (() => {
+                    const diff = Date.now() - new Date(run.createdAt).getTime();
+                    const mins = Math.floor(diff / 60000);
+                    if (mins < 60) return `${mins}m`;
+                    const hours = Math.floor(mins / 60);
+                    if (hours < 24) return `${hours}h`;
+                    return `${Math.floor(hours / 24)}d`;
+                  })();
+                  return (
+                    <div
+                      key={run.id}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "16px 1fr auto",
+                        gap: 6,
+                        padding: "3px 4px",
+                        borderRadius: 3,
+                        cursor: "pointer",
+                        alignItems: "center",
+                      }}
+                      onClick={() => window.open(run.url, "_blank")}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#1f2937")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <span style={{ color: statusColor, fontWeight: 600 }}>{statusIcon}</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <span style={{ color: "#e5e7eb" }}>{run.workflow}</span>
+                        <span style={{ color: "#6b7280" }}> · {run.branch}</span>
+                        <span style={{ color: "#6b7280" }}> · {run.actor}</span>
+                      </span>
+                      <span style={{ color: "#6b7280", flexShrink: 0 }}>{timeAgo}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (() => {
               // Group logs by scanSessionId
               const reversedLogs = [...logs].reverse();
               type LogGroup = { sessionId: string; logs: LogEntry[]; timestamp: Date };
@@ -2944,6 +3039,67 @@ export default function TreeDashboard() {
                       >
                         {filterEnabled ? "Filter ON" : "Filter"}
                       </button>
+                      {customCommands.length > 0 && (
+                        <div style={{ position: "relative" }}>
+                          <button
+                            className={`btn-icon ${runningCommand ? "btn-icon--active" : ""}`}
+                            onClick={(e) => { e.stopPropagation(); setShowRunMenu(!showRunMenu); }}
+                            title="Run custom commands"
+                          >
+                            {runningCommand ? `⏳ ${runningCommand}` : "Run ▾"}
+                          </button>
+                          {showRunMenu && (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                position: "absolute",
+                                top: "100%",
+                                right: 0,
+                                background: "#1f2937",
+                                border: "1px solid #374151",
+                                borderRadius: 6,
+                                padding: 4,
+                                zIndex: 100,
+                                minWidth: 180,
+                              }}
+                            >
+                              {customCommands.map((cmd, i) => (
+                                <button
+                                  key={i}
+                                  style={{
+                                    display: "block",
+                                    width: "100%",
+                                    padding: "8px 12px",
+                                    background: "transparent",
+                                    border: "none",
+                                    color: runningCommand === cmd.label ? "#f59e0b" : "#e5e7eb",
+                                    textAlign: "left",
+                                    cursor: runningCommand ? "not-allowed" : "pointer",
+                                    borderRadius: 4,
+                                    whiteSpace: "nowrap",
+                                    fontSize: 13,
+                                  }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.background = "#374151")}
+                                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                                  disabled={!!runningCommand}
+                                  onClick={() => {
+                                    if (!selectedPin || !snapshot) return;
+                                    api.runCommand({
+                                      localPath: selectedPin.localPath,
+                                      repoId: snapshot.repoId,
+                                      command: cmd.command,
+                                      label: cmd.label,
+                                    });
+                                    setShowRunMenu(false);
+                                  }}
+                                >
+                                  {runningCommand === cmd.label ? `⏳ ${cmd.label}` : `▶ ${cmd.label}`}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <div style={{ position: "relative" }}>
                         <button
                           className="btn-icon"
@@ -2998,43 +3154,6 @@ export default function TreeDashboard() {
                             >
                               Toggle All Checkboxes
                             </button>
-                            {customCommands.length > 0 && (
-                              <div style={{ borderTop: "1px solid #374151", marginTop: 4, paddingTop: 4 }}>
-                                {customCommands.map((cmd, i) => (
-                                  <button
-                                    key={i}
-                                    style={{
-                                      display: "block",
-                                      width: "100%",
-                                      padding: "8px 12px",
-                                      background: "transparent",
-                                      border: "none",
-                                      color: runningCommand === cmd.label ? "#f59e0b" : "#e5e7eb",
-                                      textAlign: "left",
-                                      cursor: runningCommand ? "not-allowed" : "pointer",
-                                      borderRadius: 4,
-                                      whiteSpace: "nowrap",
-                                      fontSize: 13,
-                                    }}
-                                    onMouseEnter={(e) => (e.currentTarget.style.background = "#374151")}
-                                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                                    disabled={!!runningCommand}
-                                    onClick={() => {
-                                      if (!selectedPin || !snapshot) return;
-                                      api.runCommand({
-                                        localPath: selectedPin.localPath,
-                                        repoId: snapshot.repoId,
-                                        command: cmd.command,
-                                        label: cmd.label,
-                                      });
-                                      setShowMoreMenu(false);
-                                    }}
-                                  >
-                                    {runningCommand === cmd.label ? `⏳ ${cmd.label}` : `▶ ${cmd.label}`}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
                           </div>
                         )}
                       </div>

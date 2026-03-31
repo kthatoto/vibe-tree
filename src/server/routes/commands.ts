@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { spawn } from "child_process";
-import { expandTilde } from "../utils";
+import { expandTilde, execAsync } from "../utils";
 import { broadcast } from "../ws";
 
 export const commandsRouter = new Hono();
@@ -66,4 +66,50 @@ commandsRouter.post("/run", async (c) => {
   });
 
   return c.json({ success: true, label, command });
+});
+
+// GET /api/commands/actions?repoId=... - Get recent GitHub Actions runs
+commandsRouter.get("/actions", async (c) => {
+  const repoId = c.req.query("repoId");
+  if (!repoId) {
+    return c.json({ error: "repoId is required" }, 400);
+  }
+
+  try {
+    const output = await execAsync(
+      `gh run list --repo "${repoId}" --limit 20 --json databaseId,name,status,conclusion,event,headBranch,createdAt,updatedAt,actor,url,workflowName`
+    );
+    const runs = JSON.parse(output.trim() || "[]") as Array<{
+      databaseId: number;
+      name: string;
+      status: string;
+      conclusion: string | null;
+      event: string;
+      headBranch: string;
+      createdAt: string;
+      updatedAt: string;
+      actor: { login: string };
+      url: string;
+      workflowName: string;
+    }>;
+
+    return c.json({
+      runs: runs.map((r) => ({
+        id: r.databaseId,
+        name: r.name,
+        workflow: r.workflowName,
+        status: r.status,
+        conclusion: r.conclusion,
+        event: r.event,
+        branch: r.headBranch,
+        actor: r.actor?.login ?? "unknown",
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        url: r.url,
+      })),
+    });
+  } catch (err) {
+    console.error("Failed to fetch Actions runs:", err);
+    return c.json({ runs: [] });
+  }
 });

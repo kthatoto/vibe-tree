@@ -51,6 +51,20 @@ export interface CustomCommand {
   command: string;
 }
 
+export interface ActionRun {
+  id: number;
+  name: string;
+  workflow: string;
+  status: string;
+  conclusion: string | null;
+  event: string;
+  branch: string;
+  actor: string;
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+}
+
 export interface RepoLabel {
   name: string;
   color: string;
@@ -603,6 +617,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  // GitHub Actions
+  getActionRuns: (repoId: string) =>
+    fetchJson<{ runs: ActionRun[] }>(
+      `${API_BASE}/commands/actions?repoId=${encodeURIComponent(repoId)}`
+    ),
 
   // Plan
   getCurrentPlan: (repoId: string) =>

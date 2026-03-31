@@ -11,6 +11,7 @@ class WebSocketClient {
   private handlers: Map<string, Set<MessageHandler>> = new Map();
   private repoId: string | null = null;
   private reconnectTimeout: number | null = null;
+  private lastEventTimestamp: number = Date.now();
 
   connect(repoId?: string) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -33,6 +34,7 @@ class WebSocketClient {
     this.ws.onmessage = (event) => {
       try {
         const message: WSMessage = JSON.parse(event.data);
+        this.lastEventTimestamp = Date.now();
         this.emit(message.type, message);
       } catch (e) {
         console.error("Failed to parse WS message:", e);
@@ -54,13 +56,13 @@ class WebSocketClient {
     this.reconnectTimeout = window.setTimeout(() => {
       this.reconnectTimeout = null;
       this.connect(this.repoId || undefined);
-    }, 3000);
+    }, 1000);
   }
 
   subscribe(repoId: string) {
     this.repoId = repoId;
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: "subscribe", repoId }));
+      this.ws.send(JSON.stringify({ type: "subscribe", repoId, since: this.lastEventTimestamp }));
     }
   }
 

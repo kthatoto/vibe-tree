@@ -1324,18 +1324,28 @@ export default function TreeDashboard() {
       addLog("manual", `Running: ${data.label}`);
     });
 
+    const notifiedCommands = new Set<string>();
     const unsubCommandCompleted = wsClient.on("command.completed", (msg) => {
-      const data = msg.data as { label: string; exitCode: number; stderr: string };
+      const data = msg.data as { label: string; exitCode: number; stderr: string; startedAt: string };
       setRunningCommand(null);
       const success = data.exitCode === 0;
       addLog("manual", `${data.label}: ${success ? "success" : `failed (exit ${data.exitCode})`}`);
 
+      // Deduplicate notifications (missed events from reconnect may duplicate)
+      const eventKey = `${data.label}:${data.startedAt}`;
+      if (notifiedCommands.has(eventKey)) return;
+      notifiedCommands.add(eventKey);
+
       // Chrome notification
-      if (Notification.permission === "granted") {
-        new Notification(`${data.label} ${success ? "completed" : "failed"}`, {
-          body: success ? "Command finished successfully" : data.stderr.slice(0, 100),
-          requireInteraction: true,
-        });
+      try {
+        if (Notification.permission === "granted") {
+          new Notification(`${data.label} ${success ? "completed" : "failed"}`, {
+            body: success ? "Command finished successfully" : data.stderr?.slice(0, 100) || "Error",
+            requireInteraction: true,
+          });
+        }
+      } catch (e) {
+        console.warn("Failed to show notification:", e);
       }
     });
 

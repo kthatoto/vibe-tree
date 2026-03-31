@@ -83,6 +83,7 @@ export const updateCustomCommandsSchema = z.object({
     label: z.string().min(1),
     command: z.string().min(1),
   })),
+  watchedWorkflows: z.array(z.string()).optional(),
 });
 
 export type UpdateCustomCommandsInput = z.infer<typeof updateCustomCommandsSchema>;

@@ -477,14 +477,16 @@ projectRulesRouter.get("/custom-commands", async (c) => {
       id: null,
       repoId: query.repoId,
       commands: [],
+      watchedWorkflows: [],
     });
   }
 
-  const ruleData = JSON.parse(rule.ruleJson) as { commands: { label: string; command: string }[] };
+  const ruleData = JSON.parse(rule.ruleJson) as { commands: { label: string; command: string }[]; watchedWorkflows?: string[] };
   return c.json({
     id: rule.id,
     repoId: rule.repoId,
     commands: ruleData.commands ?? [],
+    watchedWorkflows: ruleData.watchedWorkflows ?? [],
   });
 });
 
@@ -494,7 +496,7 @@ projectRulesRouter.post("/custom-commands", async (c) => {
   const input = validateOrThrow(updateCustomCommandsSchema, body);
 
   const now = new Date().toISOString();
-  const ruleJson = JSON.stringify({ commands: input.commands });
+  const ruleJson = JSON.stringify({ commands: input.commands, watchedWorkflows: input.watchedWorkflows ?? [] });
 
   const existing = await db
     .select()

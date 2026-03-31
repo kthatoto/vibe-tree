@@ -68,8 +68,8 @@ commandsRouter.post("/run", async (c) => {
   return c.json({ success: true, label, command });
 });
 
-// GET /api/commands/actions?repoId=... - Get recent GitHub Actions runs
-commandsRouter.get("/actions", async (c) => {
+// GET /api/commands/workflows?repoId=... - List available workflows
+commandsRouter.get("/workflows", async (c) => {
   const repoId = c.req.query("repoId");
   if (!repoId) {
     return c.json({ error: "repoId is required" }, 400);
@@ -77,9 +77,33 @@ commandsRouter.get("/actions", async (c) => {
 
   try {
     const output = await execAsync(
-      `gh run list --repo "${repoId}" --limit 20 --json databaseId,name,status,conclusion,event,headBranch,createdAt,updatedAt,actor,url,workflowName`
+      `gh workflow list --repo "${repoId}" --json name,id,state --all`
     );
-    const runs = JSON.parse(output.trim() || "[]") as Array<{
+    const workflows = JSON.parse(output.trim() || "[]") as Array<{
+      name: string;
+      id: number;
+      state: string;
+    }>;
+    return c.json({ workflows });
+  } catch (err) {
+    console.error("Failed to fetch workflows:", err);
+    return c.json({ workflows: [] });
+  }
+});
+
+// GET /api/commands/actions?repoId=...&workflows=a,b - Get recent GitHub Actions runs
+commandsRouter.get("/actions", async (c) => {
+  const repoId = c.req.query("repoId");
+  const workflowFilter = c.req.query("workflows"); // comma-separated workflow names
+  if (!repoId) {
+    return c.json({ error: "repoId is required" }, 400);
+  }
+
+  try {
+    // Fetch runs for each monitored workflow (or all if no filter)
+    const filterNames = workflowFilter ? workflowFilter.split(",").map((s) => s.trim()).filter(Boolean) : [];
+
+    let allRuns: Array<{
       databaseId: number;
       name: string;
       status: string;
@@ -91,10 +115,35 @@ commandsRouter.get("/actions", async (c) => {
       actor: { login: string };
       url: string;
       workflowName: string;
-    }>;
+    }> = [];
+
+    if (filterNames.length > 0) {
+      // Fetch per-workflow for better results
+      const results = await Promise.all(
+        filterNames.map(async (wf) => {
+          try {
+            const output = await execAsync(
+              `gh run list --repo "${repoId}" --workflow "${wf}" --limit 10 --json databaseId,name,status,conclusion,event,headBranch,createdAt,updatedAt,actor,url,workflowName`
+            );
+            return JSON.parse(output.trim() || "[]");
+          } catch {
+            return [];
+          }
+        })
+      );
+      allRuns = results.flat();
+    } else {
+      const output = await execAsync(
+        `gh run list --repo "${repoId}" --limit 20 --json databaseId,name,status,conclusion,event,headBranch,createdAt,updatedAt,actor,url,workflowName`
+      );
+      allRuns = JSON.parse(output.trim() || "[]");
+    }
+
+    // Sort by createdAt descending
+    allRuns.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     return c.json({
-      runs: runs.map((r) => ({
+      runs: allRuns.slice(0, 20).map((r) => ({
         id: r.databaseId,
         name: r.name,
         workflow: r.workflowName,

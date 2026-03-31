@@ -604,14 +604,18 @@ export const api = {
 
   // Custom Commands
   getCustomCommands: (repoId: string) =>
-    fetchJson<{ id: number | null; repoId: string; commands: CustomCommand[] }>(
+    fetchJson<{ id: number | null; repoId: string; commands: CustomCommand[]; watchedWorkflows: string[] }>(
       `${API_BASE}/project-rules/custom-commands?repoId=${encodeURIComponent(repoId)}`
     ),
-  updateCustomCommands: (data: { repoId: string; commands: CustomCommand[] }) =>
+  updateCustomCommands: (data: { repoId: string; commands: CustomCommand[]; watchedWorkflows?: string[] }) =>
     fetchJson<{ success: boolean }>(`${API_BASE}/project-rules/custom-commands`, {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  getWorkflows: (repoId: string) =>
+    fetchJson<{ workflows: Array<{ name: string; id: number; state: string }> }>(
+      `${API_BASE}/commands/workflows?repoId=${encodeURIComponent(repoId)}`
+    ),
   runCommand: (data: { localPath: string; repoId: string; command: string; label: string }) =>
     fetchJson<{ success: boolean }>(`${API_BASE}/commands/run`, {
       method: "POST",
@@ -619,9 +623,9 @@ export const api = {
     }),
 
   // GitHub Actions
-  getActionRuns: (repoId: string) =>
+  getActionRuns: (repoId: string, workflows?: string[]) =>
     fetchJson<{ runs: ActionRun[] }>(
-      `${API_BASE}/commands/actions?repoId=${encodeURIComponent(repoId)}`
+      `${API_BASE}/commands/actions?repoId=${encodeURIComponent(repoId)}${workflows?.length ? `&workflows=${encodeURIComponent(workflows.join(","))}` : ""}`
     ),
 
   // Plan

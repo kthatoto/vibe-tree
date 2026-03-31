@@ -490,6 +490,9 @@ export default function TreeDashboard() {
   const [actionRuns, setActionRuns] = useState<ActionRun[]>([]);
   const [actionsLoading, setActionsLoading] = useState(false);
   const [bottomTab, setBottomTab] = useState<"logs" | "actions">("logs");
+  const [watchedWorkflows, setWatchedWorkflows] = useState<string[]>([]);
+  const [availableWorkflows, setAvailableWorkflows] = useState<Array<{ name: string; id: number; state: string }>>([]);
+  const prevActionRunsRef = useRef<ActionRun[]>([]);
   // PR settings search filters
   const [labelSearch, setLabelSearch] = useState("");
   const [reviewerSearch, setReviewerSearch] = useState("");
@@ -528,6 +531,7 @@ export default function TreeDashboard() {
     // Load custom commands
     api.getCustomCommands(snapshot.repoId).then((data) => {
       setCustomCommands(data.commands || []);
+      setWatchedWorkflows(data.watchedWorkflows || []);
     }).catch(console.error);
   }, [snapshot?.repoId]);
 
@@ -1336,17 +1340,7 @@ export default function TreeDashboard() {
       if (notifiedCommands.has(eventKey)) return;
       notifiedCommands.add(eventKey);
 
-      // Chrome notification
-      try {
-        if (Notification.permission === "granted") {
-          new Notification(`${data.label} ${success ? "completed" : "failed"}`, {
-            body: success ? "Command finished successfully" : data.stderr?.slice(0, 100) || "Error",
-            requireInteraction: true,
-          });
-        }
-      } catch (e) {
-        console.warn("Failed to show notification:", e);
-      }
+      // No Chrome notification for custom commands (only Actions notify)
     });
 
     return () => {
@@ -1368,23 +1362,45 @@ export default function TreeDashboard() {
 
   // Poll GitHub Actions
   const fetchActions = useCallback(async () => {
-    if (!snapshot?.repoId) return;
+    if (!snapshot?.repoId || watchedWorkflows.length === 0) {
+      setActionRuns([]);
+      return;
+    }
     setActionsLoading(true);
     try {
-      const data = await api.getActionRuns(snapshot.repoId);
+      const data = await api.getActionRuns(snapshot.repoId, watchedWorkflows);
+      // Detect completed runs (was in_progress/queued, now completed)
+      const prevMap = new Map(prevActionRunsRef.current.map((r) => [r.id, r]));
+      for (const run of data.runs) {
+        const prev = prevMap.get(run.id);
+        if (prev && (prev.status === "in_progress" || prev.status === "queued") && run.status === "completed") {
+          const success = run.conclusion === "success";
+          if (Notification.permission === "granted") {
+            new Notification(`${run.workflow} ${success ? "succeeded" : "failed"}`, {
+              body: `${run.branch} · ${run.actor}`,
+              requireInteraction: !success,
+            });
+          }
+        }
+      }
+      prevActionRunsRef.current = data.runs;
       setActionRuns(data.runs);
     } catch {
       // ignore
     } finally {
       setActionsLoading(false);
     }
-  }, [snapshot?.repoId]);
+  }, [snapshot?.repoId, watchedWorkflows]);
 
   useEffect(() => {
+    if (watchedWorkflows.length === 0) return;
     fetchActions();
-    const interval = setInterval(fetchActions, 60000); // Poll every 60s
+    // Poll more frequently when runs are in progress
+    const hasActive = actionRuns.some((r) => r.status === "in_progress" || r.status === "queued");
+    const interval = setInterval(fetchActions, hasActive ? 15000 : 60000);
     return () => clearInterval(interval);
-  }, [fetchActions]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchActions, actionRuns.some((r) => r.status === "in_progress" || r.status === "queued")]);
 
   // Load branchLinks when snapshot is available
   // DB is the single source of truth for PR info
@@ -1828,6 +1844,7 @@ export default function TreeDashboard() {
       setPrQuickLabels(prSettings.quickLabels || []);
       setPrQuickReviewers(prSettings.quickReviewers || []);
       setCustomCommands(cmdSettings.commands || []);
+      setWatchedWorkflows(cmdSettings.watchedWorkflows || []);
       setRepoLabels(labels);
       setRepoTeams(teams);
       setRepoCollaborators(collaborators);
@@ -1889,6 +1906,7 @@ export default function TreeDashboard() {
       await api.updateCustomCommands({
         repoId: snapshot.repoId,
         commands: customCommands.filter((c) => c.label.trim() && c.command.trim()),
+        watchedWorkflows,
       });
 
       // Save default branch (empty string clears it)
@@ -4283,13 +4301,61 @@ export default function TreeDashboard() {
                           + Add
                         </button>
 
+                        <div style={{ marginTop: 24 }}>
+                          <h4 style={{ color: "#e5e7eb", marginBottom: 8 }}>Actions Monitoring</h4>
+                          <p style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8 }}>
+                            Select workflows to monitor. Notifies when a run completes.
+                          </p>
+                          <button
+                            onClick={async () => {
+                              if (!snapshot?.repoId) return;
+                              try {
+                                const data = await api.getWorkflows(snapshot.repoId);
+                                setAvailableWorkflows(data.workflows);
+                              } catch { /* ignore */ }
+                            }}
+                            style={{ padding: "4px 12px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "#e5e7eb", cursor: "pointer", fontSize: 12, marginBottom: 8 }}
+                          >
+                            Load workflows
+                          </button>
+                          {availableWorkflows.length > 0 && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
+                              {availableWorkflows.map((wf) => {
+                                const checked = watchedWorkflows.includes(wf.name);
+                                return (
+                                  <label key={wf.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#e5e7eb", cursor: "pointer" }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => {
+                                        if (checked) {
+                                          setWatchedWorkflows(watchedWorkflows.filter((n) => n !== wf.name));
+                                        } else {
+                                          setWatchedWorkflows([...watchedWorkflows, wf.name]);
+                                        }
+                                      }}
+                                    />
+                                    {wf.name}
+                                    <span style={{ color: "#6b7280", fontSize: 11 }}>({wf.state})</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {watchedWorkflows.length > 0 && availableWorkflows.length === 0 && (
+                            <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 8 }}>
+                              Watching: {watchedWorkflows.join(", ")}
+                            </div>
+                          )}
+                        </div>
+
                         <div style={{ marginTop: 16 }}>
                           <h4 style={{ color: "#e5e7eb", marginBottom: 8 }}>Notifications</h4>
                           <button
                             onClick={() => {
                               Notification.requestPermission().then((perm) => {
                                 if (perm === "granted") {
-                                  new Notification("Notifications enabled", { body: "You'll be notified when commands complete." });
+                                  new Notification("Notifications enabled", { body: "You'll be notified when Actions complete." });
                                 }
                               });
                             }}

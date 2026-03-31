@@ -407,6 +407,7 @@ export default function TreeDashboard() {
     return localStorage.getItem("branchGraph.filterEnabled") === "true";
   });
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showRunMenu, setShowRunMenu] = useState(false);
   useEffect(() => {
     localStorage.setItem("branchGraph.checkedBranches", JSON.stringify([...checkedBranches]));
   }, [checkedBranches]);
@@ -485,7 +486,6 @@ export default function TreeDashboard() {
   // Custom commands
   const [customCommands, setCustomCommands] = useState<Array<{ label: string; command: string }>>([]);
   const [runningCommand, setRunningCommand] = useState<string | null>(null);
-  const [showRunMenu, setShowRunMenu] = useState(false);
   // GitHub Actions
   const [actionRuns, setActionRuns] = useState<ActionRun[]>([]);
   const [actionsLoading, setActionsLoading] = useState(false);

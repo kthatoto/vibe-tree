@@ -54,12 +54,12 @@ export interface CustomCommand {
 export interface ActionRun {
   id: number;
   name: string;
+  displayTitle: string;
   workflow: string;
   status: string;
   conclusion: string | null;
   event: string;
   branch: string;
-  actor: string;
   createdAt: string;
   updatedAt: string;
   url: string;

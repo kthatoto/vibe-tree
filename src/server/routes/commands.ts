@@ -106,13 +106,13 @@ commandsRouter.get("/actions", async (c) => {
     let allRuns: Array<{
       databaseId: number;
       name: string;
+      displayTitle: string;
       status: string;
       conclusion: string | null;
       event: string;
       headBranch: string;
       createdAt: string;
       updatedAt: string;
-      actor: { login: string };
       url: string;
       workflowName: string;
     }> = [];
@@ -123,10 +123,11 @@ commandsRouter.get("/actions", async (c) => {
         filterNames.map(async (wf) => {
           try {
             const output = await execAsync(
-              `gh run list --repo "${repoId}" --workflow "${wf}" --limit 10 --json databaseId,name,status,conclusion,event,headBranch,createdAt,updatedAt,actor,url,workflowName`
+              `gh run list --repo "${repoId}" --workflow "${wf}" --limit 10 --json databaseId,name,displayTitle,status,conclusion,event,headBranch,createdAt,updatedAt,url,workflowName`
             );
             return JSON.parse(output.trim() || "[]");
-          } catch {
+          } catch (err) {
+            console.error(`Failed to fetch runs for workflow "${wf}":`, err);
             return [];
           }
         })
@@ -134,7 +135,7 @@ commandsRouter.get("/actions", async (c) => {
       allRuns = results.flat();
     } else {
       const output = await execAsync(
-        `gh run list --repo "${repoId}" --limit 20 --json databaseId,name,status,conclusion,event,headBranch,createdAt,updatedAt,actor,url,workflowName`
+        `gh run list --repo "${repoId}" --limit 20 --json databaseId,name,displayTitle,status,conclusion,event,headBranch,createdAt,updatedAt,url,workflowName`
       );
       allRuns = JSON.parse(output.trim() || "[]");
     }
@@ -146,12 +147,12 @@ commandsRouter.get("/actions", async (c) => {
       runs: allRuns.slice(0, 20).map((r) => ({
         id: r.databaseId,
         name: r.name,
+        displayTitle: r.displayTitle,
         workflow: r.workflowName,
         status: r.status,
         conclusion: r.conclusion,
         event: r.event,
         branch: r.headBranch,
-        actor: r.actor?.login ?? "unknown",
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
         url: r.url,

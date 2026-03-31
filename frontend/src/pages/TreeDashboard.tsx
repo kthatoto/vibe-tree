@@ -536,7 +536,7 @@ export default function TreeDashboard() {
   }, [snapshot?.repoId]);
 
   // Settings modal category
-  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "polling" | "pr-labels" | "pr-reviewers" | "commands" | "cleanup" | "debug">("branch");
+  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "polling" | "pr-labels" | "pr-reviewers" | "commands" | "actions" | "cleanup" | "debug">("branch");
   const [debugModeEnabled, setDebugModeEnabled] = useState(() => localStorage.getItem("vibe-tree-debug-mode") === "true");
   const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<{ chatSessions: number; taskInstructions: number; branchLinks: number } | null>(null);
@@ -1377,7 +1377,7 @@ export default function TreeDashboard() {
           const success = run.conclusion === "success";
           if (Notification.permission === "granted") {
             new Notification(`${run.workflow} ${success ? "succeeded" : "failed"}`, {
-              body: `${run.branch} · ${run.actor}`,
+              body: `${run.branch} · ${run.displayTitle}`,
               requireInteraction: !success,
             });
           }
@@ -2400,7 +2400,7 @@ export default function TreeDashboard() {
                       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         <span style={{ color: "#e5e7eb" }}>{run.workflow}</span>
                         <span style={{ color: "#6b7280" }}> · {run.branch}</span>
-                        <span style={{ color: "#6b7280" }}> · {run.actor}</span>
+                        <span style={{ color: "#6b7280" }}> · {run.displayTitle}</span>
                       </span>
                       <span style={{ color: "#6b7280", flexShrink: 0 }}>{timeAgo}</span>
                     </div>
@@ -3702,6 +3702,12 @@ export default function TreeDashboard() {
                   Commands
                 </button>
                 <button
+                  className={`settings-modal__nav-item ${settingsCategory === "actions" ? "settings-modal__nav-item--active" : ""}`}
+                  onClick={() => setSettingsCategory("actions")}
+                >
+                  Actions
+                </button>
+                <button
                   className={`settings-modal__nav-item ${settingsCategory === "cleanup" ? "settings-modal__nav-item--active" : ""}`}
                   onClick={() => setSettingsCategory("cleanup")}
                 >
@@ -4301,55 +4307,59 @@ export default function TreeDashboard() {
                           + Add
                         </button>
 
-                        <div style={{ marginTop: 24 }}>
-                          <h4 style={{ color: "#e5e7eb", marginBottom: 8 }}>Actions Monitoring</h4>
-                          <p style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8 }}>
-                            Select workflows to monitor. Notifies when a run completes.
-                          </p>
-                          <button
-                            onClick={async () => {
-                              if (!snapshot?.repoId) return;
-                              try {
-                                const data = await api.getWorkflows(snapshot.repoId);
-                                setAvailableWorkflows(data.workflows);
-                              } catch { /* ignore */ }
-                            }}
-                            style={{ padding: "4px 12px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "#e5e7eb", cursor: "pointer", fontSize: 12, marginBottom: 8 }}
-                          >
-                            Load workflows
-                          </button>
-                          {availableWorkflows.length > 0 && (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
-                              {availableWorkflows.map((wf) => {
-                                const checked = watchedWorkflows.includes(wf.name);
-                                return (
-                                  <label key={wf.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#e5e7eb", cursor: "pointer" }}>
-                                    <input
-                                      type="checkbox"
-                                      checked={checked}
-                                      onChange={() => {
-                                        if (checked) {
-                                          setWatchedWorkflows(watchedWorkflows.filter((n) => n !== wf.name));
-                                        } else {
-                                          setWatchedWorkflows([...watchedWorkflows, wf.name]);
-                                        }
-                                      }}
-                                    />
-                                    {wf.name}
-                                    <span style={{ color: "#6b7280", fontSize: 11 }}>({wf.state})</span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          )}
-                          {watchedWorkflows.length > 0 && availableWorkflows.length === 0 && (
-                            <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 8 }}>
-                              Watching: {watchedWorkflows.join(", ")}
-                            </div>
-                          )}
-                        </div>
+                      </>
+                    )}
 
-                        <div style={{ marginTop: 16 }}>
+                    {/* Actions Settings */}
+                    {settingsCategory === "actions" && (
+                      <>
+                        <h3>Actions Monitoring</h3>
+                        <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 16 }}>
+                          Select GitHub Actions workflows to monitor. Notifies when a run completes.
+                        </p>
+                        <button
+                          onClick={async () => {
+                            if (!snapshot?.repoId) return;
+                            try {
+                              const data = await api.getWorkflows(snapshot.repoId);
+                              setAvailableWorkflows(data.workflows);
+                            } catch { /* ignore */ }
+                          }}
+                          style={{ padding: "6px 12px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "#e5e7eb", cursor: "pointer", fontSize: 13, marginBottom: 12 }}
+                        >
+                          Load workflows
+                        </button>
+                        {availableWorkflows.length > 0 && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                            {availableWorkflows.map((wf) => {
+                              const checked = watchedWorkflows.includes(wf.name);
+                              return (
+                                <label key={wf.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#e5e7eb", cursor: "pointer" }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => {
+                                      if (checked) {
+                                        setWatchedWorkflows(watchedWorkflows.filter((n) => n !== wf.name));
+                                      } else {
+                                        setWatchedWorkflows([...watchedWorkflows, wf.name]);
+                                      }
+                                    }}
+                                  />
+                                  {wf.name}
+                                  <span style={{ color: "#6b7280", fontSize: 11 }}>({wf.state})</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {watchedWorkflows.length > 0 && availableWorkflows.length === 0 && (
+                          <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 12 }}>
+                            Watching: {watchedWorkflows.join(", ")}
+                          </div>
+                        )}
+
+                        <div style={{ marginTop: 24 }}>
                           <h4 style={{ color: "#e5e7eb", marginBottom: 8 }}>Notifications</h4>
                           <button
                             onClick={() => {

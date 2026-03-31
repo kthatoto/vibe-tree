@@ -2361,48 +2361,53 @@ export default function TreeDashboard() {
             overflow: "auto",
           }}>
             {bottomTab === "actions" ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                 {actionRuns.length === 0 && !actionsLoading && (
-                  <div style={{ color: "#6b7280", padding: 8 }}>No recent runs</div>
+                  <div style={{ color: "#6b7280", padding: 8, fontSize: 12 }}>No recent runs</div>
                 )}
                 {actionRuns.map((run) => {
                   const statusIcon = run.status === "completed"
-                    ? (run.conclusion === "success" ? "✓" : run.conclusion === "failure" ? "✗" : "○")
+                    ? (run.conclusion === "success" ? "✓" : run.conclusion === "failure" ? "✗" : run.conclusion === "cancelled" ? "⊘" : "○")
                     : run.status === "in_progress" ? "⏳" : "⏸";
                   const statusColor = run.status === "completed"
                     ? (run.conclusion === "success" ? "#22c55e" : run.conclusion === "failure" ? "#ef4444" : "#6b7280")
                     : run.status === "in_progress" ? "#f59e0b" : "#6b7280";
-                  const timeAgo = (() => {
-                    const diff = Date.now() - new Date(run.createdAt).getTime();
-                    const mins = Math.floor(diff / 60000);
-                    if (mins < 60) return `${mins}m`;
-                    const hours = Math.floor(mins / 60);
-                    if (hours < 24) return `${hours}h`;
-                    return `${Math.floor(hours / 24)}d`;
+                  const createdAt = new Date(run.createdAt);
+                  const timeStr = `${String(createdAt.getMonth() + 1).padStart(2, "0")}/${String(createdAt.getDate()).padStart(2, "0")} ${String(createdAt.getHours()).padStart(2, "0")}:${String(createdAt.getMinutes()).padStart(2, "0")}`;
+                  const duration = (() => {
+                    const start = new Date(run.createdAt).getTime();
+                    const end = run.status === "completed" ? new Date(run.updatedAt).getTime() : Date.now();
+                    const secs = Math.floor((end - start) / 1000);
+                    if (secs < 60) return `${secs}s`;
+                    const mins = Math.floor(secs / 60);
+                    if (mins < 60) return `${mins}m${secs % 60}s`;
+                    return `${Math.floor(mins / 60)}h${mins % 60}m`;
                   })();
                   return (
                     <div
                       key={run.id}
                       style={{
-                        display: "grid",
-                        gridTemplateColumns: "16px 1fr auto",
-                        gap: 6,
-                        padding: "3px 4px",
-                        borderRadius: 3,
+                        padding: "6px 8px",
+                        borderRadius: 4,
                         cursor: "pointer",
-                        alignItems: "center",
+                        borderLeft: `3px solid ${statusColor}`,
+                        marginBottom: 2,
                       }}
                       onClick={() => window.open(run.url, "_blank")}
                       onMouseEnter={(e) => (e.currentTarget.style.background = "#1f2937")}
                       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                     >
-                      <span style={{ color: statusColor, fontWeight: 600 }}>{statusIcon}</span>
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        <span style={{ color: "#e5e7eb" }}>{run.workflow}</span>
-                        <span style={{ color: "#6b7280" }}> · {run.branch}</span>
-                        <span style={{ color: "#6b7280" }}> · {run.displayTitle}</span>
-                      </span>
-                      <span style={{ color: "#6b7280", flexShrink: 0 }}>{timeAgo}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                        <span style={{ color: statusColor, fontWeight: 600, fontSize: 13 }}>{statusIcon}</span>
+                        <span style={{ color: "#e5e7eb", fontWeight: 500 }}>{run.workflow}</span>
+                        <span style={{ color: "#6b7280", marginLeft: "auto", fontSize: 11 }}>{duration}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, paddingLeft: 19 }}>
+                        {run.displayTitle}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 1, paddingLeft: 19 }}>
+                        {run.branch} · {run.event} · {timeStr}
+                      </div>
                     </div>
                   );
                 })}

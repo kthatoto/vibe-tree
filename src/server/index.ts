@@ -22,6 +22,7 @@ import { questionsRouter } from "./routes/questions";
 import { branchResourcesRouter } from "./routes/branch-resources";
 import { worktreesRouter } from "./routes/worktrees";
 import { repoCacheRouter } from "./routes/repo-cache";
+import { commandsRouter } from "./routes/commands";
 import { scanLogsRouter } from "./routes/scan-logs";
 import { errorHandler } from "./middleware/error-handler";
 import { ptyManager } from "./pty-manager";
@@ -76,6 +77,7 @@ app.route("/api/branch-resources", branchResourcesRouter);
 app.route("/api/worktrees", worktreesRouter);
 app.route("/api/repo-cache", repoCacheRouter);
 app.route("/api/scan-logs", scanLogsRouter);
+app.route("/api/commands", commandsRouter);
 
 // Internal broadcast endpoint for MCP server
 app.post("/api/internal/broadcast", async (c) => {

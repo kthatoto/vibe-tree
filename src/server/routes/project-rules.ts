@@ -8,6 +8,7 @@ import {
   updateWorktreeSettingsSchema,
   updatePollingSettingsSchema,
   updatePrSettingsSchema,
+  updateCustomCommandsSchema,
   validateOrThrow,
 } from "../../shared/validation";
 import type { BranchNamingRule, WorktreeSettings, PollingSettings, PrSettings } from "../../shared/types";
@@ -449,4 +450,80 @@ projectRulesRouter.post("/pr-settings", async (c) => {
   });
 
   return c.json(response);
+});
+
+// ============ Custom Commands ============
+
+// GET /api/project-rules/custom-commands?repoId=...
+projectRulesRouter.get("/custom-commands", async (c) => {
+  const query = validateOrThrow(repoIdQuerySchema, {
+    repoId: c.req.query("repoId"),
+  });
+
+  const rules = await db
+    .select()
+    .from(schema.projectRules)
+    .where(
+      and(
+        eq(schema.projectRules.repoId, query.repoId),
+        eq(schema.projectRules.ruleType, "custom_commands"),
+        eq(schema.projectRules.isActive, true)
+      )
+    );
+
+  const rule = rules[0];
+  if (!rule) {
+    return c.json({
+      id: null,
+      repoId: query.repoId,
+      commands: [],
+    });
+  }
+
+  const ruleData = JSON.parse(rule.ruleJson) as { commands: { label: string; command: string }[] };
+  return c.json({
+    id: rule.id,
+    repoId: rule.repoId,
+    commands: ruleData.commands ?? [],
+  });
+});
+
+// POST /api/project-rules/custom-commands
+projectRulesRouter.post("/custom-commands", async (c) => {
+  const body = await c.req.json();
+  const input = validateOrThrow(updateCustomCommandsSchema, body);
+
+  const now = new Date().toISOString();
+  const ruleJson = JSON.stringify({ commands: input.commands });
+
+  const existing = await db
+    .select()
+    .from(schema.projectRules)
+    .where(
+      and(
+        eq(schema.projectRules.repoId, input.repoId),
+        eq(schema.projectRules.ruleType, "custom_commands"),
+        eq(schema.projectRules.isActive, true)
+      )
+    );
+
+  if (existing[0]) {
+    await db
+      .update(schema.projectRules)
+      .set({ ruleJson, updatedAt: now })
+      .where(eq(schema.projectRules.id, existing[0].id));
+  } else {
+    await db
+      .insert(schema.projectRules)
+      .values({
+        repoId: input.repoId,
+        ruleType: "custom_commands",
+        ruleJson,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+  }
+
+  return c.json({ success: true, commands: input.commands });
 });

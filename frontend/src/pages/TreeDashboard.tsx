@@ -474,6 +474,9 @@ export default function TreeDashboard() {
   const [repoLabels, setRepoLabels] = useState<Array<{ name: string; color: string; description: string }>>([]);
   const [repoCollaborators, setRepoCollaborators] = useState<RepoCollaborator[]>([]);
   const [repoTeams, setRepoTeams] = useState<RepoTeam[]>([]);
+  // Custom commands
+  const [customCommands, setCustomCommands] = useState<Array<{ label: string; command: string }>>([]);
+  const [runningCommand, setRunningCommand] = useState<string | null>(null);
   // PR settings search filters
   const [labelSearch, setLabelSearch] = useState("");
   const [reviewerSearch, setReviewerSearch] = useState("");
@@ -509,10 +512,14 @@ export default function TreeDashboard() {
       }
     };
     loadPrSettings();
+    // Load custom commands
+    api.getCustomCommands(snapshot.repoId).then((data) => {
+      setCustomCommands(data.commands || []);
+    }).catch(console.error);
   }, [snapshot?.repoId]);
 
   // Settings modal category
-  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "polling" | "pr-labels" | "pr-reviewers" | "cleanup" | "debug">("branch");
+  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "polling" | "pr-labels" | "pr-reviewers" | "commands" | "cleanup" | "debug">("branch");
   const [debugModeEnabled, setDebugModeEnabled] = useState(() => localStorage.getItem("vibe-tree-debug-mode") === "true");
   const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<{ chatSessions: number; taskInstructions: number; branchLinks: number } | null>(null);
@@ -1298,6 +1305,27 @@ export default function TreeDashboard() {
       });
     });
 
+    const unsubCommandStarted = wsClient.on("command.started", (msg) => {
+      const data = msg.data as { label: string };
+      setRunningCommand(data.label);
+      addLog("manual", `Running: ${data.label}`);
+    });
+
+    const unsubCommandCompleted = wsClient.on("command.completed", (msg) => {
+      const data = msg.data as { label: string; exitCode: number; stderr: string };
+      setRunningCommand(null);
+      const success = data.exitCode === 0;
+      addLog("manual", `${data.label}: ${success ? "success" : `failed (exit ${data.exitCode})`}`);
+
+      // Chrome notification
+      if (Notification.permission === "granted") {
+        new Notification(`${data.label} ${success ? "completed" : "failed"}`, {
+          body: success ? "Command finished successfully" : data.stderr.slice(0, 100),
+          icon: success ? undefined : undefined,
+        });
+      }
+    });
+
     return () => {
       unsubScan();
       unsubBranches();
@@ -1308,6 +1336,8 @@ export default function TreeDashboard() {
       unsubFetchError();
       unsubPrUpdated();
       unsubNodeAheadBehind();
+      unsubCommandStarted();
+      unsubCommandCompleted();
     };
   }, [snapshot?.repoId, selectedPin, triggerScan, addLog]);
 
@@ -1734,11 +1764,12 @@ export default function TreeDashboard() {
     setSettingsDefaultBranch(selectedPin.baseBranch || "");
     setSettingsCategory("branch");
     try {
-      const [rule, wtSettings, pollSettings, prSettings, labels, collaborators, teams] = await Promise.all([
+      const [rule, wtSettings, pollSettings, prSettings, cmdSettings, labels, collaborators, teams] = await Promise.all([
         api.getBranchNaming(snapshot.repoId),
         api.getWorktreeSettings(snapshot.repoId),
         api.getPollingSettings(snapshot.repoId),
         api.getPrSettings(snapshot.repoId),
+        api.getCustomCommands(snapshot.repoId).catch(() => ({ commands: [] })),
         api.getRepoLabels(snapshot.repoId).catch(() => []),
         api.getRepoCollaborators(snapshot.repoId).catch(() => []),
         api.searchRepoTeams(snapshot.repoId).catch(() => []),
@@ -1753,6 +1784,7 @@ export default function TreeDashboard() {
       setPollingThresholds(pollSettings.thresholds || null);
       setPrQuickLabels(prSettings.quickLabels || []);
       setPrQuickReviewers(prSettings.quickReviewers || []);
+      setCustomCommands(cmdSettings.commands || []);
       setRepoLabels(labels);
       setRepoTeams(teams);
       setRepoCollaborators(collaborators);
@@ -1808,6 +1840,12 @@ export default function TreeDashboard() {
         repoId: snapshot.repoId,
         quickLabels: prQuickLabels,
         quickReviewers: prQuickReviewers,
+      });
+
+      // Save custom commands (filter empty entries)
+      await api.updateCustomCommands({
+        repoId: snapshot.repoId,
+        commands: customCommands.filter((c) => c.label.trim() && c.command.trim()),
       });
 
       // Save default branch (empty string clears it)
@@ -2960,6 +2998,43 @@ export default function TreeDashboard() {
                             >
                               Toggle All Checkboxes
                             </button>
+                            {customCommands.length > 0 && (
+                              <div style={{ borderTop: "1px solid #374151", marginTop: 4, paddingTop: 4 }}>
+                                {customCommands.map((cmd, i) => (
+                                  <button
+                                    key={i}
+                                    style={{
+                                      display: "block",
+                                      width: "100%",
+                                      padding: "8px 12px",
+                                      background: "transparent",
+                                      border: "none",
+                                      color: runningCommand === cmd.label ? "#f59e0b" : "#e5e7eb",
+                                      textAlign: "left",
+                                      cursor: runningCommand ? "not-allowed" : "pointer",
+                                      borderRadius: 4,
+                                      whiteSpace: "nowrap",
+                                      fontSize: 13,
+                                    }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.background = "#374151")}
+                                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                                    disabled={!!runningCommand}
+                                    onClick={() => {
+                                      if (!selectedPin || !snapshot) return;
+                                      api.runCommand({
+                                        localPath: selectedPin.localPath,
+                                        repoId: snapshot.repoId,
+                                        command: cmd.command,
+                                        label: cmd.label,
+                                      });
+                                      setShowMoreMenu(false);
+                                    }}
+                                  >
+                                    {runningCommand === cmd.label ? `⏳ ${cmd.label}` : `▶ ${cmd.label}`}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -3473,6 +3548,12 @@ export default function TreeDashboard() {
                     Reviewers
                   </button>
                 </div>
+                <button
+                  className={`settings-modal__nav-item ${settingsCategory === "commands" ? "settings-modal__nav-item--active" : ""}`}
+                  onClick={() => setSettingsCategory("commands")}
+                >
+                  Commands
+                </button>
                 <button
                   className={`settings-modal__nav-item ${settingsCategory === "cleanup" ? "settings-modal__nav-item--active" : ""}`}
                   onClick={() => setSettingsCategory("cleanup")}
@@ -4023,6 +4104,70 @@ export default function TreeDashboard() {
                               {prQuickReviewers.filter(r => !r.startsWith("team/")).length === repoCollaborators.length ? "All users selected" : "No matching users"}
                             </span>
                           )}
+                        </div>
+                      </>
+                    )}
+
+                    {/* Commands Settings */}
+                    {settingsCategory === "commands" && (
+                      <>
+                        <h3>Custom Commands</h3>
+                        <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 16 }}>
+                          Register shell commands to run from the toolbar. Runs in the project directory.
+                        </p>
+                        {customCommands.map((cmd, i) => (
+                          <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+                            <input
+                              type="text"
+                              placeholder="Label"
+                              value={cmd.label}
+                              onChange={(e) => {
+                                const next = [...customCommands];
+                                next[i] = { ...next[i], label: e.target.value };
+                                setCustomCommands(next);
+                              }}
+                              style={{ width: 120, padding: "4px 8px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "#e5e7eb", fontSize: 13 }}
+                            />
+                            <input
+                              type="text"
+                              placeholder="Command (e.g. make deploy)"
+                              value={cmd.command}
+                              onChange={(e) => {
+                                const next = [...customCommands];
+                                next[i] = { ...next[i], command: e.target.value };
+                                setCustomCommands(next);
+                              }}
+                              style={{ flex: 1, padding: "4px 8px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "#e5e7eb", fontSize: 13 }}
+                            />
+                            <button
+                              onClick={() => setCustomCommands(customCommands.filter((_, j) => j !== i))}
+                              style={{ padding: "4px 8px", background: "transparent", border: "1px solid #374151", borderRadius: 4, color: "#ef4444", cursor: "pointer", fontSize: 13 }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => setCustomCommands([...customCommands, { label: "", command: "" }])}
+                          style={{ padding: "4px 12px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "#e5e7eb", cursor: "pointer", fontSize: 13 }}
+                        >
+                          + Add
+                        </button>
+
+                        <div style={{ marginTop: 16 }}>
+                          <h4 style={{ color: "#e5e7eb", marginBottom: 8 }}>Notifications</h4>
+                          <button
+                            onClick={() => {
+                              Notification.requestPermission().then((perm) => {
+                                if (perm === "granted") {
+                                  new Notification("Notifications enabled", { body: "You'll be notified when commands complete." });
+                                }
+                              });
+                            }}
+                            style={{ padding: "6px 12px", background: "#1f2937", border: "1px solid #374151", borderRadius: 4, color: "#e5e7eb", cursor: "pointer", fontSize: 13 }}
+                          >
+                            {typeof Notification !== "undefined" && Notification.permission === "granted" ? "Notifications enabled" : "Enable notifications"}
+                          </button>
                         </div>
                       </>
                     )}

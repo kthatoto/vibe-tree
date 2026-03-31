@@ -46,6 +46,11 @@ export interface PrSettings {
   quickReviewers: string[];
 }
 
+export interface CustomCommand {
+  label: string;
+  command: string;
+}
+
 export interface RepoLabel {
   name: string;
   color: string;
@@ -579,6 +584,22 @@ export const api = {
     ),
   updatePrSettings: (data: { repoId: string } & PrSettings) =>
     fetchJson<PrSettings>(`${API_BASE}/project-rules/pr-settings`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // Custom Commands
+  getCustomCommands: (repoId: string) =>
+    fetchJson<{ id: number | null; repoId: string; commands: CustomCommand[] }>(
+      `${API_BASE}/project-rules/custom-commands?repoId=${encodeURIComponent(repoId)}`
+    ),
+  updateCustomCommands: (data: { repoId: string; commands: CustomCommand[] }) =>
+    fetchJson<{ success: boolean }>(`${API_BASE}/project-rules/custom-commands`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  runCommand: (data: { localPath: string; repoId: string; command: string; label: string }) =>
+    fetchJson<{ success: boolean }>(`${API_BASE}/commands/run`, {
       method: "POST",
       body: JSON.stringify(data),
     }),

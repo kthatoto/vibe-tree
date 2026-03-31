@@ -76,6 +76,17 @@ export const updatePrSettingsSchema = z.object({
 
 export type UpdatePrSettingsInput = z.infer<typeof updatePrSettingsSchema>;
 
+// Custom commands schemas
+export const updateCustomCommandsSchema = z.object({
+  repoId: repoIdSchema,
+  commands: z.array(z.object({
+    label: z.string().min(1),
+    command: z.string().min(1),
+  })),
+});
+
+export type UpdateCustomCommandsInput = z.infer<typeof updateCustomCommandsSchema>;
+
 // Plan schemas
 export const startPlanSchema = z.object({
   repoId: repoIdSchema,

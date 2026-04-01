@@ -2406,7 +2406,7 @@ export default function TreeDashboard() {
                       <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, paddingLeft: 19, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {run.displayTitle}
                       </div>
-                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3, paddingLeft: 19, display: "flex", flexDirection: "column", gap: 1 }}>
+                      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 3, paddingLeft: 19, display: "flex", flexDirection: "column", gap: 1 }}>
                         <span>📅 {timeStr}</span>
                         <span>⏱ {duration}</span>
                       </div>

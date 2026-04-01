@@ -2373,16 +2373,17 @@ export default function TreeDashboard() {
                     ? (run.conclusion === "success" ? "#22c55e" : run.conclusion === "failure" ? "#ef4444" : "#6b7280")
                     : run.status === "in_progress" ? "#f59e0b" : "#6b7280";
                   const createdAt = new Date(run.createdAt);
-                  const timeStr = `${String(createdAt.getMonth() + 1).padStart(2, "0")}/${String(createdAt.getDate()).padStart(2, "0")} ${String(createdAt.getHours()).padStart(2, "0")}:${String(createdAt.getMinutes()).padStart(2, "0")}`;
-                  const duration = (() => {
-                    const start = new Date(run.createdAt).getTime();
-                    const end = run.status === "completed" ? new Date(run.updatedAt).getTime() : Date.now();
-                    const secs = Math.floor((end - start) / 1000);
-                    if (secs < 60) return `${secs}s`;
-                    const mins = Math.floor(secs / 60);
-                    if (mins < 60) return `${mins}m${secs % 60}s`;
-                    return `${Math.floor(mins / 60)}h${mins % 60}m`;
-                  })();
+                  const now = new Date();
+                  const isToday = createdAt.toDateString() === now.toDateString();
+                  const timeStr = isToday
+                    ? `Today at ${createdAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
+                    : createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + ", " + createdAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+                  const start = createdAt.getTime();
+                  const end = run.status === "completed" ? new Date(run.updatedAt).getTime() : Date.now();
+                  const totalSecs = Math.floor((end - start) / 1000);
+                  const durationMins = Math.floor(totalSecs / 60);
+                  const durationSecs = totalSecs % 60;
+                  const duration = durationMins > 0 ? `${durationMins}m ${durationSecs}s` : `${durationSecs}s`;
                   return (
                     <div
                       key={run.id}
@@ -2400,13 +2401,14 @@ export default function TreeDashboard() {
                       <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
                         <span style={{ color: statusColor, fontWeight: 600, fontSize: 13 }}>{statusIcon}</span>
                         <span style={{ color: "#e5e7eb", fontWeight: 500 }}>{run.workflow}</span>
-                        <span style={{ color: "#6b7280", marginLeft: "auto", fontSize: 11 }}>{duration}</span>
+                        <span style={{ color: "#6b7280", fontSize: 11, marginLeft: "auto" }}>{run.branch}</span>
                       </div>
-                      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, paddingLeft: 19 }}>
+                      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, paddingLeft: 19, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {run.displayTitle}
                       </div>
-                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 1, paddingLeft: 19 }}>
-                        {run.branch} · {run.event} · {timeStr}
+                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3, paddingLeft: 19, display: "flex", flexDirection: "column", gap: 1 }}>
+                        <span>📅 {timeStr}</span>
+                        <span>⏱ {duration}</span>
                       </div>
                     </div>
                   );

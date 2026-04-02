@@ -1205,13 +1205,54 @@ branchRouter.post("/delete", async (c) => {
   const repoId = await getRepoId(localPath);
   const reparentedEdges: Array<{ child: string; newParent: string }> = [];
   if (repoId) {
-      // 0. Invalidate cached snapshot AND branches (will be rebuilt on next scan)
-      // Must clear cachedBranchesJson too, otherwise the fallback snapshot builder
-      // would re-include the deleted branch from the stale branch list
-      await db
-        .update(schema.repoPins)
-        .set({ cachedSnapshotJson: null, cachedBranchesJson: null })
-        .where(eq(schema.repoPins.repoId, repoId));
+      // 0. Remove deleted branch from cached snapshot and branches
+      // Instead of clearing cache to null (which triggers a fallback path that
+      // rebuilds from DB tables and can resurrect the branch), we surgically
+      // remove the branch from the existing cached data.
+      const [repoPin] = await db.select().from(schema.repoPins)
+        .where(eq(schema.repoPins.repoId, repoId)).limit(1);
+      if (repoPin) {
+        const updates: Record<string, unknown> = {};
+
+        // Remove from cachedBranchesJson
+        if (repoPin.cachedBranchesJson) {
+          try {
+            const branches = JSON.parse(repoPin.cachedBranchesJson) as string[];
+            updates.cachedBranchesJson = JSON.stringify(branches.filter((b) => b !== branchName));
+          } catch { /* ignore */ }
+        }
+
+        // Remove from cachedSnapshotJson
+        if (repoPin.cachedSnapshotJson) {
+          try {
+            const snap = JSON.parse(repoPin.cachedSnapshotJson);
+            snap.branches = (snap.branches || []).filter((b: string) => b !== branchName);
+            snap.nodes = (snap.nodes || []).filter((n: { branchName: string }) => n.branchName !== branchName);
+            snap.edges = (snap.edges || [])
+              .filter((e: { child: string }) => e.child !== branchName)
+              .map((e: { parent: string; child: string }) =>
+                e.parent === branchName ? { ...e, parent: snap.defaultBranch } : e
+              );
+            updates.cachedSnapshotJson = JSON.stringify(snap);
+          } catch { /* ignore */ }
+        }
+
+        // Remove from cachedEdgesJson
+        if (repoPin.cachedEdgesJson) {
+          try {
+            const edges = JSON.parse(repoPin.cachedEdgesJson) as Array<{ parent: string; child: string }>;
+            updates.cachedEdgesJson = JSON.stringify(
+              edges
+                .filter((e) => e.child !== branchName)
+                .map((e) => e.parent === branchName ? { ...e, parent: repoPin.baseBranch || "main" } : e)
+            );
+          } catch { /* ignore */ }
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await db.update(schema.repoPins).set(updates).where(eq(schema.repoPins.id, repoPin.id));
+        }
+      }
 
       // 1. Update treeSpecs (Branch Graph structure - highest priority)
       try {
@@ -1380,6 +1421,16 @@ branchRouter.post("/delete", async (c) => {
           and(
             eq(schema.instructionsLog.repoId, repoId),
             eq(schema.instructionsLog.branchName, branchName)
+          )
+        );
+
+      // Delete worktree activity
+      await db
+        .delete(schema.worktreeActivity)
+        .where(
+          and(
+            eq(schema.worktreeActivity.repoId, repoId),
+            eq(schema.worktreeActivity.branchName, branchName)
           )
         );
     } catch (err) {

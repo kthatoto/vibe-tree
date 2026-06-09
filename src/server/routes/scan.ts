@@ -443,6 +443,15 @@ scanRouter.post("/", async (c) => {
           db.delete(schema.branchLinks).where(
             and(eq(schema.branchLinks.repoId, repoId), notInArray(schema.branchLinks.branchName, branchNames))
           ),
+          // Remove any PR links attached to the default branch (e.g. release PRs
+          // develop -> main) so the default branch never renders as merged.
+          db.delete(schema.branchLinks).where(
+            and(
+              eq(schema.branchLinks.repoId, repoId),
+              eq(schema.branchLinks.branchName, currentDefaultBranch),
+              eq(schema.branchLinks.linkType, "pr")
+            )
+          ),
           db.delete(schema.worktreeActivity).where(
             and(eq(schema.worktreeActivity.repoId, repoId), notInArray(schema.worktreeActivity.branchName, branchNames))
           ),
@@ -789,6 +798,9 @@ scanRouter.post("/", async (c) => {
         const freshPrMap = new Map<string, typeof freshPrs[0]>();
         for (const pr of freshPrs) {
           if (!localBranchSet.has(pr.branch)) continue;
+          // Skip PRs whose head is the default branch (e.g. release PRs like
+          // develop -> main). They must not mark the default branch node as merged.
+          if (pr.branch === currentDefaultBranch) continue;
           const existing = freshPrMap.get(pr.branch);
           if (!existing || (existing.state.toLowerCase() !== "open" && pr.state.toLowerCase() === "open")) {
             freshPrMap.set(pr.branch, pr);

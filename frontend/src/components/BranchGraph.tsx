@@ -1900,10 +1900,14 @@ export default function BranchGraph({
 
             if (isMetaKey) {
               // Cmd/Ctrl+click:
-              // - With no active selection: open the PR link in a new tab (if any).
-              // - With an active selection: toggle this branch individually so the
-              //   selection can be refined node-by-node (Shift+click selects a range).
-              if (selectedBranches.size === 0) {
+              // - When this branch is the only focus (nothing selected, or it is the
+              //   sole current selection): open the PR link in a new tab (if any).
+              // - Otherwise: toggle this branch individually so the selection can be
+              //   refined node-by-node (Shift+click selects a range).
+              const isSoleSelection =
+                selectedBranches.size === 0 ||
+                (selectedBranches.size === 1 && selectedBranches.has(id));
+              if (isSoleSelection) {
                 if (prLink?.url) {
                   window.open(prLink.url, "_blank");
                   return;

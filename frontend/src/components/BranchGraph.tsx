@@ -1899,12 +1899,16 @@ export default function BranchGraph({
             const isShiftKey = e.shiftKey;
 
             if (isMetaKey) {
-              // Cmd/Ctrl+click: open PR link in new tab (if PR exists)
-              if (prLink?.url) {
-                window.open(prLink.url, "_blank");
-                return;
+              // Cmd/Ctrl+click:
+              // - With no active selection: open the PR link in a new tab (if any).
+              // - With an active selection: toggle this branch individually so the
+              //   selection can be refined node-by-node (Shift+click selects a range).
+              if (selectedBranches.size === 0) {
+                if (prLink?.url) {
+                  window.open(prLink.url, "_blank");
+                  return;
+                }
               }
-              // Fallback: toggle selection if no PR
               const newSelection = new Set(selectedBranches);
               if (newSelection.has(id)) {
                 newSelection.delete(id);

@@ -914,6 +914,27 @@ export default function TreeDashboard() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [selectedBranches.size, selectedPin, triggerScan]);
 
+  // Add every descendant of the currently selected branches to the selection
+  const selectWithDescendants = useCallback(() => {
+    const edges = snapshotRef.current?.edges ?? [];
+    setSelectedBranches((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set(prev);
+      const stack = [...prev];
+      while (stack.length > 0) {
+        const branch = stack.pop()!;
+        for (const e of edges) {
+          if (e.parent === branch && !next.has(e.child)) {
+            next.add(e.child);
+            stack.push(e.child);
+          }
+        }
+      }
+      return next;
+    });
+    setMultiSelectMode(true);
+  }, []);
+
   // Load instruction when selectedNode changes (with caching)
   useEffect(() => {
     if (!snapshot?.repoId || !selectedNode) {
@@ -3364,6 +3385,7 @@ export default function TreeDashboard() {
                       setSelectedBranches(new Set());
                       setSelectionAnchor(null);
                     }}
+                    onSelectDescendants={selectWithDescendants}
                     repoId={snapshot.repoId}
                     localPath={selectedPin.localPath}
                     branchLinks={branchLinks}
@@ -3431,6 +3453,7 @@ export default function TreeDashboard() {
                       setSelectedBranches(new Set());
                       setSelectionAnchor(null);
                     }}
+                    onSelectDescendants={selectWithDescendants}
                     onWorktreeCreated={() => triggerScan(selectedPin.localPath)}
                     onStartPlanning={(branchName, instruction) => {
                       setPendingPlanning({ branchName, instruction });

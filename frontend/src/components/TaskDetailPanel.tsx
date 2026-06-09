@@ -184,6 +184,8 @@ interface TaskDetailPanelProps {
   onBranchLinksChange?: (branchName: string, links: BranchLink[]) => void;
   // Callback when branch is deleted (for immediate UI update)
   onBranchDeleted?: (branchName: string, reparentedEdges?: Array<{ child: string; newParent: string }>) => void;
+  // Add this branch and all its descendants to the multi-select selection
+  onSelectDescendants?: () => void;
   // For partial status refresh (instead of full scan)
   edges?: { parent: string; child: string }[];
   onBranchStatusRefresh?: (updates: Record<string, BranchStatusUpdate>) => void;
@@ -215,6 +217,7 @@ export function TaskDetailPanel({
   branchLinksFromParent,
   onBranchLinksChange,
   onBranchDeleted,
+  onSelectDescendants,
   edges,
   onBranchStatusRefresh,
   onBranchStatusRefreshStart,
@@ -684,6 +687,9 @@ export function TaskDetailPanel({
     }
   }, [localPath, edges, defaultBranch, getAffectedBranches, onBranchStatusRefresh, onBranchStatusRefreshStart, onBranchStatusRefreshEnd]);
 
+  // Number of descendant branches below this one (for the "select descendants" action)
+  const descendantCount = onSelectDescendants ? getAffectedBranches(branchName).length - 1 : 0;
+
   const handlePull = async () => {
     setPulling(true);
     setError(null);
@@ -1149,6 +1155,16 @@ export function TaskDetailPanel({
           <div className="task-detail-panel__worktree-info">
             <span className="task-detail-panel__active-badge">Active</span>
             <div className="task-detail-panel__branch-actions">
+              {/* Select this branch and all descendants below it */}
+              {descendantCount > 0 && (
+                <button
+                  className="task-detail-panel__fetch-btn"
+                  onClick={onSelectDescendants}
+                  title="Select this branch and all descendants below it"
+                >
+                  {`Select descendants (${descendantCount})`}
+                </button>
+              )}
               {/* Behind parent - show Sync button */}
               {node?.aheadBehind && node.aheadBehind.behind > 0 && parentBranch && (
                 <button
@@ -1210,6 +1226,16 @@ export function TaskDetailPanel({
             >
               {checkingOut ? "Checking out..." : "Checkout"}
             </button>
+            {/* Select this branch and all descendants below it */}
+            {descendantCount > 0 && (
+              <button
+                className="task-detail-panel__fetch-btn"
+                onClick={onSelectDescendants}
+                title="Select this branch and all descendants below it"
+              >
+                {`Select descendants (${descendantCount})`}
+              </button>
+            )}
             {node?.remoteAheadBehind && node.remoteAheadBehind.behind > 0 && (
               <button
                 className="task-detail-panel__pull-btn"

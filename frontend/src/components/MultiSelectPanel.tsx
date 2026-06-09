@@ -19,6 +19,8 @@ interface MultiSelectPanelProps {
   onCheckAll: () => void;
   onUncheckAll: () => void;
   onClearSelection: () => void;
+  // Add all descendants of the currently selected branches to the selection
+  onSelectDescendants?: () => void;
   // For bulk operations
   repoId: string;
   localPath: string;
@@ -42,6 +44,7 @@ export default function MultiSelectPanel({
   onCheckAll,
   onUncheckAll,
   onClearSelection,
+  onSelectDescendants,
   repoId,
   localPath,
   branchLinks,
@@ -56,6 +59,24 @@ export default function MultiSelectPanel({
   onBranchesDeleted,
 }: MultiSelectPanelProps) {
   const selectedList = useMemo(() => [...selectedBranches], [selectedBranches]);
+
+  // How many not-yet-selected descendants the "select descendants" action would add
+  const descendantsToAdd = useMemo(() => {
+    if (selectedBranches.size === 0) return 0;
+    const toAdd = new Set<string>();
+    const stack = [...selectedBranches];
+    while (stack.length > 0) {
+      const branch = stack.pop()!;
+      for (const e of edges) {
+        if (e.parent === branch && !selectedBranches.has(e.child) && !toAdd.has(e.child)) {
+          toAdd.add(e.child);
+          stack.push(e.child);
+        }
+      }
+    }
+    return toAdd.size;
+  }, [selectedBranches, edges]);
+
   const displayLimit = 10;
   const displayedBranches = selectedList.slice(0, displayLimit);
   const remainingCount = selectedList.length - displayLimit;
@@ -696,15 +717,26 @@ export default function MultiSelectPanel({
     <div className="task-detail-panel">
       <div className="task-detail-panel__header">
         <h3>{selectedBranches.size} branches selected</h3>
-        <button
-          className="task-detail-panel__close"
-          onClick={onClearSelection}
-          title="Clear selection"
-          style={{ marginLeft: "auto" }}
-          disabled={isOperationRunning}
-        >
-          ×
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          {onSelectDescendants && descendantsToAdd > 0 && (
+            <button
+              className="task-detail-panel__fetch-btn"
+              onClick={onSelectDescendants}
+              title="Add all descendants of the selected branches to the selection"
+              disabled={isOperationRunning}
+            >
+              {`+ Descendants (${descendantsToAdd})`}
+            </button>
+          )}
+          <button
+            className="task-detail-panel__close"
+            onClick={onClearSelection}
+            title="Clear selection"
+            disabled={isOperationRunning}
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       <div style={{ padding: "16px", flex: 1, overflowY: "auto" }}>

@@ -935,6 +935,17 @@ export default function TreeDashboard() {
     setMultiSelectMode(true);
   }, []);
 
+  // Use the repository name as the browser tab title (helps distinguish project tabs)
+  useEffect(() => {
+    const repoName = selectedPin?.label || selectedPin?.repoId || snapshot?.repoId;
+    if (repoName) {
+      document.title = repoName;
+    }
+    return () => {
+      document.title = "vibe-tree";
+    };
+  }, [selectedPin?.label, selectedPin?.repoId, snapshot?.repoId]);
+
   // Load instruction when selectedNode changes (with caching)
   useEffect(() => {
     if (!snapshot?.repoId || !selectedNode) {

@@ -2924,12 +2924,16 @@ export default function TreeDashboard() {
 
                               branchesWithDesc.sort((a, b) => a.desc.localeCompare(b.desc));
 
-                              // Group by prefix (e.g. "tp09" from "tp09-02")
-                              // Chain linearly within each group, each group starts from defaultBranch
+                              // Group by prefix (e.g. "shr01" from "shr01-02 #123 PBI-2[7] foo")
+                              // Chain linearly within each group, each group starts from defaultBranch.
+                              // Only the leading token (before whitespace) defines the prefix; the
+                              // trailing free text may itself contain dashes (e.g. "PBI-2[7]") which
+                              // must NOT be treated as the prefix separator.
                               const groups = new Map<string, { branch: string; desc: string }[]>();
                               for (const item of branchesWithDesc) {
-                                const lastDash = item.desc.lastIndexOf("-");
-                                const group = lastDash > 0 ? item.desc.slice(0, lastDash) : item.desc;
+                                const token = item.desc.split(/\s+/)[0];
+                                const lastDash = token.lastIndexOf("-");
+                                const group = lastDash > 0 ? token.slice(0, lastDash) : token;
                                 if (!groups.has(group)) groups.set(group, []);
                                 groups.get(group)!.push(item);
                               }

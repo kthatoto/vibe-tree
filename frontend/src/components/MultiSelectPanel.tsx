@@ -5,6 +5,25 @@ import { LabelChip, UserChip, TeamChip } from "./atoms/Chips";
 import { WorktreeSelector } from "./atoms/WorktreeSelector";
 import "./TaskDetailPanel.css";
 
+// Max number of branches to operate on concurrently for bulk PR operations.
+const BULK_CONCURRENCY = 8;
+
+// Run an async task over items with bounded concurrency.
+async function forEachWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  task: (item: T) => Promise<void>
+): Promise<void> {
+  let index = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (index < items.length) {
+      const item = items[index++];
+      await task(item);
+    }
+  });
+  await Promise.all(workers);
+}
+
 interface BulkOperationProgress {
   total: number;
   completed: number;
@@ -390,215 +409,138 @@ export default function MultiSelectPanel({
     });
   };
 
-  // Apply labels (add or remove based on mode)
-  const handleApplyLabels = async () => {
-    if (pendingLabels.size === 0) return;
+  // Run a one-op-per-item bulk operation across branches in parallel (bounded concurrency).
+  const runBulkPerItem = async <T,>(
+    items: T[],
+    labelOf: (item: T) => string,
+    run: (item: T) => Promise<{ success: boolean; message?: string }>
+  ) => {
+    if (items.length === 0) return;
+    setProgress({ total: items.length, completed: 0, current: null, results: [], status: "running" });
+    const results: BulkOperationProgress["results"] = [];
+    let completed = 0;
+    await forEachWithConcurrency(items, BULK_CONCURRENCY, async (item) => {
+      const label = labelOf(item);
+      setProgress((p) => ({ ...p, current: label }));
+      try {
+        const r = await run(item);
+        results.push({ branch: label, success: r.success, message: r.message });
+      } catch (e: unknown) {
+        results.push({ branch: label, success: false, message: e instanceof Error ? e.message : String(e) });
+      }
+      completed++;
+      setProgress((p) => ({ ...p, completed, results: [...results] }));
+    });
+    setProgress((p) => ({ ...p, current: null, status: "done" }));
+  };
+
+  // Apply pending labels AND reviewers together in one bulk operation.
+  // Branches are processed in parallel; within a single PR the operations run
+  // sequentially so concurrent edits don't race on the same PR.
+  const handleApply = async () => {
+    if (pendingLabels.size === 0 && pendingReviewers.size === 0) return;
     setShowLabelDropdown(false);
+    setShowReviewerDropdown(false);
 
     const targetBranches = branchesWithPRs;
-    const labelsToApply = [...pendingLabels];
-    const totalOps = targetBranches.length * labelsToApply.length;
-    const isRemove = labelMode === "remove";
+    const labels = [...pendingLabels];
+    const reviewers = [...pendingReviewers];
+    const labelRemove = labelMode === "remove";
+    const reviewerRemove = reviewerMode === "remove";
+    const totalOps = targetBranches.length * (labels.length + reviewers.length);
+    if (totalOps === 0) return;
 
-    setProgress({
-      total: totalOps,
-      completed: 0,
-      current: null,
-      results: [],
-      status: "running",
-    });
+    setProgress({ total: totalOps, completed: 0, current: null, results: [], status: "running" });
 
     const results: BulkOperationProgress["results"] = [];
     let completed = 0;
+    const record = (branch: string, success: boolean, message?: string) => {
+      results.push({ branch, success, message });
+      completed++;
+      setProgress((p) => ({ ...p, completed, results: [...results] }));
+    };
 
-    for (const branch of targetBranches) {
+    await forEachWithConcurrency(targetBranches, BULK_CONCURRENCY, async (branch) => {
       const linkId = getPRLinkId(branch);
-      if (!linkId) {
-        for (const label of labelsToApply) {
-          results.push({ branch: `${branch} (${label})`, success: false, message: "No PR found" });
-          completed++;
-        }
-        setProgress((p) => ({ ...p, completed, results: [...results] }));
-        continue;
-      }
-
-      for (const label of labelsToApply) {
-        setProgress((p) => ({ ...p, current: `${branch}: ${isRemove ? "-" : "+"}${label}` }));
+      for (const label of labels) {
+        const opLabel = `${branch} (${labelRemove ? "−" : "+"}${label})`;
+        if (!linkId) { record(opLabel, false, "No PR found"); continue; }
+        setProgress((p) => ({ ...p, current: opLabel }));
         try {
-          if (isRemove) {
+          if (labelRemove) {
             await api.removePrLabel(linkId, label);
           } else {
             await api.addPrLabel(linkId, label);
           }
-          results.push({ branch: `${branch} (${label})`, success: true });
-        } catch (e) {
-          results.push({ branch: `${branch} (${label})`, success: false, message: String(e) });
+          record(opLabel, true);
+        } catch (e: unknown) {
+          record(opLabel, false, e instanceof Error ? e.message : String(e));
         }
-        completed++;
-        setProgress((p) => ({ ...p, completed, results: [...results] }));
       }
-    }
-
-    setProgress((p) => ({ ...p, current: null, status: "done" }));
-    setPendingLabels(new Set());
-    onRefreshBranches?.();
-  };
-
-  // Apply reviewers (add or remove based on mode)
-  const handleApplyReviewers = async () => {
-    if (pendingReviewers.size === 0) return;
-    setShowReviewerDropdown(false);
-
-    const targetBranches = branchesWithPRs;
-    const reviewersToApply = [...pendingReviewers];
-    const totalOps = targetBranches.length * reviewersToApply.length;
-    const isRemove = reviewerMode === "remove";
-
-    setProgress({
-      total: totalOps,
-      completed: 0,
-      current: null,
-      results: [],
-      status: "running",
-    });
-
-    const results: BulkOperationProgress["results"] = [];
-    let completed = 0;
-
-    for (const branch of targetBranches) {
-      const linkId = getPRLinkId(branch);
-      if (!linkId) {
-        for (const reviewer of reviewersToApply) {
-          results.push({ branch: `${branch} (${reviewer})`, success: false, message: "No PR found" });
-          completed++;
-        }
-        setProgress((p) => ({ ...p, completed, results: [...results] }));
-        continue;
-      }
-
-      for (const reviewer of reviewersToApply) {
-        setProgress((p) => ({ ...p, current: `${branch}: ${isRemove ? "-" : "+"}${reviewer}` }));
+      for (const reviewer of reviewers) {
+        const opLabel = `${branch} (${reviewerRemove ? "−" : "+"}${reviewer})`;
+        if (!linkId) { record(opLabel, false, "No PR found"); continue; }
+        setProgress((p) => ({ ...p, current: opLabel }));
         try {
-          if (isRemove) {
+          if (reviewerRemove) {
             await api.removePrReviewer(linkId, reviewer);
           } else {
             await api.addPrReviewer(linkId, reviewer);
           }
-          results.push({ branch: `${branch} (${reviewer})`, success: true });
-        } catch (e) {
-          results.push({ branch: `${branch} (${reviewer})`, success: false, message: String(e) });
+          record(opLabel, true);
+        } catch (e: unknown) {
+          record(opLabel, false, e instanceof Error ? e.message : String(e));
         }
-        completed++;
-        setProgress((p) => ({ ...p, completed, results: [...results] }));
       }
-    }
+    });
 
     setProgress((p) => ({ ...p, current: null, status: "done" }));
+    setPendingLabels(new Set());
     setPendingReviewers(new Set());
     onRefreshBranches?.();
   };
 
-  // Sync base branches to match Graph parent
+  // Sync base branches to match Graph parent (parallel)
   const handleSyncBaseBranches = async () => {
     if (mismatchedBaseBranches.length === 0) return;
-
-    setProgress({
-      total: mismatchedBaseBranches.length,
-      completed: 0,
-      current: null,
-      results: [],
-      status: "running",
-    });
-
-    const results: BulkOperationProgress["results"] = [];
-
-    for (const { branch, linkId, suggestedBase } of mismatchedBaseBranches) {
-      setProgress((p) => ({ ...p, current: `${branch}: → ${suggestedBase}` }));
-      try {
+    await runBulkPerItem(
+      mismatchedBaseBranches,
+      (m) => `${m.branch}: → ${m.suggestedBase}`,
+      async ({ linkId, suggestedBase }) => {
         await api.changePrBaseBranch(linkId, suggestedBase);
-        results.push({ branch, success: true });
-      } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : String(e);
-        results.push({ branch, success: false, message });
+        return { success: true };
       }
-      setProgress((p) => ({ ...p, completed: p.completed + 1, results: [...results] }));
-    }
-
-    setProgress((p) => ({ ...p, current: null, status: "done" }));
+    );
     onRefreshBranches?.();
   };
 
-  // Refresh all PRs
+  // Refresh all PRs (parallel)
   const handleRefreshPRs = async () => {
-    const targetBranches = branchesWithPRs;
-    if (targetBranches.length === 0) return;
-
-    setProgress({
-      total: targetBranches.length,
-      completed: 0,
-      current: null,
-      results: [],
-      status: "running",
-    });
-
-    const results: BulkOperationProgress["results"] = [];
-
-    for (const branch of targetBranches) {
-      setProgress((p) => ({ ...p, current: branch }));
-
-      const linkId = getPRLinkId(branch);
-      if (!linkId) {
-        results.push({ branch, success: false, message: "No PR found" });
-        setProgress((p) => ({ ...p, completed: p.completed + 1, results: [...results] }));
-        continue;
-      }
-
-      try {
+    if (branchesWithPRs.length === 0) return;
+    await runBulkPerItem(
+      branchesWithPRs,
+      (branch) => branch,
+      async (branch) => {
+        const linkId = getPRLinkId(branch);
+        if (!linkId) return { success: false, message: "No PR found" };
         await api.refreshBranchLink(linkId);
-        results.push({ branch, success: true });
-      } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : String(e);
-        results.push({ branch, success: false, message });
+        return { success: true };
       }
-      setProgress((p) => ({ ...p, completed: p.completed + 1, results: [...results] }));
-    }
-
-    setProgress((p) => ({ ...p, current: null, status: "done" }));
+    );
     onRefreshBranches?.();
   };
 
-  // Detect PRs for branches without PR links
+  // Detect PRs for branches without PR links (parallel)
   const handleDetectPRs = async () => {
     if (branchesWithoutPRs.length === 0) return;
-
-    setProgress({
-      total: branchesWithoutPRs.length,
-      completed: 0,
-      current: null,
-      results: [],
-      status: "running",
-    });
-
-    const results: BulkOperationProgress["results"] = [];
-
-    for (const branch of branchesWithoutPRs) {
-      setProgress((p) => ({ ...p, current: branch }));
-
-      try {
+    await runBulkPerItem(
+      branchesWithoutPRs,
+      (branch) => branch,
+      async (branch) => {
         const result = await api.detectPr(repoId, branch);
-        if (result.found) {
-          results.push({ branch, success: true, message: `PR #${result.link?.number}` });
-        } else {
-          results.push({ branch, success: true, message: "No PR found" });
-        }
-      } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : String(e);
-        results.push({ branch, success: false, message });
+        return { success: true, message: result.found ? `PR #${result.link?.number}` : "No PR found" };
       }
-      setProgress((p) => ({ ...p, completed: p.completed + 1, results: [...results] }));
-    }
-
-    setProgress((p) => ({ ...p, current: null, status: "done" }));
+    );
     onRefreshBranches?.();
   };
 
@@ -701,14 +643,14 @@ export default function MultiSelectPanel({
   };
 
   // Close dropdown and reset pending
+  // Keep pending selections when closing a dropdown so labels + reviewers can be
+  // selected across both dropdowns and applied together. They are cleared on Apply.
   const closeLabelDropdown = () => {
     setShowLabelDropdown(false);
-    setPendingLabels(new Set());
   };
 
   const closeReviewerDropdown = () => {
     setShowReviewerDropdown(false);
-    setPendingReviewers(new Set());
   };
 
   const isOperationRunning = progress.status === "running";
@@ -1116,23 +1058,23 @@ export default function MultiSelectPanel({
                     }}
                   >
                     <span style={{ fontSize: 11, color: "#9ca3af" }}>
-                      {pendingLabels.size} selected
+                      {pendingLabels.size} labels, {pendingReviewers.size} reviewers
                     </span>
                     <button
-                      onClick={handleApplyLabels}
-                      disabled={pendingLabels.size === 0}
+                      onClick={handleApply}
+                      disabled={pendingLabels.size + pendingReviewers.size === 0}
                       style={{
                         padding: "6px 16px",
-                        background: pendingLabels.size === 0 ? "#374151" : labelMode === "remove" ? "#ef4444" : "#10b981",
+                        background: pendingLabels.size + pendingReviewers.size === 0 ? "#374151" : "#10b981",
                         border: "none",
                         borderRadius: 4,
-                        color: pendingLabels.size === 0 ? "#6b7280" : "#fff",
+                        color: pendingLabels.size + pendingReviewers.size === 0 ? "#6b7280" : "#fff",
                         fontSize: 12,
                         fontWeight: 500,
-                        cursor: pendingLabels.size === 0 ? "not-allowed" : "pointer",
+                        cursor: pendingLabels.size + pendingReviewers.size === 0 ? "not-allowed" : "pointer",
                       }}
                     >
-                      {labelMode === "remove" ? "Remove" : "Add"}
+                      Apply
                     </button>
                   </div>
                 </div>
@@ -1290,27 +1232,49 @@ export default function MultiSelectPanel({
                     }}
                   >
                     <span style={{ fontSize: 11, color: "#9ca3af" }}>
-                      {pendingReviewers.size} selected
+                      {pendingLabels.size} labels, {pendingReviewers.size} reviewers
                     </span>
                     <button
-                      onClick={handleApplyReviewers}
-                      disabled={pendingReviewers.size === 0}
+                      onClick={handleApply}
+                      disabled={pendingLabels.size + pendingReviewers.size === 0}
                       style={{
                         padding: "6px 16px",
-                        background: pendingReviewers.size === 0 ? "#374151" : reviewerMode === "remove" ? "#ef4444" : "#10b981",
+                        background: pendingLabels.size + pendingReviewers.size === 0 ? "#374151" : "#10b981",
                         border: "none",
                         borderRadius: 4,
-                        color: pendingReviewers.size === 0 ? "#6b7280" : "#fff",
+                        color: pendingLabels.size + pendingReviewers.size === 0 ? "#6b7280" : "#fff",
                         fontSize: 12,
                         fontWeight: 500,
-                        cursor: pendingReviewers.size === 0 ? "not-allowed" : "pointer",
+                        cursor: pendingLabels.size + pendingReviewers.size === 0 ? "not-allowed" : "pointer",
                       }}
                     >
-                      {reviewerMode === "remove" ? "Remove" : "Add"}
+                      Apply
                     </button>
                   </div>
                 </div>
               </Dropdown>
+
+              {/* Combined Apply: applies pending labels + reviewers together (in parallel) */}
+              {(pendingLabels.size > 0 || pendingReviewers.size > 0) && (
+                <button
+                  onClick={handleApply}
+                  disabled={isOperationRunning}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: isOperationRunning ? "#1f2937" : "#065f46",
+                    border: `1px solid ${isOperationRunning ? "#374151" : "#10b981"}`,
+                    borderRadius: 6,
+                    color: isOperationRunning ? "#6b7280" : "#6ee7b7",
+                    cursor: isOperationRunning ? "not-allowed" : "pointer",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    textAlign: "left",
+                  }}
+                >
+                  ✓ Apply pending ({pendingLabels.size} labels, {pendingReviewers.size} reviewers)
+                </button>
+              )}
             </div>
           </div>
         )}

@@ -332,8 +332,10 @@ export default function TreeDashboard() {
   const [refreshingBranches, setRefreshingBranches] = useState<Set<string>>(new Set());
   // Branches pending deletion confirmation (d shortcut); null = no modal
   const [deleteConfirmBranches, setDeleteConfirmBranches] = useState<string[] | null>(null);
-  const [deletingBranches, setDeletingBranches] = useState(false);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
+  // Tombstones for optimistically-deleted branches: name -> expiry timestamp.
+  // Incoming scans drop these so a delete in flight can't resurrect a branch.
+  const recentlyDeletedRef = useRef<Map<string, number>>(new Map());
   // Field-level timestamps for conflict resolution with scan results
   const [fieldTimestamps, setFieldTimestamps] = useState<Map<string, NodeFieldTimestamps>>(new Map());
   // Scan start time for timestamp-based merge protection
@@ -1001,24 +1003,27 @@ export default function TreeDashboard() {
     setDeleteConfirmBranches(branches);
   }, [selectedBranches]);
 
-  // Delete the confirmed branches (serially to avoid git index lock conflicts)
-  const confirmDeleteBranches = useCallback(async () => {
-    if (!deleteConfirmBranches || !selectedPin || deletingBranches) return;
-    setDeletingBranches(true);
-    const deleted: string[] = [];
-    for (const branch of deleteConfirmBranches) {
-      try {
-        await api.deleteBranch(selectedPin.localPath, branch, true);
-        deleted.push(branch);
-      } catch (err) {
-        console.error("Failed to delete branch:", branch, err);
-      }
-    }
-    setDeletingBranches(false);
+  // Delete the confirmed branches optimistically: close the modal and remove them
+  // from the graph immediately, then fire the actual deletions in parallel. The
+  // branches are tombstoned so an in-flight scan can't resurrect them.
+  const confirmDeleteBranches = useCallback(() => {
+    if (!deleteConfirmBranches || !selectedPin) return;
+    const branches = deleteConfirmBranches;
+    const localPath = selectedPin.localPath;
+    // Optimistic UI
     setDeleteConfirmBranches(null);
-    applyBranchesDeleted(deleted);
-    if (deleted.length > 0) triggerScan(selectedPin.localPath);
-  }, [deleteConfirmBranches, selectedPin, deletingBranches, applyBranchesDeleted, triggerScan]);
+    applyBranchesDeleted(branches);
+    const expiry = Date.now() + 30000;
+    branches.forEach((b) => recentlyDeletedRef.current.set(b, expiry));
+    // Fire actual deletions in parallel in the background
+    void Promise.all(
+      branches.map((branch) =>
+        api.deleteBranch(localPath, branch, true).catch((err) => {
+          console.error("Failed to delete branch:", branch, err);
+        })
+      )
+    );
+  }, [deleteConfirmBranches, selectedPin, applyBranchesDeleted]);
 
   // Keyboard shortcuts for selection
   // Escape: clear · r: refresh PRs · Shift+R: full scan · c: select descendants · d: delete (confirm)
@@ -1172,6 +1177,27 @@ export default function TreeDashboard() {
       }
 
       if (!data.snapshot) return;
+
+      // Drop optimistically-deleted branches so an in-flight scan can't resurrect them
+      if (recentlyDeletedRef.current.size > 0) {
+        const now = Date.now();
+        for (const [b, exp] of recentlyDeletedRef.current) {
+          if (exp <= now) recentlyDeletedRef.current.delete(b);
+        }
+        const tombstoned = recentlyDeletedRef.current;
+        if (tombstoned.size > 0) {
+          const snap = data.snapshot;
+          data.snapshot = {
+            ...snap,
+            branches: snap.branches.filter((b) => !tombstoned.has(b)),
+            nodes: snap.nodes.filter((n) => !tombstoned.has(n.branchName)),
+            edges: snap.edges
+              .filter((e) => !tombstoned.has(e.child))
+              .map((e) => (tombstoned.has(e.parent) ? { ...e, parent: snap.defaultBranch } : e)),
+          };
+        }
+      }
+
       const newVersion = data.version ?? 0;
 
       // Skip if version is not newer (prevent out-of-order updates)
@@ -4596,7 +4622,7 @@ export default function TreeDashboard() {
 
       {/* Delete Branches Confirm Modal (d shortcut) */}
       {deleteConfirmBranches !== null && (
-        <div className="modal-overlay" onClick={() => !deletingBranches && setDeleteConfirmBranches(null)}>
+        <div className="modal-overlay" onClick={() => setDeleteConfirmBranches(null)}>
           <div className="modal modal--small" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <h2>Delete {deleteConfirmBranches.length} {deleteConfirmBranches.length === 1 ? "branch" : "branches"}?</h2>
@@ -4612,11 +4638,11 @@ export default function TreeDashboard() {
               </p>
             </div>
             <div className="modal__footer">
-              <button className="btn-secondary" onClick={() => setDeleteConfirmBranches(null)} disabled={deletingBranches}>
+              <button className="btn-secondary" onClick={() => setDeleteConfirmBranches(null)}>
                 Cancel
               </button>
-              <button ref={deleteButtonRef} className="btn-danger" onClick={confirmDeleteBranches} disabled={deletingBranches}>
-                {deletingBranches ? "Deleting..." : "Delete"}
+              <button ref={deleteButtonRef} className="btn-danger" onClick={confirmDeleteBranches}>
+                Delete
               </button>
             </div>
           </div>

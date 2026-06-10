@@ -89,12 +89,14 @@ interface GitHubPRInfo {
   reviewers: string[];
   projectStatus?: string;
   baseBranch: string;
+  mergeable: string;
+  mergeStateStatus: string;
 }
 
 async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<GitHubPRInfo | null> {
   try {
     const result = (await execAsync(
-      `gh pr view ${prNumber} --repo "${repoId}" --json number,title,state,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems,baseRefName`
+      `gh pr view ${prNumber} --repo "${repoId}" --json number,title,state,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems,baseRefName,mergeable,mergeStateStatus`
     )).trim();
     const data = JSON.parse(result);
 
@@ -214,6 +216,8 @@ async function fetchGitHubPRInfo(repoId: string, prNumber: number): Promise<GitH
       reviewers,
       projectStatus,
       baseBranch: data.baseRefName || "",
+      mergeable: data.mergeable || "UNKNOWN",
+      mergeStateStatus: data.mergeStateStatus || "UNKNOWN",
     };
   } catch (err) {
     console.error(`Failed to fetch PR #${prNumber}:`, err);
@@ -436,6 +440,8 @@ branchLinksRouter.post("/", async (c) => {
   let reviewers: string | null = null;
   let projectStatus: string | null = null;
   let baseBranch: string | null = null;
+  let mergeable: string | null = null;
+  let mergeStateStatus: string | null = null;
 
   if (input.number) {
     if (input.linkType === "issue") {
@@ -458,6 +464,8 @@ branchLinksRouter.post("/", async (c) => {
         reviewers = JSON.stringify(prInfo.reviewers);
         projectStatus = prInfo.projectStatus ?? null;
         baseBranch = prInfo.baseBranch || null;
+        mergeable = prInfo.mergeable ?? null;
+        mergeStateStatus = prInfo.mergeStateStatus ?? null;
         // Cache label colors at repo level
         await cacheRepoLabels(input.repoId, prInfo.labels);
       }
@@ -481,6 +489,8 @@ branchLinksRouter.post("/", async (c) => {
       reviewers,
       projectStatus,
       baseBranch,
+      mergeable,
+      mergeStateStatus,
       createdAt: now,
       updatedAt: now,
     })
@@ -652,6 +662,8 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
   let reviewers = existing.reviewers;
   let projectStatus = existing.projectStatus;
   let baseBranch = existing.baseBranch;
+  let mergeable = existing.mergeable;
+  let mergeStateStatus = existing.mergeStateStatus;
 
   if (existing.linkType === "issue") {
     const issueInfo = await fetchGitHubIssueInfo(existing.repoId, existing.number);
@@ -673,6 +685,8 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
       reviewers = JSON.stringify(prInfo.reviewers);
       projectStatus = prInfo.projectStatus ?? null;
       baseBranch = prInfo.baseBranch || null;
+      mergeable = prInfo.mergeable ?? null;
+      mergeStateStatus = prInfo.mergeStateStatus ?? null;
       // Cache label colors at repo level
       await cacheRepoLabels(existing.repoId, prInfo.labels);
     }
@@ -690,6 +704,8 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
       reviewers,
       projectStatus,
       baseBranch,
+      mergeable,
+      mergeStateStatus,
       updatedAt: now,
     })
     .where(eq(schema.branchLinks.id, id));
@@ -771,7 +787,7 @@ branchLinksRouter.post("/detect", async (c) => {
   try {
     // First try to find an open PR
     let result = (await execAsync(
-      `gh pr list --head "${input.branchName}" --repo "${input.repoId}" --state open --json number,title,state,url,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems,baseRefName --limit 1`
+      `gh pr list --head "${input.branchName}" --repo "${input.repoId}" --state open --json number,title,state,url,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems,baseRefName,mergeable,mergeStateStatus --limit 1`
     )).trim();
     let data: Record<string, unknown> | null = null;
     const parsed = result ? JSON.parse(result) : [];
@@ -780,7 +796,7 @@ branchLinksRouter.post("/detect", async (c) => {
     } else {
       // Fall back to gh pr view which returns the latest PR (may be closed/merged)
       result = (await execAsync(
-        `gh pr view "${input.branchName}" --repo "${input.repoId}" --json number,title,state,url,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems,baseRefName`
+        `gh pr view "${input.branchName}" --repo "${input.repoId}" --json number,title,state,url,reviewDecision,statusCheckRollup,labels,reviewRequests,reviews,projectItems,baseRefName,mergeable,mergeStateStatus`
       )).trim();
       data = result ? JSON.parse(result) : null;
     }
@@ -926,6 +942,8 @@ branchLinksRouter.post("/detect", async (c) => {
       reviewers: JSON.stringify(reviewers),
       projectStatus,
       baseBranch: data.baseRefName || null,
+      mergeable: (data.mergeable as string) || null,
+      mergeStateStatus: (data.mergeStateStatus as string) || null,
       updatedAt: now,
     };
 

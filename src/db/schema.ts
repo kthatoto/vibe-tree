@@ -275,6 +275,8 @@ export const branchLinks = sqliteTable("branch_links", {
   reviewers: text("reviewers"), // JSON array of reviewer logins
   projectStatus: text("project_status"), // GitHub Projects status
   baseBranch: text("base_branch"), // PR: base branch (target branch)
+  mergeable: text("mergeable"), // PR: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN' (cached)
+  mergeStateStatus: text("merge_state_status"), // PR: 'CLEAN' | 'BLOCKED' | 'BEHIND' | 'DIRTY' | ... (cached)
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

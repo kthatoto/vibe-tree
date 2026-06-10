@@ -334,9 +334,7 @@ export function TaskDetailPanel({
   const [checkingPR, setCheckingPR] = useState(false);
   const [reassigningPR, setReassigningPR] = useState(false);
   const [reassignPRNumber, setReassignPRNumber] = useState("");
-  // PR mergeability (fetched on demand) + merge in progress
-  const [mergeStatus, setMergeStatus] = useState<{ mergeable: string; mergeStateStatus: string; state: string } | null>(null);
-  const [loadingMergeStatus, setLoadingMergeStatus] = useState(false);
+  // Merge in progress / confirmation (mergeability is read from cached PR data)
   const [merging, setMerging] = useState(false);
   const [showMergeConfirm, setShowMergeConfirm] = useState(false);
 
@@ -366,20 +364,10 @@ export function TaskDetailPanel({
   );
   const openPrNumber = openPrLink?.number ?? null;
 
-  // Fetch the PR mergeability on demand when an open PR is shown
-  useEffect(() => {
-    if (!openPrNumber) {
-      setMergeStatus(null);
-      return;
-    }
-    let cancelled = false;
-    setLoadingMergeStatus(true);
-    api.getPrMergeStatus(repoId, openPrNumber)
-      .then((s) => { if (!cancelled) setMergeStatus(s); })
-      .catch(() => { if (!cancelled) setMergeStatus(null); })
-      .finally(() => { if (!cancelled) setLoadingMergeStatus(false); });
-    return () => { cancelled = true; };
-  }, [repoId, openPrNumber]);
+  // Mergeability comes from the cached PR data (refreshed on PR refresh / scan)
+  const mergeStatus = openPrLink?.mergeable
+    ? { mergeable: openPrLink.mergeable, mergeStateStatus: openPrLink.mergeStateStatus ?? "UNKNOWN" }
+    : null;
 
   const handleMergePR = async (prNumber: number) => {
     if (merging) return;
@@ -418,7 +406,7 @@ export function TaskDetailPanel({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [openPrNumber, mergeStatus, merging]);
+  }, [openPrNumber, openPrLink?.mergeable, merging]);
 
 
   // Planning mode can work without workingPath (uses localPath), Execution requires workingPath
@@ -1670,9 +1658,7 @@ export function TaskDetailPanel({
                 <div className="task-detail-panel__pr-row">
                   <span className="task-detail-panel__pr-row-label">Merge:</span>
                   <div className="task-detail-panel__pr-row-items">
-                    {loadingMergeStatus ? (
-                      <span style={{ color: "#9ca3af", fontSize: 11 }}>checking…</span>
-                    ) : mergeStatus ? (
+                    {mergeStatus ? (
                       <span
                         style={{
                           fontSize: 11,
@@ -1686,11 +1672,13 @@ export function TaskDetailPanel({
                         {mergeStatus.mergeStateStatus && mergeStatus.mergeStateStatus !== "CLEAN" && mergeStatus.mergeStateStatus !== "UNKNOWN"
                           ? ` (${mergeStatus.mergeStateStatus.toLowerCase()})` : ""}
                       </span>
-                    ) : null}
+                    ) : (
+                      <span style={{ color: "#6b7280", fontSize: 11 }}>refresh to check</span>
+                    )}
                     <button
                       className="task-detail-panel__pr-add-btn"
                       onClick={() => setShowMergeConfirm(true)}
-                      disabled={merging || loadingMergeStatus || mergeStatus?.mergeable !== "MERGEABLE"}
+                      disabled={merging || mergeStatus?.mergeable !== "MERGEABLE"}
                       title={`Merge PR #${pr.number} into ${pr.baseBranch || "base"} (merge commit) — shortcut: m`}
                       style={{ color: mergeStatus?.mergeable === "MERGEABLE" ? "#4ade80" : "#6b7280", fontWeight: 600 }}
                     >

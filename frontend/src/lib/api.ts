@@ -513,6 +513,8 @@ export interface BranchLink {
   reviewers: string | null; // JSON array
   projectStatus: string | null;
   baseBranch: string | null; // PR base branch (target branch)
+  mergeable: string | null; // PR: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN' (cached)
+  mergeStateStatus: string | null; // PR: 'CLEAN' | 'BLOCKED' | ... (cached)
   createdAt: string;
   updatedAt: string;
 }

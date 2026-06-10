@@ -1010,11 +1010,12 @@ export default function BranchGraph({
   }, [zoom]);
 
   // Vim-style cursor navigation between nodes: h/j/k/l → left/down/up/right.
-  // Moving the cursor selects that node (same as a click). With no current
+  // Moving the cursor selects that node (same as a click). With Shift held, the
+  // moved-to node is added to the selection (range select). With no current
   // cursor, the first press drops it on the default branch.
   useEffect(() => {
     const handleNavKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const key = e.key.toLowerCase();
       if (key !== "h" && key !== "j" && key !== "k" && key !== "l") return;
       const target = e.target as HTMLElement;
@@ -1058,7 +1059,11 @@ export default function BranchGraph({
         if (ok && score < bestScore) { bestScore = score; best = n; }
       }
       if (best) {
-        onSelectionChange(new Set([best.id]), best.id);
+        // Shift held → extend the selection (range select); otherwise replace it
+        const nextSelection = e.shiftKey
+          ? new Set([...selectedBranches, best.id])
+          : new Set([best.id]);
+        onSelectionChange(nextSelection, best.id);
         scrollNodeIntoView(best);
       }
     };

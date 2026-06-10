@@ -1048,6 +1048,15 @@ export default function TreeDashboard() {
         setMultiSelectMode(false);
         return;
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && selectedBranches.size > 0) {
+        // Cmd/Ctrl+Enter: open the PR link(s) of the selected branches
+        e.preventDefault();
+        for (const branch of selectedBranches) {
+          const pr = (branchLinks.get(branch) ?? []).find((l) => l.linkType === "pr");
+          if (pr?.url) window.open(pr.url, "_blank");
+        }
+        return;
+      }
       if (selectedBranches.size === 0 || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.shiftKey && e.key.toLowerCase() === "r" && selectedPin) {
         // Shift+R: full repo scan
@@ -1069,7 +1078,7 @@ export default function TreeDashboard() {
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selectedBranches, selectedPin, triggerScan, refreshSelectedPRs, selectWithDescendants, requestDeleteSelected, deleteConfirmBranches]);
+  }, [selectedBranches, selectedPin, triggerScan, refreshSelectedPRs, selectWithDescendants, requestDeleteSelected, deleteConfirmBranches, branchLinks]);
 
   // Focus the Delete button when the confirmation opens, so d -> Enter confirms
   useEffect(() => {

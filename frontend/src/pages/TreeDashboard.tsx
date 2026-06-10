@@ -330,6 +330,9 @@ export default function TreeDashboard() {
   const [branchDescriptions, setBranchDescriptions] = useState<Map<string, string>>(new Map());
   // Branches currently refreshing their status (for loading UI)
   const [refreshingBranches, setRefreshingBranches] = useState<Set<string>>(new Set());
+  // Branches pending deletion confirmation (d shortcut); null = no modal
+  const [deleteConfirmBranches, setDeleteConfirmBranches] = useState<string[] | null>(null);
+  const [deletingBranches, setDeletingBranches] = useState(false);
   // Field-level timestamps for conflict resolution with scan results
   const [fieldTimestamps, setFieldTimestamps] = useState<Map<string, NodeFieldTimestamps>>(new Map());
   // Scan start time for timestamp-based merge protection
@@ -930,32 +933,43 @@ export default function TreeDashboard() {
     }
   }, [selectedBranches, branchLinks]);
 
-  // Keyboard shortcuts for selection (Escape to clear, R to refresh PRs, Shift+R for full scan)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't handle if user is typing in an input/textarea
-      const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
-        return;
-      }
-      if (e.key === "Escape" && selectedBranches.size > 0) {
-        setSelectedBranches(new Set());
-        setSelectionAnchor(null);
-        setMultiSelectMode(false);
-      }
-      if (e.shiftKey && e.key.toLowerCase() === "r" && selectedBranches.size > 0 && selectedPin && !e.metaKey && !e.ctrlKey) {
-        // Shift+R: full repo scan
-        e.preventDefault();
-        triggerScan(selectedPin.localPath);
-      } else if (e.key === "r" && !e.shiftKey && selectedBranches.size > 0 && !e.metaKey && !e.ctrlKey) {
-        // r: refresh the PR(s) of the selected branches
-        e.preventDefault();
-        refreshSelectedPRs();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selectedBranches.size, selectedPin, triggerScan, refreshSelectedPRs]);
+  // Remove deleted branches from the snapshot, reparenting their children to the grandparent
+  const applyBranchesDeleted = useCallback((deletedBranches: string[]) => {
+    if (deletedBranches.length === 0) return;
+    const deletedSet = new Set(deletedBranches);
+    setSnapshot((prev) => {
+      if (!prev) return prev;
+      const parentOf = new Map<string, string>();
+      for (const e of prev.edges) parentOf.set(e.child, e.parent);
+      const getGrandparent = (branch: string): string | null => {
+        let current = branch;
+        while (deletedSet.has(current)) {
+          const parent = parentOf.get(current);
+          if (!parent) return null;
+          current = parent;
+        }
+        return current;
+      };
+      const updatedEdges = prev.edges
+        .filter((e) => !deletedSet.has(e.child))
+        .map((e) => {
+          if (deletedSet.has(e.parent)) {
+            const grandparent = getGrandparent(e.parent);
+            return grandparent ? { ...e, parent: grandparent } : null;
+          }
+          return e;
+        })
+        .filter((e): e is TreeEdge => e !== null);
+      return {
+        ...prev,
+        nodes: prev.nodes.filter((n) => !deletedSet.has(n.branchName)),
+        edges: updatedEdges,
+      };
+    });
+    setSelectedBranches(new Set());
+    setSelectionAnchor(null);
+    setMultiSelectMode(false);
+  }, []);
 
   // Add every descendant of the currently selected branches to the selection
   const selectWithDescendants = useCallback(() => {
@@ -977,6 +991,79 @@ export default function TreeDashboard() {
     });
     setMultiSelectMode(true);
   }, []);
+
+  // Open the delete confirmation for the selected branches (excludes the default branch)
+  const requestDeleteSelected = useCallback(() => {
+    const defaultBranch = snapshotRef.current?.defaultBranch;
+    const branches = [...selectedBranches].filter((b) => b !== defaultBranch);
+    if (branches.length === 0) return;
+    setDeleteConfirmBranches(branches);
+  }, [selectedBranches]);
+
+  // Delete the confirmed branches (serially to avoid git index lock conflicts)
+  const confirmDeleteBranches = useCallback(async () => {
+    if (!deleteConfirmBranches || !selectedPin || deletingBranches) return;
+    setDeletingBranches(true);
+    const deleted: string[] = [];
+    for (const branch of deleteConfirmBranches) {
+      try {
+        await api.deleteBranch(selectedPin.localPath, branch, true);
+        deleted.push(branch);
+      } catch (err) {
+        console.error("Failed to delete branch:", branch, err);
+      }
+    }
+    setDeletingBranches(false);
+    setDeleteConfirmBranches(null);
+    applyBranchesDeleted(deleted);
+    if (deleted.length > 0) triggerScan(selectedPin.localPath);
+  }, [deleteConfirmBranches, selectedPin, deletingBranches, applyBranchesDeleted, triggerScan]);
+
+  // Keyboard shortcuts for selection
+  // Escape: clear · r: refresh PRs · Shift+R: full scan · c: select descendants · d: delete (confirm)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't handle if user is typing in an input/textarea
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
+        return;
+      }
+      // While the delete confirmation is open, Escape cancels it; ignore other shortcuts
+      if (deleteConfirmBranches !== null) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setDeleteConfirmBranches(null);
+        }
+        return;
+      }
+      if (e.key === "Escape" && selectedBranches.size > 0) {
+        setSelectedBranches(new Set());
+        setSelectionAnchor(null);
+        setMultiSelectMode(false);
+        return;
+      }
+      if (selectedBranches.size === 0 || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.shiftKey && e.key.toLowerCase() === "r" && selectedPin) {
+        // Shift+R: full repo scan
+        e.preventDefault();
+        triggerScan(selectedPin.localPath);
+      } else if (e.key === "r" && !e.shiftKey) {
+        // r: refresh the PR(s) of the selected branches
+        e.preventDefault();
+        refreshSelectedPRs();
+      } else if (e.key === "c" && !e.shiftKey) {
+        // c: select all descendants of the selected branches
+        e.preventDefault();
+        selectWithDescendants();
+      } else if (e.key === "d" && !e.shiftKey) {
+        // d: delete the selected branches (with confirmation)
+        e.preventDefault();
+        requestDeleteSelected();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [selectedBranches, selectedPin, triggerScan, refreshSelectedPRs, selectWithDescendants, requestDeleteSelected, deleteConfirmBranches]);
 
   // Use the repository name as the browser tab title (helps distinguish project tabs)
   useEffect(() => {
@@ -3461,48 +3548,7 @@ export default function TreeDashboard() {
                         return next;
                       });
                     }}
-                    onBranchesDeleted={(deletedBranches) => {
-                      const deletedSet = new Set(deletedBranches);
-                      // Remove deleted branches from snapshot, reparenting children
-                      setSnapshot((prev) => {
-                        if (!prev) return prev;
-                        // Build parent map for deleted branches
-                        const parentOf = new Map<string, string>();
-                        for (const e of prev.edges) {
-                          parentOf.set(e.child, e.parent);
-                        }
-                        // Find grandparent for each deleted branch
-                        const getGrandparent = (branch: string): string | null => {
-                          let current = branch;
-                          while (deletedSet.has(current)) {
-                            const parent = parentOf.get(current);
-                            if (!parent) return null;
-                            current = parent;
-                          }
-                          return current;
-                        };
-
-                        const updatedEdges = prev.edges
-                          .filter((e) => !deletedSet.has(e.child))
-                          .map((e) => {
-                            if (deletedSet.has(e.parent)) {
-                              const grandparent = getGrandparent(e.parent);
-                              return grandparent ? { ...e, parent: grandparent } : null;
-                            }
-                            return e;
-                          })
-                          .filter((e): e is TreeEdge => e !== null);
-
-                        return {
-                          ...prev,
-                          nodes: prev.nodes.filter((n) => !deletedSet.has(n.branchName)),
-                          edges: updatedEdges,
-                        };
-                      });
-                      // Clear selection
-                      setSelectedBranches(new Set());
-                      setSelectionAnchor(null);
-                    }}
+                    onBranchesDeleted={applyBranchesDeleted}
                   />
                 ) : selectedNode && selectedPin ? (
                   <TaskDetailPanel
@@ -4534,6 +4580,35 @@ export default function TreeDashboard() {
                 disabled={settingsLoading}
               >
                 {settingsLoading ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Branches Confirm Modal (d shortcut) */}
+      {deleteConfirmBranches !== null && (
+        <div className="modal-overlay" onClick={() => !deletingBranches && setDeleteConfirmBranches(null)}>
+          <div className="modal modal--small" onClick={(e) => e.stopPropagation()}>
+            <div className="modal__header">
+              <h2>Delete {deleteConfirmBranches.length} {deleteConfirmBranches.length === 1 ? "branch" : "branches"}?</h2>
+            </div>
+            <div className="modal__body">
+              <ul style={{ margin: 0, paddingLeft: 18, maxHeight: 220, overflowY: "auto", color: "#e5e7eb", fontSize: 13, fontFamily: "monospace" }}>
+                {deleteConfirmBranches.map((b) => (
+                  <li key={b} style={{ marginBottom: 4 }}>{b}</li>
+                ))}
+              </ul>
+              <p style={{ margin: "12px 0 0", fontSize: 13, color: "#6b7280" }}>
+                This deletes the local branches and cannot be undone.
+              </p>
+            </div>
+            <div className="modal__footer">
+              <button className="btn-secondary" onClick={() => setDeleteConfirmBranches(null)} disabled={deletingBranches}>
+                Cancel
+              </button>
+              <button className="btn-danger" onClick={confirmDeleteBranches} disabled={deletingBranches}>
+                {deletingBranches ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>

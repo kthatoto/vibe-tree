@@ -389,8 +389,29 @@ export default function MultiSelectPanel({
       const link = openPr(b);
       return !!link && link.number != null;
     });
+    const prSet = new Set(prBranches);
+    // Only PRs whose base chain (within the selection) bottoms out at the default
+    // branch are mergeable into it via stacked merge. A PR whose root targets some
+    // other branch is "dangling" and must NOT look mergeable into the default branch.
+    const rootedCache = new Map<string, boolean>();
+    const isRootedAtDefault = (b: string, seen: Set<string>): boolean => {
+      const cached = rootedCache.get(b);
+      if (cached !== undefined) return cached;
+      if (seen.has(b)) return false; // cycle: not rooted
+      seen.add(b);
+      const base = openPr(b)?.baseBranch;
+      const result =
+        !base || base === defaultBranch
+          ? true
+          : prSet.has(base)
+            ? isRootedAtDefault(base, seen)
+            : false; // base is a non-selected, non-default branch → dangling
+      rootedCache.set(b, result);
+      return result;
+    };
+    const rooted = prBranches.filter((b) => isRootedAtDefault(b, new Set()));
     // Topological sort by PR base branch (base not in the remaining set → ready)
-    const remaining = new Set(prBranches);
+    const remaining = new Set(rooted);
     const ordered: string[] = [];
     while (remaining.size > 0) {
       const ready = [...remaining].filter((b) => {
@@ -404,7 +425,7 @@ export default function MultiSelectPanel({
       }
     }
     return ordered;
-  }, [selectedList, branchLinks]);
+  }, [selectedList, branchLinks, defaultBranch]);
 
   // Resolve label info from name
   const getLabelInfo = useCallback(

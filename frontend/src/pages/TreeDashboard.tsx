@@ -892,7 +892,45 @@ export default function TreeDashboard() {
     }
   }, [snapshot, selectedBranches, selectionAnchor]);
 
-  // Keyboard shortcuts for selection (Escape to clear, R to refresh)
+  // Refresh the PR links of the currently selected branches (single or multi-select)
+  const refreshSelectedPRs = useCallback(async () => {
+    const tasks: { branch: string; linkId: number }[] = [];
+    for (const branch of selectedBranches) {
+      const links = branchLinks.get(branch) ?? [];
+      for (const link of links) {
+        if (link.linkType === "pr") tasks.push({ branch, linkId: link.id });
+      }
+    }
+    if (tasks.length === 0) return;
+
+    const affected = [...new Set(tasks.map((t) => t.branch))];
+    setRefreshingBranches((prev) => new Set([...prev, ...affected]));
+    try {
+      await Promise.all(
+        tasks.map(async ({ branch, linkId }) => {
+          try {
+            const refreshed = await api.refreshBranchLink(linkId);
+            setBranchLinks((prev) => {
+              const next = new Map(prev);
+              const cur = next.get(branch) ?? [];
+              next.set(branch, cur.map((l) => (l.id === refreshed.id ? refreshed : l)));
+              return next;
+            });
+          } catch (err) {
+            console.error("Failed to refresh PR link:", err);
+          }
+        })
+      );
+    } finally {
+      setRefreshingBranches((prev) => {
+        const next = new Set(prev);
+        affected.forEach((b) => next.delete(b));
+        return next;
+      });
+    }
+  }, [selectedBranches, branchLinks]);
+
+  // Keyboard shortcuts for selection (Escape to clear, R to refresh, Shift+R to refresh PRs)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't handle if user is typing in an input/textarea
@@ -905,14 +943,18 @@ export default function TreeDashboard() {
         setSelectionAnchor(null);
         setMultiSelectMode(false);
       }
-      if (e.key === "r" && selectedBranches.size > 0 && selectedPin && !e.metaKey && !e.ctrlKey) {
+      if (e.shiftKey && e.key.toLowerCase() === "r" && selectedBranches.size > 0 && !e.metaKey && !e.ctrlKey) {
+        // Shift+R: refresh the PR(s) of the selected branches
+        e.preventDefault();
+        refreshSelectedPRs();
+      } else if (e.key === "r" && selectedBranches.size > 0 && selectedPin && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         triggerScan(selectedPin.localPath);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selectedBranches.size, selectedPin, triggerScan]);
+  }, [selectedBranches.size, selectedPin, triggerScan, refreshSelectedPRs]);
 
   // Add every descendant of the currently selected branches to the selection
   const selectWithDescendants = useCallback(() => {

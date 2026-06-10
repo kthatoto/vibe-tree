@@ -277,6 +277,9 @@ export const branchLinks = sqliteTable("branch_links", {
   baseBranch: text("base_branch"), // PR: base branch (target branch)
   mergeable: text("mergeable"), // PR: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN' (cached)
   mergeStateStatus: text("merge_state_status"), // PR: 'CLEAN' | 'BLOCKED' | 'BEHIND' | 'DIRTY' | ... (cached)
+  additions: integer("additions"), // PR: added lines (cached)
+  deletions: integer("deletions"), // PR: deleted lines (cached)
+  changedFiles: integer("changed_files"), // PR: changed file count (cached)
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

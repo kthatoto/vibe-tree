@@ -2487,6 +2487,59 @@ export default function BranchGraph({
           );
         })()}
 
+        {/* Changed files + line stats (right-aligned, below the node) */}
+        {(() => {
+          const pr = node.pr;
+          if (refreshingBranches.has(id) || !pr || !pr.changedFiles) return null;
+          const charW = 5.5;
+          type FB = { kind: "file" | "add" | "del"; label: string; color: string; width: number };
+          const fbs: FB[] = [];
+          const fileLabel = `${pr.changedFiles}`;
+          fbs.push({ kind: "file", label: fileLabel, color: "#6b7280", width: 16 + fileLabel.length * charW });
+          if (pr.additions && pr.additions > 0) {
+            const l = `+${pr.additions}`;
+            fbs.push({ kind: "add", label: l, color: "#4caf50", width: 8 + l.length * charW });
+          }
+          if (pr.deletions && pr.deletions > 0) {
+            const l = `-${pr.deletions}`;
+            fbs.push({ kind: "del", label: l, color: "#f44336", width: 8 + l.length * charW });
+          }
+          const gap = 2;
+          const total = fbs.reduce((s, b) => s + b.width, 0) + gap * (fbs.length - 1);
+          let cx = x + nodeWidth - total - 4;
+          const by = y + nodeHeight + 3;
+          return (
+            <g>
+              {fbs.map((b, i) => {
+                const bx = cx;
+                cx += b.width + gap;
+                return (
+                  <g key={i}>
+                    <rect x={bx} y={by} width={b.width} height={14} rx={3} fill={b.color} />
+                    {b.kind === "file" && (
+                      <>
+                        <path d={`M${bx + 4},${by + 3} h4 l2,2 v6 h-6 z`} fill="white" />
+                        <path d={`M${bx + 8},${by + 3} v2 h2`} fill="none" stroke={b.color} strokeWidth={0.8} />
+                      </>
+                    )}
+                    <text
+                      x={b.kind === "file" ? bx + 12 : bx + b.width / 2}
+                      y={by + 8}
+                      textAnchor={b.kind === "file" ? "start" : "middle"}
+                      dominantBaseline="middle"
+                      fontSize={9}
+                      fill="white"
+                      fontWeight="bold"
+                    >
+                      {b.label}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          );
+        })()}
+
         {/* Add branch button - positioned at bottom right of node */}
         {onBranchCreate && !isTentative && !isMerged && (
           <g

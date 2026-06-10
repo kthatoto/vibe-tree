@@ -169,6 +169,9 @@ scanRouter.get("/snapshot/:pinId", async (c) => {
         reviewStatus: link.reviewStatus as "none" | "requested" | "reviewed" | "approved" | undefined,
         labels: link.labels ? JSON.parse(link.labels) : undefined,
         reviewers: link.reviewers ? JSON.parse(link.reviewers) : undefined,
+        additions: link.additions ?? undefined,
+        deletions: link.deletions ?? undefined,
+        changedFiles: link.changedFiles ?? undefined,
       });
     }
   }
@@ -604,6 +607,9 @@ scanRouter.post("/", async (c) => {
         reviewStatus: link.reviewStatus as "none" | "requested" | "reviewed" | "approved" | undefined,
         labels: link.labels ? JSON.parse(link.labels) : undefined,
         reviewers: link.reviewers ? JSON.parse(link.reviewers) : undefined,
+        additions: link.additions ?? undefined,
+        deletions: link.deletions ?? undefined,
+        changedFiles: link.changedFiles ?? undefined,
       }));
 
       const { nodes: treeNodes, edges: treeEdges } = await buildTree(branches, worktrees, prs, localPath, currentDefaultBranch);
@@ -1070,6 +1076,10 @@ scanRouter.post("/", async (c) => {
                 reviewStatus: freshPr.reviewStatus,
                 labels: freshPr.labels,
                 reviewers: freshPr.reviewers,
+                // diff stats come from the cached per-PR data (gh pr list omits them)
+                additions: node.pr?.additions,
+                deletions: node.pr?.deletions,
+                changedFiles: node.pr?.changedFiles,
               },
             };
           }

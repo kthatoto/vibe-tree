@@ -1016,8 +1016,15 @@ export default function BranchGraph({
   useEffect(() => {
     const handleNavKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const key = e.key.toLowerCase();
-      if (key !== "h" && key !== "j" && key !== "k" && key !== "l") return;
+      // h/j/k/l and the arrow keys both map to left/down/up/right
+      let dir: "h" | "j" | "k" | "l" | null = null;
+      switch (e.key) {
+        case "h": case "H": case "ArrowLeft": dir = "h"; break;
+        case "j": case "J": case "ArrowDown": dir = "j"; break;
+        case "k": case "K": case "ArrowUp": dir = "k"; break;
+        case "l": case "L": case "ArrowRight": dir = "l"; break;
+        default: return;
+      }
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
       if (dragStateRef.current) return;
@@ -1052,10 +1059,10 @@ export default function BranchGraph({
         const dy = n.y + n.height / 2 - cy;
         let ok = false;
         let score = 0;
-        if (key === "l" && dx > 1) { ok = true; score = dx + Math.abs(dy) * 3; }
-        else if (key === "h" && dx < -1) { ok = true; score = -dx + Math.abs(dy) * 3; }
-        else if (key === "j" && dy > 1) { ok = true; score = dy + Math.abs(dx) * 3; }
-        else if (key === "k" && dy < -1) { ok = true; score = -dy + Math.abs(dx) * 3; }
+        if (dir === "l" && dx > 1) { ok = true; score = dx + Math.abs(dy) * 3; }
+        else if (dir === "h" && dx < -1) { ok = true; score = -dx + Math.abs(dy) * 3; }
+        else if (dir === "j" && dy > 1) { ok = true; score = dy + Math.abs(dx) * 3; }
+        else if (dir === "k" && dy < -1) { ok = true; score = -dy + Math.abs(dx) * 3; }
         if (ok && score < bestScore) { bestScore = score; best = n; }
       }
       if (best) {

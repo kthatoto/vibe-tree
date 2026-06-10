@@ -379,15 +379,32 @@ export default function MultiSelectPanel({
     return [...selectedList].sort((a, b) => getDepth(a) - getDepth(b));
   }, [selectedList, parentMap]);
 
-  // Selected branches that have an open PR, in dependency order (for stacked merge)
-  const stackedMergeBranches = useMemo(
-    () =>
-      sortedBranchesForRebase.filter((b) => {
-        const link = branchLinks.get(b)?.find((l) => l.linkType === "pr" && l.status === "open");
-        return !!link && link.number != null;
-      }),
-    [sortedBranchesForRebase, branchLinks]
-  );
+  // Selected branches with an open PR, ordered by the actual PR base chain so a
+  // PR is always merged after the (selected) PR it is based on. This guarantees
+  // e.g. develop←PR1←PR2 merges PR1 first, then PR2 (retargeted to develop).
+  const stackedMergeBranches = useMemo(() => {
+    const openPr = (b: string) =>
+      branchLinks.get(b)?.find((l) => l.linkType === "pr" && l.status === "open") ?? null;
+    const prBranches = selectedList.filter((b) => {
+      const link = openPr(b);
+      return !!link && link.number != null;
+    });
+    // Topological sort by PR base branch (base not in the remaining set → ready)
+    const remaining = new Set(prBranches);
+    const ordered: string[] = [];
+    while (remaining.size > 0) {
+      const ready = [...remaining].filter((b) => {
+        const base = openPr(b)?.baseBranch;
+        return !base || !remaining.has(base);
+      });
+      const batch = ready.length > 0 ? ready : [...remaining]; // break cycles defensively
+      for (const b of batch) {
+        ordered.push(b);
+        remaining.delete(b);
+      }
+    }
+    return ordered;
+  }, [selectedList, branchLinks]);
 
   // Resolve label info from name
   const getLabelInfo = useCallback(
@@ -1687,6 +1704,7 @@ export default function MultiSelectPanel({
                 Cancel
               </button>
               <button
+                autoFocus
                 onClick={handleStackedMerge}
                 style={{
                   padding: "8px 16px",

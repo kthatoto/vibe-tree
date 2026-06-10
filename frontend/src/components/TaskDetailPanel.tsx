@@ -371,6 +371,7 @@ export function TaskDetailPanel({
 
   const handleMergePR = async (prNumber: number) => {
     if (merging) return;
+    setShowMergeConfirm(false); // optimistic: close the modal immediately
     setMerging(true);
     setError(null);
     try {
@@ -388,7 +389,6 @@ export function TaskDetailPanel({
       setError((err as Error).message);
     } finally {
       setMerging(false);
-      setShowMergeConfirm(false);
     }
   };
 

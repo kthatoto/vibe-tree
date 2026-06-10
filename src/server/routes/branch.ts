@@ -1708,3 +1708,46 @@ branchRouter.post("/refresh-status", async (c) => {
 
   return c.json(results);
 });
+
+// POST /api/branch/pr-merge-status - Get whether a PR is mergeable
+branchRouter.post("/pr-merge-status", async (c) => {
+  const body = await c.req.json();
+  const { repoId, prNumber } = body as { repoId?: string; prNumber?: number };
+  if (!repoId || !prNumber) {
+    throw new BadRequestError("repoId and prNumber are required");
+  }
+  try {
+    const output = await execAsync(
+      `gh pr view ${prNumber} --repo "${repoId}" --json mergeable,mergeStateStatus,state,reviewDecision,baseRefName`
+    );
+    const data = JSON.parse(output.trim());
+    return c.json({
+      mergeable: data.mergeable ?? "UNKNOWN",
+      mergeStateStatus: data.mergeStateStatus ?? "UNKNOWN",
+      state: data.state ?? "UNKNOWN",
+      reviewDecision: data.reviewDecision ?? null,
+      baseRefName: data.baseRefName ?? null,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new BadRequestError(`Failed to get PR merge status: ${message}`);
+  }
+});
+
+// POST /api/branch/merge-pr - Merge a PR (merge commit) into its base branch
+branchRouter.post("/merge-pr", async (c) => {
+  const body = await c.req.json();
+  const { repoId, prNumber } = body as { repoId?: string; prNumber?: number };
+  if (!repoId || !prNumber) {
+    throw new BadRequestError("repoId and prNumber are required");
+  }
+  try {
+    const output = await execAsync(
+      `gh pr merge ${prNumber} --repo "${repoId}" --merge`
+    );
+    return c.json({ success: true, output: output.trim() || "Merged" });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new BadRequestError(`Failed to merge PR: ${message}`);
+  }
+});

@@ -334,6 +334,10 @@ export function TaskDetailPanel({
   const [checkingPR, setCheckingPR] = useState(false);
   const [reassigningPR, setReassigningPR] = useState(false);
   const [reassignPRNumber, setReassignPRNumber] = useState("");
+  // PR mergeability (fetched on demand) + merge in progress
+  const [mergeStatus, setMergeStatus] = useState<{ mergeable: string; mergeStateStatus: string; state: string } | null>(null);
+  const [loadingMergeStatus, setLoadingMergeStatus] = useState(false);
+  const [merging, setMerging] = useState(false);
 
   // Deletable branch check (no commits + not on remote)
   const [isDeletable, setIsDeletable] = useState(false);
@@ -354,6 +358,49 @@ export function TaskDetailPanel({
   // Check if PR is merged or closed
   const isMerged = branchLinks.some((l) => l.linkType === "pr" && l.status === "merged");
   const isClosed = branchLinks.some((l) => l.linkType === "pr" && l.status === "closed");
+
+  // The open PR for this branch (for the merge action)
+  const openPrLink = branchLinks.find(
+    (l) => l.linkType === "pr" && l.number != null && l.status !== "merged" && l.status !== "closed"
+  );
+  const openPrNumber = openPrLink?.number ?? null;
+
+  // Fetch the PR mergeability on demand when an open PR is shown
+  useEffect(() => {
+    if (!openPrNumber) {
+      setMergeStatus(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingMergeStatus(true);
+    api.getPrMergeStatus(repoId, openPrNumber)
+      .then((s) => { if (!cancelled) setMergeStatus(s); })
+      .catch(() => { if (!cancelled) setMergeStatus(null); })
+      .finally(() => { if (!cancelled) setLoadingMergeStatus(false); });
+    return () => { cancelled = true; };
+  }, [repoId, openPrNumber]);
+
+  const handleMergePR = async (prNumber: number) => {
+    if (merging) return;
+    setMerging(true);
+    setError(null);
+    try {
+      await api.mergePr(repoId, prNumber);
+      // Refresh the PR link so it reflects the merged state, then rescan
+      const link = branchLinks.find((l) => l.linkType === "pr" && l.number === prNumber);
+      if (link) {
+        const refreshed = await api.refreshBranchLink(link.id).catch(() => null);
+        if (refreshed) {
+          onBranchLinksChange?.(branchName, branchLinks.map((l) => (l.id === refreshed.id ? refreshed : l)));
+        }
+      }
+      onWorktreeCreated?.();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setMerging(false);
+    }
+  };
 
 
   // Planning mode can work without workingPath (uses localPath), Execution requires workingPath
@@ -1597,6 +1644,40 @@ export function TaskDetailPanel({
                         → {suggestedParent}
                       </button>
                     )}
+                  </div>
+                </div>
+              )}
+              {/* Merge Row */}
+              {pr.status === "open" && pr.number != null && (
+                <div className="task-detail-panel__pr-row">
+                  <span className="task-detail-panel__pr-row-label">Merge:</span>
+                  <div className="task-detail-panel__pr-row-items">
+                    {loadingMergeStatus ? (
+                      <span style={{ color: "#9ca3af", fontSize: 11 }}>checking…</span>
+                    ) : mergeStatus ? (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color:
+                            mergeStatus.mergeable === "MERGEABLE" ? "#4ade80" :
+                            mergeStatus.mergeable === "CONFLICTING" ? "#f87171" : "#9ca3af",
+                        }}
+                      >
+                        {mergeStatus.mergeable === "MERGEABLE" ? "mergeable" :
+                          mergeStatus.mergeable === "CONFLICTING" ? "conflicts" : "unknown"}
+                        {mergeStatus.mergeStateStatus && mergeStatus.mergeStateStatus !== "CLEAN" && mergeStatus.mergeStateStatus !== "UNKNOWN"
+                          ? ` (${mergeStatus.mergeStateStatus.toLowerCase()})` : ""}
+                      </span>
+                    ) : null}
+                    <button
+                      className="task-detail-panel__pr-add-btn"
+                      onClick={() => handleMergePR(pr.number!)}
+                      disabled={merging || loadingMergeStatus || mergeStatus?.mergeable !== "MERGEABLE"}
+                      title={`Merge PR #${pr.number} into ${pr.baseBranch || "base"} (merge commit)`}
+                      style={{ color: mergeStatus?.mergeable === "MERGEABLE" ? "#4ade80" : "#6b7280", fontWeight: 600 }}
+                    >
+                      {merging ? "Merging…" : "⤵ Merge"}
+                    </button>
                   </div>
                 </div>
               )}

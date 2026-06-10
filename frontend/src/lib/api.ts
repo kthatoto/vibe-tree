@@ -1329,6 +1329,22 @@ export const api = {
     fetchJson<BranchLink>(`${API_BASE}/branch-links/${id}/refresh`, {
       method: "POST",
     }),
+  getPrMergeStatus: (repoId: string, prNumber: number) =>
+    fetchJson<{
+      mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+      mergeStateStatus: string;
+      state: string;
+      reviewDecision: string | null;
+      baseRefName: string | null;
+    }>(`${API_BASE}/branch/pr-merge-status`, {
+      method: "POST",
+      body: JSON.stringify({ repoId, prNumber }),
+    }),
+  mergePr: (repoId: string, prNumber: number) =>
+    fetchJson<{ success: boolean; output: string }>(`${API_BASE}/branch/merge-pr`, {
+      method: "POST",
+      body: JSON.stringify({ repoId, prNumber }),
+    }),
   detectPr: (repoId: string, branchName: string) =>
     fetchJson<{ found: boolean; link?: BranchLink }>(`${API_BASE}/branch-links/detect`, {
       method: "POST",

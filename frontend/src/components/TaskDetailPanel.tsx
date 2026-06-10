@@ -364,8 +364,11 @@ export function TaskDetailPanel({
   );
   const openPrNumber = openPrLink?.number ?? null;
 
+  // Mergeability is only meaningful for PRs that target the default branch.
+  // For stacked PRs (base = a parent branch) we don't surface a merge status.
+  const prTargetsDefault = !openPrLink?.baseBranch || openPrLink.baseBranch === defaultBranch;
   // Mergeability comes from the cached PR data (refreshed on PR refresh / scan)
-  const mergeStatus = openPrLink?.mergeable
+  const mergeStatus = prTargetsDefault && openPrLink?.mergeable
     ? { mergeable: openPrLink.mergeable, mergeStateStatus: openPrLink.mergeStateStatus ?? "UNKNOWN" }
     : null;
   // Only CLEAN is truly ready; mergeable+blocked (review/checks required, behind,
@@ -1671,7 +1674,9 @@ export function TaskDetailPanel({
                 <div className="task-detail-panel__pr-row">
                   <span className="task-detail-panel__pr-row-label">Merge:</span>
                   <div className="task-detail-panel__pr-row-items">
-                    {mergeStatus ? (
+                    {!prTargetsDefault ? (
+                      <span style={{ color: "#6b7280", fontSize: 11 }}>not into {defaultBranch}</span>
+                    ) : mergeStatus ? (
                       <span style={{ fontSize: 11, color: mergeColor, fontWeight: mergeBlocked || mergeConflict ? 600 : 400 }}>
                         {mergeLabel}
                       </span>
@@ -1683,7 +1688,9 @@ export function TaskDetailPanel({
                       onClick={() => setShowMergeConfirm(true)}
                       disabled={merging || !mergeReady}
                       title={
-                        mergeReady
+                        !prTargetsDefault
+                          ? `PR targets ${pr.baseBranch}, not ${defaultBranch}`
+                          : mergeReady
                           ? `Merge PR #${pr.number} into ${pr.baseBranch || "base"} (merge commit) — shortcut: m`
                           : mergeBlocked
                             ? `Cannot merge yet: ${mergeLabel}`

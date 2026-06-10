@@ -988,6 +988,84 @@ export default function BranchGraph({
     };
   }, [nodes, edges, defaultBranch, tentativeNodes, tentativeEdges, tentativeBaseBranch, checkedBranches, filterEnabled, siblingOrder]);
 
+  // Scroll a node into view within the graph container (coords are pre-zoom)
+  const scrollNodeIntoView = useCallback((n: LayoutNode) => {
+    const container = svgRef.current?.closest(".graph-container") as HTMLElement | null;
+    if (!container) return;
+    const pad = 48;
+    const left = n.x * zoom;
+    const top = n.y * zoom;
+    const right = (n.x + n.width) * zoom;
+    const bottom = (n.y + n.height) * zoom;
+    if (left < container.scrollLeft + pad) {
+      container.scrollLeft = Math.max(0, left - pad);
+    } else if (right > container.scrollLeft + container.clientWidth - pad) {
+      container.scrollLeft = right - container.clientWidth + pad;
+    }
+    if (top < container.scrollTop + pad) {
+      container.scrollTop = Math.max(0, top - pad);
+    } else if (bottom > container.scrollTop + container.clientHeight - pad) {
+      container.scrollTop = bottom - container.clientHeight + pad;
+    }
+  }, [zoom]);
+
+  // Vim-style cursor navigation between nodes: h/j/k/l → left/down/up/right.
+  // Moving the cursor selects that node (same as a click). With no current
+  // cursor, the first press drops it on the default branch.
+  useEffect(() => {
+    const handleNavKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      const key = e.key.toLowerCase();
+      if (key !== "h" && key !== "j" && key !== "k" && key !== "l") return;
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+      if (dragStateRef.current) return;
+
+      const navNodes = layoutNodes.filter((n) => !n.isTentative);
+      if (navNodes.length === 0) return;
+      e.preventDefault();
+
+      // Current cursor node: prefer the selection anchor, else the single selection
+      const cursorId =
+        selectionAnchor && navNodes.some((n) => n.id === selectionAnchor)
+          ? selectionAnchor
+          : selectedBranches.size === 1
+            ? [...selectedBranches][0]
+            : null;
+      const current = cursorId ? navNodes.find((n) => n.id === cursorId) : null;
+
+      if (!current) {
+        const start = navNodes.find((n) => n.id === defaultBranch) ?? navNodes.reduce((a, b) => (a.y <= b.y ? a : b));
+        onSelectionChange(new Set([start.id]), start.id);
+        scrollNodeIntoView(start);
+        return;
+      }
+
+      const cx = current.x + current.width / 2;
+      const cy = current.y + current.height / 2;
+      let best: LayoutNode | null = null;
+      let bestScore = Infinity;
+      for (const n of navNodes) {
+        if (n.id === current.id) continue;
+        const dx = n.x + n.width / 2 - cx;
+        const dy = n.y + n.height / 2 - cy;
+        let ok = false;
+        let score = 0;
+        if (key === "l" && dx > 1) { ok = true; score = dx + Math.abs(dy) * 3; }
+        else if (key === "h" && dx < -1) { ok = true; score = -dx + Math.abs(dy) * 3; }
+        else if (key === "j" && dy > 1) { ok = true; score = dy + Math.abs(dx) * 3; }
+        else if (key === "k" && dy < -1) { ok = true; score = -dy + Math.abs(dx) * 3; }
+        if (ok && score < bestScore) { bestScore = score; best = n; }
+      }
+      if (best) {
+        onSelectionChange(new Set([best.id]), best.id);
+        scrollNodeIntoView(best);
+      }
+    };
+    document.addEventListener("keydown", handleNavKey);
+    return () => document.removeEventListener("keydown", handleNavKey);
+  }, [layoutNodes, selectedBranches, selectionAnchor, defaultBranch, onSelectionChange, scrollNodeIntoView]);
+
   // Helper to get column bounds (used in multiple places)
   const getColumnBoundsHelper = useCallback((branchId: string) => {
     const getDescendants = (id: string): string[] => {

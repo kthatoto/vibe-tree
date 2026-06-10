@@ -690,32 +690,50 @@ export default function MultiSelectPanel({
     setProgress({ total: ordered.length, completed: 0, current: null, results: [], status: "running" });
     const results: BulkOperationProgress["results"] = [];
     let completed = 0;
+    let mergedAny = false;
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
     for (const { branch, link } of ordered) {
       setProgress((p) => ({ ...p, current: branch }));
       try {
         const prNumber = link.number!;
-        // 1. Retarget the PR base to the default branch if needed
-        if (link.baseBranch && link.baseBranch !== defaultBranch) {
-          setProgress((p) => ({ ...p, current: `${branch}: → ${defaultBranch}` }));
-          await api.changePrBaseBranch(link.id, defaultBranch);
+        // After a previous merge, the merged branch is deleted and GitHub
+        // re-targets the dependent PR to the default branch. That takes a few
+        // seconds, so wait before checking the next PR.
+        if (mergedAny) {
+          setProgress((p) => ({ ...p, current: `${branch}: waiting for re-target…` }));
+          await sleep(10000);
         }
-        // 2. Wait until GitHub reports it mergeable
+        // Wait until the PR targets the default branch and is mergeable. The base
+        // is re-fetched each loop (handles GitHub's auto re-target); if it still
+        // points elsewhere, retarget it explicitly. Be patient — recomputing
+        // mergeability after a re-target also takes time.
         setProgress((p) => ({ ...p, current: `${branch}: checking…` }));
         let ready = false;
-        for (let i = 0; i < 12; i++) {
+        let retargeted = false;
+        for (let i = 0; i < 20; i++) {
           const st = await api.getPrMergeStatus(repoId, prNumber);
           if (st.state === "MERGED") { ready = false; break; }
           if (st.state !== "OPEN") throw new Error(`PR is ${st.state.toLowerCase()}`);
           if (st.mergeable === "CONFLICTING") throw new Error("has conflicts");
+          if (st.baseRefName && st.baseRefName !== defaultBranch) {
+            if (!retargeted) {
+              setProgress((p) => ({ ...p, current: `${branch}: → ${defaultBranch}` }));
+              await api.changePrBaseBranch(link.id, defaultBranch);
+              retargeted = true;
+              await sleep(2000);
+            }
+            await sleep(3000);
+            continue; // re-check the base
+          }
           if (st.mergeable === "MERGEABLE") { ready = true; break; }
-          await sleep(1500); // UNKNOWN → wait for GitHub to compute
+          await sleep(3000); // UNKNOWN → keep waiting patiently
         }
         if (!ready) throw new Error("not mergeable (timed out)");
-        // 3. Merge
+        // Merge
         setProgress((p) => ({ ...p, current: `${branch}: merging…` }));
         await api.mergePr(repoId, prNumber);
+        mergedAny = true;
         results.push({ branch, success: true });
       } catch (err) {
         results.push({ branch, success: false, message: err instanceof Error ? err.message : String(err) });

@@ -368,6 +368,19 @@ export function TaskDetailPanel({
   const mergeStatus = openPrLink?.mergeable
     ? { mergeable: openPrLink.mergeable, mergeStateStatus: openPrLink.mergeStateStatus ?? "UNKNOWN" }
     : null;
+  // Only CLEAN is truly ready; mergeable+blocked (review/checks required, behind,
+  // draft, unstable) must NOT look green — it can't actually be merged yet.
+  const mergeMss = mergeStatus?.mergeStateStatus ?? null;
+  const mergeConflict = mergeStatus?.mergeable === "CONFLICTING" || mergeMss === "DIRTY";
+  const mergeReady = mergeStatus?.mergeable === "MERGEABLE" && mergeMss === "CLEAN";
+  const mergeBlocked = mergeStatus?.mergeable === "MERGEABLE" && !mergeReady && !mergeConflict && mergeMss !== "UNKNOWN";
+  const mergeLabel = !mergeStatus
+    ? ""
+    : mergeConflict ? "conflicts"
+    : mergeReady ? "mergeable"
+    : mergeBlocked ? (mergeMss ? mergeMss.toLowerCase() : "blocked")
+    : "checking";
+  const mergeColor = mergeConflict ? "#f87171" : mergeReady ? "#4ade80" : mergeBlocked ? "#f59e0b" : "#9ca3af";
 
   const handleMergePR = async (prNumber: number) => {
     if (merging) return;
@@ -399,14 +412,14 @@ export function TaskDetailPanel({
       if (e.key !== "m") return;
       const t = e.target as HTMLElement;
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable) return;
-      if (openPrNumber && mergeStatus?.mergeable === "MERGEABLE" && !merging) {
+      if (openPrNumber && mergeReady && !merging) {
         e.preventDefault();
         setShowMergeConfirm(true);
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [openPrNumber, openPrLink?.mergeable, merging]);
+  }, [openPrNumber, mergeReady, merging]);
 
 
   // Planning mode can work without workingPath (uses localPath), Execution requires workingPath
@@ -1659,18 +1672,8 @@ export function TaskDetailPanel({
                   <span className="task-detail-panel__pr-row-label">Merge:</span>
                   <div className="task-detail-panel__pr-row-items">
                     {mergeStatus ? (
-                      <span
-                        style={{
-                          fontSize: 11,
-                          color:
-                            mergeStatus.mergeable === "MERGEABLE" ? "#4ade80" :
-                            mergeStatus.mergeable === "CONFLICTING" ? "#f87171" : "#9ca3af",
-                        }}
-                      >
-                        {mergeStatus.mergeable === "MERGEABLE" ? "mergeable" :
-                          mergeStatus.mergeable === "CONFLICTING" ? "conflicts" : "unknown"}
-                        {mergeStatus.mergeStateStatus && mergeStatus.mergeStateStatus !== "CLEAN" && mergeStatus.mergeStateStatus !== "UNKNOWN"
-                          ? ` (${mergeStatus.mergeStateStatus.toLowerCase()})` : ""}
+                      <span style={{ fontSize: 11, color: mergeColor, fontWeight: mergeBlocked || mergeConflict ? 600 : 400 }}>
+                        {mergeLabel}
                       </span>
                     ) : (
                       <span style={{ color: "#6b7280", fontSize: 11 }}>refresh to check</span>
@@ -1678,9 +1681,17 @@ export function TaskDetailPanel({
                     <button
                       className="task-detail-panel__pr-add-btn"
                       onClick={() => setShowMergeConfirm(true)}
-                      disabled={merging || mergeStatus?.mergeable !== "MERGEABLE"}
-                      title={`Merge PR #${pr.number} into ${pr.baseBranch || "base"} (merge commit) — shortcut: m`}
-                      style={{ color: mergeStatus?.mergeable === "MERGEABLE" ? "#4ade80" : "#6b7280", fontWeight: 600 }}
+                      disabled={merging || !mergeReady}
+                      title={
+                        mergeReady
+                          ? `Merge PR #${pr.number} into ${pr.baseBranch || "base"} (merge commit) — shortcut: m`
+                          : mergeBlocked
+                            ? `Cannot merge yet: ${mergeLabel}`
+                            : mergeConflict
+                              ? "Cannot merge: conflicts"
+                              : "Refresh to check mergeability"
+                      }
+                      style={{ color: mergeReady ? "#4ade80" : "#6b7280", fontWeight: 600 }}
                     >
                       {merging ? "Merging…" : "⤵ Merge"}
                     </button>

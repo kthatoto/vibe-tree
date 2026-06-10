@@ -874,6 +874,7 @@ export function TaskDetailPanel({
 
   const handleRefreshLink = async (id: number) => {
     setRefreshingLink(id);
+    onBranchStatusRefreshStart?.([branchName]);
     try {
       const refreshed = await api.refreshBranchLink(id);
       // Notify parent to update branchLinks
@@ -882,6 +883,7 @@ export function TaskDetailPanel({
       setError((err as Error).message);
     } finally {
       setRefreshingLink(null);
+      onBranchStatusRefreshEnd?.([branchName]);
     }
   };
 

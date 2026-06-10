@@ -3450,6 +3450,16 @@ export default function TreeDashboard() {
                     repoLabels={repoLabels}
                     repoCollaborators={repoCollaborators}
                     onRefreshBranches={() => triggerScan(selectedPin.localPath)}
+                    onBranchStatusRefreshStart={(branches) => {
+                      setRefreshingBranches((prev) => new Set([...prev, ...branches]));
+                    }}
+                    onBranchStatusRefreshEnd={(branches) => {
+                      setRefreshingBranches((prev) => {
+                        const next = new Set(prev);
+                        branches.forEach((b) => next.delete(b));
+                        return next;
+                      });
+                    }}
                     onBranchesDeleted={(deletedBranches) => {
                       const deletedSet = new Set(deletedBranches);
                       // Remove deleted branches from snapshot, reparenting children

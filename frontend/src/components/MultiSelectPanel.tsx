@@ -55,6 +55,9 @@ interface MultiSelectPanelProps {
   repoCollaborators: RepoCollaborator[];
   onRefreshBranches?: () => void;
   onBranchesDeleted?: (deletedBranches: string[]) => void;
+  // Show/hide the per-node "refreshing" spinner on the branch graph
+  onBranchStatusRefreshStart?: (branches: string[]) => void;
+  onBranchStatusRefreshEnd?: (branches: string[]) => void;
 }
 
 export default function MultiSelectPanel({
@@ -76,6 +79,8 @@ export default function MultiSelectPanel({
   repoCollaborators,
   onRefreshBranches,
   onBranchesDeleted,
+  onBranchStatusRefreshStart,
+  onBranchStatusRefreshEnd,
 }: MultiSelectPanelProps) {
   const selectedList = useMemo(() => [...selectedBranches], [selectedBranches]);
 
@@ -517,16 +522,21 @@ export default function MultiSelectPanel({
   // Refresh all PRs (parallel)
   const handleRefreshPRs = async () => {
     if (branchesWithPRs.length === 0) return;
-    await runBulkPerItem(
-      branchesWithPRs,
-      (branch) => branch,
-      async (branch) => {
-        const linkId = getPRLinkId(branch);
-        if (!linkId) return { success: false, message: "No PR found" };
-        await api.refreshBranchLink(linkId);
-        return { success: true };
-      }
-    );
+    onBranchStatusRefreshStart?.(branchesWithPRs);
+    try {
+      await runBulkPerItem(
+        branchesWithPRs,
+        (branch) => branch,
+        async (branch) => {
+          const linkId = getPRLinkId(branch);
+          if (!linkId) return { success: false, message: "No PR found" };
+          await api.refreshBranchLink(linkId);
+          return { success: true };
+        }
+      );
+    } finally {
+      onBranchStatusRefreshEnd?.(branchesWithPRs);
+    }
     onRefreshBranches?.();
   };
 

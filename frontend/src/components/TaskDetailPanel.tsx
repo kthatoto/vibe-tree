@@ -338,6 +338,7 @@ export function TaskDetailPanel({
   const [mergeStatus, setMergeStatus] = useState<{ mergeable: string; mergeStateStatus: string; state: string } | null>(null);
   const [loadingMergeStatus, setLoadingMergeStatus] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false);
 
   // Deletable branch check (no commits + not on remote)
   const [isDeletable, setIsDeletable] = useState(false);
@@ -399,8 +400,25 @@ export function TaskDetailPanel({
       setError((err as Error).message);
     } finally {
       setMerging(false);
+      setShowMergeConfirm(false);
     }
   };
+
+  // Press "m" to open the merge confirmation for the selected branch's PR
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.key !== "m") return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable) return;
+      if (openPrNumber && mergeStatus?.mergeable === "MERGEABLE" && !merging) {
+        e.preventDefault();
+        setShowMergeConfirm(true);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [openPrNumber, mergeStatus, merging]);
 
 
   // Planning mode can work without workingPath (uses localPath), Execution requires workingPath
@@ -1671,9 +1689,9 @@ export function TaskDetailPanel({
                     ) : null}
                     <button
                       className="task-detail-panel__pr-add-btn"
-                      onClick={() => handleMergePR(pr.number!)}
+                      onClick={() => setShowMergeConfirm(true)}
                       disabled={merging || loadingMergeStatus || mergeStatus?.mergeable !== "MERGEABLE"}
-                      title={`Merge PR #${pr.number} into ${pr.baseBranch || "base"} (merge commit)`}
+                      title={`Merge PR #${pr.number} into ${pr.baseBranch || "base"} (merge commit) — shortcut: m`}
                       style={{ color: mergeStatus?.mergeable === "MERGEABLE" ? "#4ade80" : "#6b7280", fontWeight: 600 }}
                     >
                       {merging ? "Merging…" : "⤵ Merge"}
@@ -2302,6 +2320,35 @@ export function TaskDetailPanel({
                 onClick={() => setShowPushModal(false)}
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Merge Confirmation Modal */}
+      {showMergeConfirm && openPrNumber && (
+        <div className="task-detail-panel__modal-overlay" onClick={() => setShowMergeConfirm(false)}>
+          <div className="task-detail-panel__modal" onClick={(e) => e.stopPropagation()}>
+            <h4>Merge PR #{openPrNumber} → {openPrLink?.baseBranch || defaultBranch}?</h4>
+            <p className="task-detail-panel__modal-info">
+              Creates a merge commit on {openPrLink?.baseBranch || defaultBranch}. This cannot be undone.
+            </p>
+            <div className="task-detail-panel__modal-actions">
+              <button
+                className="task-detail-panel__modal-cancel"
+                onClick={() => setShowMergeConfirm(false)}
+                disabled={merging}
+              >
+                Cancel
+              </button>
+              <button
+                autoFocus
+                onClick={() => handleMergePR(openPrNumber)}
+                disabled={merging}
+                style={{ padding: "8px 16px", background: "#059669", border: "none", borderRadius: 6, color: "#fff", fontWeight: 500, cursor: merging ? "not-allowed" : "pointer" }}
+              >
+                {merging ? "Merging…" : "Merge"}
               </button>
             </div>
           </div>

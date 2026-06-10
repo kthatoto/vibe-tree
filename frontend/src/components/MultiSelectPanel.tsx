@@ -322,6 +322,8 @@ export default function MultiSelectPanel({
 
   // Delete confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Stacked merge confirmation state
+  const [showStackedMergeConfirm, setShowStackedMergeConfirm] = useState(false);
 
   // Worktree selection state for serial rebase
   const [selectedWorktree, setSelectedWorktree] = useState<string | null>(null);
@@ -334,6 +336,13 @@ export default function MultiSelectPanel({
       const prLink = links?.find((l) => l.linkType === "pr" && l.status === "open");
       return prLink?.id ?? null;
     },
+    [branchLinks]
+  );
+
+  // Get the open PR link (with number/base) for a branch
+  const getPRLink = useCallback(
+    (branch: string): BranchLink | null =>
+      branchLinks.get(branch)?.find((l) => l.linkType === "pr" && l.status === "open") ?? null,
     [branchLinks]
   );
 
@@ -369,6 +378,16 @@ export default function MultiSelectPanel({
     };
     return [...selectedList].sort((a, b) => getDepth(a) - getDepth(b));
   }, [selectedList, parentMap]);
+
+  // Selected branches that have an open PR, in dependency order (for stacked merge)
+  const stackedMergeBranches = useMemo(
+    () =>
+      sortedBranchesForRebase.filter((b) => {
+        const link = branchLinks.get(b)?.find((l) => l.linkType === "pr" && l.status === "open");
+        return !!link && link.number != null;
+      }),
+    [sortedBranchesForRebase, branchLinks]
+  );
 
   // Resolve label info from name
   const getLabelInfo = useCallback(
@@ -641,6 +660,77 @@ export default function MultiSelectPanel({
     }
   };
 
+  // Stacked merge: merge the selected PRs into the default branch in dependency
+  // order. Each PR is retargeted to the default branch (if needed), waited on
+  // until mergeable, then merged. Stops on the first failure.
+  const handleStackedMerge = async () => {
+    setShowStackedMergeConfirm(false);
+    const ordered = stackedMergeBranches
+      .map((b) => ({ branch: b, link: getPRLink(b) }))
+      .filter((x): x is { branch: string; link: BranchLink } => !!x.link && x.link.number != null);
+    if (ordered.length === 0) return;
+
+    setProgress({ total: ordered.length, completed: 0, current: null, results: [], status: "running" });
+    const results: BulkOperationProgress["results"] = [];
+    let completed = 0;
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    for (const { branch, link } of ordered) {
+      setProgress((p) => ({ ...p, current: branch }));
+      try {
+        const prNumber = link.number!;
+        // 1. Retarget the PR base to the default branch if needed
+        if (link.baseBranch && link.baseBranch !== defaultBranch) {
+          setProgress((p) => ({ ...p, current: `${branch}: → ${defaultBranch}` }));
+          await api.changePrBaseBranch(link.id, defaultBranch);
+        }
+        // 2. Wait until GitHub reports it mergeable
+        setProgress((p) => ({ ...p, current: `${branch}: checking…` }));
+        let ready = false;
+        for (let i = 0; i < 12; i++) {
+          const st = await api.getPrMergeStatus(repoId, prNumber);
+          if (st.state === "MERGED") { ready = false; break; }
+          if (st.state !== "OPEN") throw new Error(`PR is ${st.state.toLowerCase()}`);
+          if (st.mergeable === "CONFLICTING") throw new Error("has conflicts");
+          if (st.mergeable === "MERGEABLE") { ready = true; break; }
+          await sleep(1500); // UNKNOWN → wait for GitHub to compute
+        }
+        if (!ready) throw new Error("not mergeable (timed out)");
+        // 3. Merge
+        setProgress((p) => ({ ...p, current: `${branch}: merging…` }));
+        await api.mergePr(repoId, prNumber);
+        results.push({ branch, success: true });
+      } catch (err) {
+        results.push({ branch, success: false, message: err instanceof Error ? err.message : String(err) });
+        completed++;
+        setProgress((p) => ({ ...p, completed, results: [...results], current: null, status: "error" }));
+        onRefreshBranches?.();
+        return; // stop the stack on first failure
+      }
+      completed++;
+      setProgress((p) => ({ ...p, completed, results: [...results] }));
+    }
+
+    setProgress((p) => ({ ...p, current: null, status: "done" }));
+    onRefreshBranches?.();
+  };
+
+  // Press "m" to open the stacked merge confirmation
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.key !== "m") return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable) return;
+      if (stackedMergeBranches.length > 0 && progress.status !== "running") {
+        e.preventDefault();
+        setShowStackedMergeConfirm(true);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [stackedMergeBranches.length, progress.status]);
+
   // Reset progress
   const handleResetProgress = () => {
     setProgress({
@@ -896,6 +986,32 @@ export default function MultiSelectPanel({
               >
                 ↻ Refresh All PRs
               </button>
+
+              {/* Stacked Merge */}
+              {stackedMergeBranches.length > 0 && (
+                <button
+                  onClick={() => setShowStackedMergeConfirm(true)}
+                  disabled={isOperationRunning}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: isOperationRunning ? "#1f2937" : "#064e3b",
+                    border: `1px solid ${isOperationRunning ? "#374151" : "#10b981"}`,
+                    borderRadius: 6,
+                    color: isOperationRunning ? "#6b7280" : "#6ee7b7",
+                    cursor: isOperationRunning ? "not-allowed" : "pointer",
+                    fontSize: 13,
+                    textAlign: "left",
+                  }}
+                >
+                  <div style={{ fontWeight: 500 }}>
+                    ⤵ Stacked Merge ({stackedMergeBranches.length}) → {defaultBranch}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
+                    Merge PRs into {defaultBranch} in dependency order
+                  </div>
+                </button>
+              )}
 
               {/* Sync Base Branches */}
               {mismatchedBaseBranches.length > 0 && (
@@ -1514,6 +1630,76 @@ export default function MultiSelectPanel({
                 }}
               >
                 Delete {deletableInfo.deletable.length} Branches
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showStackedMergeConfirm && (
+        <div
+          className="task-detail-panel__modal-overlay"
+          onClick={() => setShowStackedMergeConfirm(false)}
+        >
+          <div
+            className="task-detail-panel__modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 420 }}
+          >
+            <h4 style={{ margin: "0 0 12px", color: "#6ee7b7" }}>
+              Stacked merge {stackedMergeBranches.length} PR{stackedMergeBranches.length === 1 ? "" : "s"} → {defaultBranch}?
+            </h4>
+            <p style={{ margin: "0 0 16px", color: "#9ca3af", fontSize: 13 }}>
+              Each PR is retargeted to {defaultBranch} and merged in this order. Stops on the first conflict or non-mergeable PR.
+            </p>
+            <div
+              style={{
+                maxHeight: 180,
+                overflowY: "auto",
+                background: "#0f172a",
+                borderRadius: 4,
+                padding: 8,
+                marginBottom: 16,
+              }}
+            >
+              {stackedMergeBranches.map((branch, i) => (
+                <div
+                  key={branch}
+                  style={{ fontSize: 12, color: "#e5e7eb", padding: "2px 0", fontFamily: "monospace" }}
+                >
+                  {i + 1}. {branch}{getPRLink(branch)?.number ? ` (#${getPRLink(branch)!.number})` : ""}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setShowStackedMergeConfirm(false)}
+                style={{
+                  padding: "8px 16px",
+                  background: "#374151",
+                  border: "none",
+                  borderRadius: 6,
+                  color: "#e5e7eb",
+                  cursor: "pointer",
+                  fontSize: 13,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleStackedMerge}
+                style={{
+                  padding: "8px 16px",
+                  background: "#059669",
+                  border: "none",
+                  borderRadius: 6,
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: 500,
+                }}
+              >
+                Merge {stackedMergeBranches.length} PR{stackedMergeBranches.length === 1 ? "" : "s"}
               </button>
             </div>
           </div>

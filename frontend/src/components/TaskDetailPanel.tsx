@@ -1056,18 +1056,29 @@ export function TaskDetailPanel({
           {(worktreePath || checkedOut) ? (
             <div className="task-detail-panel__worktree-info">
               <span className="task-detail-panel__active-badge">Active</span>
-              {node?.remoteAheadBehind && node.remoteAheadBehind.behind > 0 && (
-                <button
-                  className="task-detail-panel__pull-btn"
-                  onClick={handlePull}
-                  disabled={pulling}
-                >
-                  {pulling ? "Pulling..." : `Pull (↓${node.remoteAheadBehind.behind})`}
-                </button>
-              )}
+              <button
+                className="task-detail-panel__pull-btn"
+                onClick={handlePull}
+                disabled={pulling}
+                title={`Fetch and fast-forward ${branchName} to origin/${branchName} (no checkout needed)`}
+              >
+                {pulling
+                  ? "Updating..."
+                  : `↻ origin/${branchName}${node?.remoteAheadBehind && node.remoteAheadBehind.behind > 0 ? ` (↓${node.remoteAheadBehind.behind})` : ""}`}
+              </button>
             </div>
           ) : (
             <div className="task-detail-panel__branch-actions">
+              <button
+                className="task-detail-panel__pull-btn"
+                onClick={handlePull}
+                disabled={pulling}
+                title={`Fetch and fast-forward ${branchName} to origin/${branchName} (no checkout needed)`}
+              >
+                {pulling
+                  ? "Updating..."
+                  : `↻ origin/${branchName}${node?.remoteAheadBehind && node.remoteAheadBehind.behind > 0 ? ` (↓${node.remoteAheadBehind.behind})` : ""}`}
+              </button>
               <button
                 className="task-detail-panel__checkout-btn"
                 onClick={handleOpenCheckoutModal}
@@ -1075,15 +1086,6 @@ export function TaskDetailPanel({
               >
                 {checkingOut ? "Checking out..." : "Checkout"}
               </button>
-              {node?.remoteAheadBehind && node.remoteAheadBehind.behind > 0 && (
-                <button
-                  className="task-detail-panel__pull-btn"
-                  onClick={handlePull}
-                  disabled={pulling}
-                >
-                  {pulling ? "Pulling..." : `Pull (↓${node.remoteAheadBehind.behind})`}
-                </button>
-              )}
             </div>
           )}
         </div>

@@ -613,7 +613,17 @@ branchRouter.post("/pull", async (c) => {
     }
   }
 
-  // If not checked out, try fast-forward fetch
+  // If not on the branch in the main repo, check if it is checked out in a
+  // worktree. A checked-out branch can't be fast-forwarded via fetch, so pull
+  // there instead (e.g. develop checked out in a separate worktree).
+  if (!pullPath) {
+    const branchWorktree = await getWorktreePath(localPath, branchName);
+    if (branchWorktree && existsSync(branchWorktree)) {
+      pullPath = branchWorktree;
+    }
+  }
+
+  // If not checked out anywhere, fast-forward the ref via fetch (no checkout)
   if (!pullPath) {
     try {
       // Use git fetch origin branchname:branchname for fast-forward update

@@ -930,7 +930,7 @@ export default function TreeDashboard() {
     }
   }, [selectedBranches, branchLinks]);
 
-  // Keyboard shortcuts for selection (Escape to clear, R to refresh, Shift+R to refresh PRs)
+  // Keyboard shortcuts for selection (Escape to clear, R to refresh PRs, Shift+R for full scan)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't handle if user is typing in an input/textarea
@@ -943,13 +943,14 @@ export default function TreeDashboard() {
         setSelectionAnchor(null);
         setMultiSelectMode(false);
       }
-      if (e.shiftKey && e.key.toLowerCase() === "r" && selectedBranches.size > 0 && !e.metaKey && !e.ctrlKey) {
-        // Shift+R: refresh the PR(s) of the selected branches
-        e.preventDefault();
-        refreshSelectedPRs();
-      } else if (e.key === "r" && selectedBranches.size > 0 && selectedPin && !e.metaKey && !e.ctrlKey) {
+      if (e.shiftKey && e.key.toLowerCase() === "r" && selectedBranches.size > 0 && selectedPin && !e.metaKey && !e.ctrlKey) {
+        // Shift+R: full repo scan
         e.preventDefault();
         triggerScan(selectedPin.localPath);
+      } else if (e.key === "r" && !e.shiftKey && selectedBranches.size > 0 && !e.metaKey && !e.ctrlKey) {
+        // r: refresh the PR(s) of the selected branches
+        e.preventDefault();
+        refreshSelectedPRs();
       }
     };
     document.addEventListener("keydown", handleKeyDown);

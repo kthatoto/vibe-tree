@@ -682,71 +682,103 @@ export default function MultiSelectPanel({
   // until mergeable, then merged. Stops on the first failure.
   const handleStackedMerge = async () => {
     setShowStackedMergeConfirm(false);
-    const ordered = stackedMergeBranches
+    const prs = stackedMergeBranches
       .map((b) => ({ branch: b, link: getPRLink(b) }))
       .filter((x): x is { branch: string; link: BranchLink } => !!x.link && x.link.number != null);
-    if (ordered.length === 0) return;
+    if (prs.length === 0) return;
 
-    setProgress({ total: ordered.length, completed: 0, current: null, results: [], status: "running" });
+    const linkOf = new Map(prs.map((p) => [p.branch, p.link]));
+    const branchSet = new Set(prs.map((p) => p.branch));
+    // parent = the selected PR whose branch is this PR's base; null = chain root
+    const parentOf = new Map<string, string | null>();
+    for (const { branch, link } of prs) {
+      const base = link.baseBranch;
+      parentOf.set(branch, base && branchSet.has(base) ? base : null);
+    }
+    const childrenOf = (b: string) => prs.filter((p) => parentOf.get(p.branch) === b).map((p) => p.branch);
+
+    setProgress({ total: prs.length, completed: 0, current: null, results: [], status: "running" });
     const results: BulkOperationProgress["results"] = [];
-    let completed = 0;
-    let mergedAny = false;
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-    for (const { branch, link } of ordered) {
-      setProgress((p) => ({ ...p, current: branch }));
-      try {
-        const prNumber = link.number!;
-        // After a previous merge, the merged branch is deleted and GitHub
-        // re-targets the dependent PR to the default branch. That takes a few
-        // seconds, so wait before checking the next PR.
-        if (mergedAny) {
-          setProgress((p) => ({ ...p, current: `${branch}: waiting for re-target…` }));
-          await sleep(10000);
-        }
-        // Wait until the PR targets the default branch and is mergeable. The base
-        // is re-fetched each loop (handles GitHub's auto re-target); if it still
-        // points elsewhere, retarget it explicitly. Be patient — recomputing
-        // mergeability after a re-target also takes time.
-        setProgress((p) => ({ ...p, current: `${branch}: checking…` }));
-        let ready = false;
-        let retargeted = false;
-        for (let i = 0; i < 20; i++) {
-          const st = await api.getPrMergeStatus(repoId, prNumber);
-          if (st.state === "MERGED") { ready = false; break; }
-          if (st.state !== "OPEN") throw new Error(`PR is ${st.state.toLowerCase()}`);
-          if (st.mergeable === "CONFLICTING") throw new Error("has conflicts");
-          if (st.baseRefName && st.baseRefName !== defaultBranch) {
-            if (!retargeted) {
-              setProgress((p) => ({ ...p, current: `${branch}: → ${defaultBranch}` }));
-              await api.changePrBaseBranch(link.id, defaultBranch);
-              retargeted = true;
-              await sleep(2000);
-            }
-            await sleep(3000);
-            continue; // re-check the base
-          }
-          if (st.mergeable === "MERGEABLE") { ready = true; break; }
-          await sleep(3000); // UNKNOWN → keep waiting patiently
-        }
-        if (!ready) throw new Error("not mergeable (timed out)");
-        // Merge
-        setProgress((p) => ({ ...p, current: `${branch}: merging…` }));
-        await api.mergePr(repoId, prNumber);
-        mergedAny = true;
-        results.push({ branch, success: true });
-      } catch (err) {
-        results.push({ branch, success: false, message: err instanceof Error ? err.message : String(err) });
-        completed++;
-        setProgress((p) => ({ ...p, completed, results: [...results], current: null, status: "error" }));
-        onRefreshBranches?.();
-        return; // stop the stack on first failure
-      }
+    let completed = 0;
+    const merged = new Set<string>();
+    const failed = new Set<string>();
+    const record = (branch: string, success: boolean, message?: string) => {
+      results.push({ branch, success, message });
       completed++;
       setProgress((p) => ({ ...p, completed, results: [...results] }));
+    };
+
+    // Merge a single PR: re-target it to the default branch if needed, wait
+    // patiently until it is truly mergeable (CLEAN), then merge. Throws on failure.
+    const mergeOne = async (branch: string, link: BranchLink) => {
+      const prNumber = link.number!;
+      // Non-roots: the parent was just merged → its branch is being deleted and
+      // GitHub is re-targeting this PR to the default branch. Give it time.
+      if (parentOf.get(branch) !== null) {
+        setProgress((p) => ({ ...p, current: `${branch}: waiting for re-target…` }));
+        await sleep(10000);
+      }
+      setProgress((p) => ({ ...p, current: `${branch}: checking…` }));
+      let retargeted = false;
+      for (let i = 0; i < 20; i++) {
+        const st = await api.getPrMergeStatus(repoId, prNumber);
+        if (st.state === "MERGED") return; // already merged
+        if (st.state !== "OPEN") throw new Error(`PR is ${st.state.toLowerCase()}`);
+        if (st.mergeable === "CONFLICTING") throw new Error("has conflicts");
+        if (st.baseRefName && st.baseRefName !== defaultBranch) {
+          if (!retargeted) {
+            setProgress((p) => ({ ...p, current: `${branch}: → ${defaultBranch}` }));
+            await api.changePrBaseBranch(link.id, defaultBranch);
+            retargeted = true;
+            await sleep(2000);
+          }
+          await sleep(3000);
+          continue; // re-check the base
+        }
+        const mss = st.mergeStateStatus;
+        if (st.mergeable === "MERGEABLE" && (mss === "CLEAN" || mss === "UNSTABLE" || mss === "HAS_HOOKS")) {
+          setProgress((p) => ({ ...p, current: `${branch}: merging…` }));
+          await api.mergePr(repoId, prNumber);
+          return;
+        }
+        if (st.mergeable === "MERGEABLE" && (mss === "BLOCKED" || mss === "BEHIND" || mss === "DRAFT")) {
+          throw new Error(mss.toLowerCase());
+        }
+        await sleep(3000); // UNKNOWN → keep waiting patiently
+      }
+      throw new Error("not mergeable (timed out)");
+    };
+
+    // Run a chain from this PR: merge it, then run its children. Children of the
+    // same parent run in parallel; independent chains (separate roots) run in
+    // parallel too. A failure stops only its own subtree.
+    const runFrom = async (branch: string): Promise<void> => {
+      const link = linkOf.get(branch)!;
+      try {
+        await mergeOne(branch, link);
+        merged.add(branch);
+        record(branch, true);
+      } catch (err) {
+        failed.add(branch);
+        record(branch, false, err instanceof Error ? err.message : String(err));
+        return; // do not merge descendants of a failed PR
+      }
+      await Promise.all(childrenOf(branch).map((c) => runFrom(c)));
+    };
+
+    const roots = prs.filter((p) => parentOf.get(p.branch) === null).map((p) => p.branch);
+    await Promise.all(roots.map((r) => runFrom(r)));
+
+    // Descendants of a failed PR were never attempted → mark them skipped
+    for (const { branch } of prs) {
+      if (!merged.has(branch) && !failed.has(branch)) {
+        record(branch, false, "skipped (ancestor not merged)");
+      }
     }
 
-    setProgress((p) => ({ ...p, current: null, status: "done" }));
+    const anyFailed = results.some((r) => !r.success);
+    setProgress((p) => ({ ...p, current: null, status: anyFailed ? "error" : "done" }));
     onRefreshBranches?.();
   };
 
@@ -1685,7 +1717,7 @@ export default function MultiSelectPanel({
               Stacked merge {stackedMergeBranches.length} PR{stackedMergeBranches.length === 1 ? "" : "s"} → {defaultBranch}?
             </h4>
             <p style={{ margin: "0 0 16px", color: "#9ca3af", fontSize: 13 }}>
-              Each PR is retargeted to {defaultBranch} and merged in this order. Stops on the first conflict or non-mergeable PR.
+              Merged from the root into {defaultBranch}. Each PR is re-targeted to {defaultBranch} after its parent merges. Independent chains run in parallel; a conflict / non-mergeable PR stops only its own chain.
             </p>
             <div
               style={{

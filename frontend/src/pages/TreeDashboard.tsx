@@ -333,6 +333,7 @@ export default function TreeDashboard() {
   // Branches pending deletion confirmation (d shortcut); null = no modal
   const [deleteConfirmBranches, setDeleteConfirmBranches] = useState<string[] | null>(null);
   const [deletingBranches, setDeletingBranches] = useState(false);
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
   // Field-level timestamps for conflict resolution with scan results
   const [fieldTimestamps, setFieldTimestamps] = useState<Map<string, NodeFieldTimestamps>>(new Map());
   // Scan start time for timestamp-based merge protection
@@ -1064,6 +1065,13 @@ export default function TreeDashboard() {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [selectedBranches, selectedPin, triggerScan, refreshSelectedPRs, selectWithDescendants, requestDeleteSelected, deleteConfirmBranches]);
+
+  // Focus the Delete button when the confirmation opens, so d -> Enter confirms
+  useEffect(() => {
+    if (deleteConfirmBranches !== null) {
+      deleteButtonRef.current?.focus();
+    }
+  }, [deleteConfirmBranches]);
 
   // Use the repository name as the browser tab title (helps distinguish project tabs)
   useEffect(() => {
@@ -4607,7 +4615,7 @@ export default function TreeDashboard() {
               <button className="btn-secondary" onClick={() => setDeleteConfirmBranches(null)} disabled={deletingBranches}>
                 Cancel
               </button>
-              <button className="btn-danger" onClick={confirmDeleteBranches} disabled={deletingBranches}>
+              <button ref={deleteButtonRef} className="btn-danger" onClick={confirmDeleteBranches} disabled={deletingBranches}>
                 {deletingBranches ? "Deleting..." : "Delete"}
               </button>
             </div>

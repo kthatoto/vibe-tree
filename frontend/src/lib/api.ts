@@ -515,6 +515,9 @@ export interface BranchLink {
   baseBranch: string | null; // PR base branch (target branch)
   mergeable: string | null; // PR: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN' (cached)
   mergeStateStatus: string | null; // PR: 'CLEAN' | 'BLOCKED' | ... (cached)
+  additions: number | null; // PR diff: lines added (cached)
+  deletions: number | null; // PR diff: lines removed (cached)
+  changedFiles: number | null; // PR diff: files changed (cached)
   createdAt: string;
   updatedAt: string;
 }

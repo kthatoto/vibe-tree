@@ -898,6 +898,32 @@ export default function TreeDashboard() {
     }
   }, [snapshot, selectedBranches, selectionAnchor]);
 
+  // Patch the snapshot node's PR diff stats (files / additions / deletions) from a
+  // freshly fetched branch link. The graph's diff-stat pills read from node.pr, but
+  // PR refresh/detect only update branchLinks — and the backend doesn't broadcast
+  // diff-only changes — so the graph would otherwise stay stale until the next scan.
+  const patchNodePrStats = useCallback(
+    (branch: string, link: { additions: number | null; deletions: number | null; changedFiles: number | null }) => {
+      setSnapshot((prev) => {
+        if (!prev) return prev;
+        let changed = false;
+        const nodes = prev.nodes.map((n) => {
+          if (n.branchName !== branch || !n.pr) return n;
+          const additions = link.additions ?? n.pr.additions;
+          const deletions = link.deletions ?? n.pr.deletions;
+          const changedFiles = link.changedFiles ?? n.pr.changedFiles;
+          if (additions === n.pr.additions && deletions === n.pr.deletions && changedFiles === n.pr.changedFiles) {
+            return n;
+          }
+          changed = true;
+          return { ...n, pr: { ...n.pr, additions, deletions, changedFiles } };
+        });
+        return changed ? { ...prev, nodes } : prev;
+      });
+    },
+    []
+  );
+
   // Refresh the PR links of the currently selected branches (single or multi-select).
   // Branches that have no PR link yet are run through PR detection instead, so a
   // single "r" both refreshes existing PRs and detects newly-opened ones.
@@ -929,6 +955,7 @@ export default function TreeDashboard() {
               next.set(branch, cur.map((l) => (l.id === refreshed.id ? refreshed : l)));
               return next;
             });
+            patchNodePrStats(branch, refreshed);
           } catch (err) {
             console.error("Failed to refresh PR link:", err);
           }
@@ -944,6 +971,7 @@ export default function TreeDashboard() {
                 next.set(branch, [...cur, link]);
                 return next;
               });
+              patchNodePrStats(branch, link);
             }
           } catch (err) {
             console.error("Failed to detect PR:", err);
@@ -957,7 +985,7 @@ export default function TreeDashboard() {
         return next;
       });
     }
-  }, [selectedBranches, branchLinks, snapshot?.repoId]);
+  }, [selectedBranches, branchLinks, snapshot?.repoId, patchNodePrStats]);
 
   // Remove deleted branches from the snapshot, reparenting their children to the grandparent
   const applyBranchesDeleted = useCallback((deletedBranches: string[]) => {
@@ -3666,6 +3694,12 @@ export default function TreeDashboard() {
                     branchLinksFromParent={branchLinks.get(selectedNode.branchName) || []}
                     onBranchLinksChange={(branch, links) => {
                       setBranchLinks((prev) => new Map(prev).set(branch, links));
+                      // Keep the graph's diff-stat pills in sync when the detail
+                      // panel refreshes/detects a PR (it only updates branchLinks).
+                      const prLink = links.find(
+                        (l) => l.linkType === "pr" && l.status !== "merged" && l.status !== "closed"
+                      );
+                      if (prLink) patchNodePrStats(branch, prLink);
                     }}
                     onBranchDeleted={(deletedBranch, reparentedEdges) => {
                       // Immediately remove branch from graph, reparenting children

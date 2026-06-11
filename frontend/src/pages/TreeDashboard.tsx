@@ -880,6 +880,45 @@ export default function TreeDashboard() {
     }
   }, []);
 
+  // Full reload (Shift+R / reload button): git fetch --all + rescan to pick up new
+  // branches, with a "fetching" feel — every node pulses while it runs, then flashes
+  // the green "done" ring when the scan completes.
+  const [fullReloading, setFullReloading] = useState(false);
+  const fullReloadEchoRef = useRef<string[]>([]);
+  const fullReloadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const endFullReloadEcho = useCallback(() => {
+    if (fullReloadTimeoutRef.current) {
+      clearTimeout(fullReloadTimeoutRef.current);
+      fullReloadTimeoutRef.current = null;
+    }
+    setFullReloading(false);
+    const echoed = fullReloadEchoRef.current;
+    if (echoed.length === 0) return;
+    fullReloadEchoRef.current = [];
+    setRefreshingBranches((prev) => {
+      const next = new Set(prev);
+      echoed.forEach((b) => next.delete(b));
+      return next;
+    });
+  }, []);
+  const endFullReloadEchoRef = useRef(endFullReloadEcho);
+  endFullReloadEchoRef.current = endFullReloadEcho;
+
+  const handleFullReload = useCallback((localPath: string) => {
+    if (!localPath || isScanningRef.current) return;
+    const branchNames = snapshotRef.current?.nodes.map((n) => n.branchName) ?? [];
+    if (branchNames.length > 0) {
+      fullReloadEchoRef.current = branchNames;
+      setRefreshingBranches((prev) => new Set([...prev, ...branchNames]));
+    }
+    setFullReloading(true);
+    // Safety net: never leave the graph pulsing forever if a scan stalls.
+    if (fullReloadTimeoutRef.current) clearTimeout(fullReloadTimeoutRef.current);
+    fullReloadTimeoutRef.current = setTimeout(() => endFullReloadEchoRef.current(), 30000);
+    triggerScan(localPath);
+  }, [triggerScan]);
+
   // Smart polling: auto-refresh based on activity and visibility
   const hasDirtyWorktree = snapshot?.worktrees.some((w) => w.dirty) ?? false;
   const hasPendingCI = snapshot?.nodes.some((n) => n.pr?.checks === "PENDING") ?? false;
@@ -1152,9 +1191,9 @@ export default function TreeDashboard() {
       }
       if (selectedBranches.size === 0 || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.shiftKey && e.key.toLowerCase() === "r" && selectedPin) {
-        // Shift+R: full repo scan
+        // Shift+R: full repo reload (fetch all branches + rescan) with fetching echo
         e.preventDefault();
-        triggerScan(selectedPin.localPath);
+        handleFullReload(selectedPin.localPath);
       } else if (e.key === "r" && !e.shiftKey) {
         // r: refresh the PR(s) of the selected branches
         e.preventDefault();
@@ -1171,7 +1210,7 @@ export default function TreeDashboard() {
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selectedBranches, selectedPin, triggerScan, refreshSelectedPRs, selectWithDescendants, requestDeleteSelected, deleteConfirmBranches, branchLinks]);
+  }, [selectedBranches, selectedPin, triggerScan, handleFullReload, refreshSelectedPRs, selectWithDescendants, requestDeleteSelected, deleteConfirmBranches, branchLinks]);
 
   // Focus the Delete button when the confirmation opens, so d -> Enter confirms
   useEffect(() => {
@@ -1418,6 +1457,8 @@ export default function TreeDashboard() {
         if (data.isComplete) {
           // Clear the scanning lock immediately so new scans can be triggered
           isScanningRef.current = false;
+          // End the full-reload "fetching" echo → marked nodes flash the green done ring
+          endFullReloadEchoRef.current();
           lastScanCompleteTimeRef.current = Date.now();
           // Clear scan start time and field timestamps (next scan starts fresh)
           scanStartTimeRef.current = null;
@@ -3375,6 +3416,15 @@ export default function TreeDashboard() {
                         title={filterEnabled ? "Disable filter" : "Enable filter"}
                       >
                         {filterEnabled ? "Filter ON" : "Filter"}
+                      </button>
+                      <button
+                        className={`btn-icon ${fullReloading ? "btn-icon--active" : ""}`}
+                        onClick={() => selectedPin && handleFullReload(selectedPin.localPath)}
+                        disabled={fullReloading || !selectedPin}
+                        title="Reload all branches: git fetch --all + rescan (Shift+R)"
+                      >
+                        <span className={fullReloading ? "vt-spin" : undefined} style={{ marginRight: 4 }}>↻</span>
+                        {fullReloading ? "Fetching…" : "Reload"}
                       </button>
                       {customCommands.length > 0 && (
                         <div style={{ position: "relative" }}>

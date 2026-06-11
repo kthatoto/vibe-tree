@@ -491,3 +491,14 @@ pre {
   color: #fbbf24;
   margin-top: 4px;
 }
+
+/* Spinner used for the "fetching" feedback on the reload button */
+@keyframes vt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.vt-spin {
+  display: inline-block;
+  animation: vt-spin 0.8s linear infinite;
+}

@@ -2072,24 +2072,30 @@ export default function BranchGraph({
             />
           </rect>
         )}
-        {/* Done: brief green ring that pops and fades the moment reload finishes.
-            Drawn last (on top) and offset outward so it stays visible even when the
-            node is selected (which paints a solid blue border + selection glow). */}
+        {/* Done: a green "ping" — a halo ripples outward while a core ring pops out and
+            fades, both easing out for a satisfying finish. Drawn last (on top) and offset
+            outward so it stays visible even when the node is selected (solid blue border). */}
         {isJustRefreshed && (
-          <rect
-            x={x - 6}
-            y={y - 6}
-            width={nodeWidth + 12}
-            height={nodeHeight + 12}
-            rx={12}
-            ry={12}
-            fill="none"
-            stroke="#4ade80"
-            pointerEvents="none"
-          >
-            <animate attributeName="opacity" values="1;1;0" dur="0.6s" repeatCount="1" fill="freeze" />
-            <animate attributeName="stroke-width" values="3.5;3.5;1" dur="0.6s" repeatCount="1" fill="freeze" />
-          </rect>
+          <g pointerEvents="none">
+            {/* Expanding halo ripple */}
+            <rect x={x - 6} y={y - 6} width={nodeWidth + 12} height={nodeHeight + 12} rx={14} ry={14} fill="none" stroke="#4ade80">
+              <animate attributeName="x" values={`${x - 6};${x - 24}`} dur="0.55s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="y" values={`${y - 6};${y - 24}`} dur="0.55s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="width" values={`${nodeWidth + 12};${nodeWidth + 48}`} dur="0.55s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="height" values={`${nodeHeight + 12};${nodeHeight + 48}`} dur="0.55s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="opacity" values="0.5;0" dur="0.55s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="stroke-width" values="3;0.5" dur="0.55s" repeatCount="1" fill="freeze" />
+            </rect>
+            {/* Core ring: pops outward, holds briefly, then fades */}
+            <rect x={x - 6} y={y - 6} width={nodeWidth + 12} height={nodeHeight + 12} rx={12} ry={12} fill="none" stroke="#4ade80">
+              <animate attributeName="x" values={`${x - 6};${x - 12}`} dur="0.6s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="y" values={`${y - 6};${y - 12}`} dur="0.6s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="width" values={`${nodeWidth + 12};${nodeWidth + 24}`} dur="0.6s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="height" values={`${nodeHeight + 12};${nodeHeight + 24}`} dur="0.6s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="opacity" values="1;1;0" keyTimes="0;0.4;1" dur="0.6s" repeatCount="1" fill="freeze" />
+              <animate attributeName="stroke-width" values="4;4;2" keyTimes="0;0.4;1" dur="0.6s" repeatCount="1" fill="freeze" />
+            </rect>
+          </g>
         )}
         {/* Node rectangle */}
         <rect

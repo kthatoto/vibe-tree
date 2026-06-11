@@ -1,6 +1,7 @@
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import type { TreeNode, TreeEdge, TaskNode, TaskEdge, BranchLink, RepoLabel } from "../lib/api";
 import type { MergeNodeState } from "../lib/mergeProgress";
+import { effectiveChecksStatus } from "../lib/ciStatus";
 import { CIBadge, ReviewBadge, LabelChip, UserChip, TeamChip } from "./atoms/Chips";
 import { Dropdown } from "./atoms/Dropdown";
 
@@ -49,6 +50,8 @@ interface BranchGraphProps {
   refreshingBranches?: Set<string>;
   // Per-branch merge progress, shown on the nodes during single/stacked merges
   mergeStates?: Map<string, MergeNodeState>;
+  // CI check names excluded from the all-green judgment (per repo)
+  ignoredCiJobs?: Set<string>;
   // Repo labels for highlight feature (with colors)
   repoLabels?: RepoLabel[];
 }
@@ -144,6 +147,7 @@ export default function BranchGraph({
   onWorktreeMove,
   refreshingBranches = new Set(),
   mergeStates = new Map(),
+  ignoredCiJobs = new Set(),
   repoLabels = [],
 }: BranchGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -1894,9 +1898,13 @@ export default function BranchGraph({
     const hasPR = !!prLink;
     const isMerged = prLink?.status === "merged";
 
-    // Use checksStatus field directly (scan.ts calculates correct status from latest checks)
-    // The checks array in DB may contain stale check results, so checksStatus is more reliable
-    const computedChecksStatus = prLink?.checksStatus ?? null;
+    // Use the backend checksStatus, but exclude any per-repo ignored CI jobs from
+    // the all-green judgment (recomputed on the client from the full checks array).
+    const computedChecksStatus = effectiveChecksStatus(
+      prLink?.checks,
+      ignoredCiJobs,
+      (prLink?.checksStatus ?? null) as "success" | "failure" | "pending" | null
+    );
 
     // Check if PR base branch matches graph parent
     const graphParent = edges.find(e => e.child === id)?.parent;

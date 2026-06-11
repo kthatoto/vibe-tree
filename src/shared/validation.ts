@@ -76,6 +76,14 @@ export const updatePrSettingsSchema = z.object({
 
 export type UpdatePrSettingsInput = z.infer<typeof updatePrSettingsSchema>;
 
+// CI ignore jobs: per-repo list of check names excluded from the all-green judgment
+export const updateCiIgnoreJobsSchema = z.object({
+  repoId: repoIdSchema,
+  jobs: z.array(z.string()),
+});
+
+export type UpdateCiIgnoreJobsInput = z.infer<typeof updateCiIgnoreJobsSchema>;
+
 // Custom commands schemas
 export const updateCustomCommandsSchema = z.object({
   repoId: repoIdSchema,

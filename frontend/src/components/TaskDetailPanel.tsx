@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, type TaskInstruction, type ChatMessage, type TreeNode, type BranchLink, type GitHubCheck, type GitHubLabel, type BranchDescription, type RepoCollaborator } from "../lib/api";
 import type { MergeStateUpdate } from "../lib/mergeProgress";
+import { effectiveChecksStatus } from "../lib/ciStatus";
 import { wsClient } from "../lib/ws";
 import { computeSimpleDiff, type DiffLine } from "../lib/diff";
 import { linkifyPreContent } from "../lib/linkify";
@@ -195,6 +196,9 @@ interface TaskDetailPanelProps {
   // Report per-branch merge progress to the graph (and clear it)
   onMergeStateChange?: (updates: MergeStateUpdate[]) => void;
   onMergeStatesClear?: () => void;
+  // CI check names ignored for the all-green judgment (per repo) + toggle
+  ignoredCiJobs?: Set<string>;
+  onToggleCiIgnoreJob?: (jobName: string) => void;
   // PR quick actions (from project settings)
   prQuickLabels?: string[];
   prQuickReviewers?: string[];
@@ -228,6 +232,8 @@ export function TaskDetailPanel({
   onBranchStatusRefreshEnd,
   onMergeStateChange,
   onMergeStatesClear,
+  ignoredCiJobs = new Set<string>(),
+  onToggleCiIgnoreJob,
   prQuickLabels = [],
   prQuickReviewers = [],
   allRepoLabels = [],
@@ -1491,11 +1497,15 @@ export function TaskDetailPanel({
           const labels: GitHubLabel[] = pr.labels ? ((): GitHubLabel[] => { try { const parsed = JSON.parse(pr.labels!); return Array.isArray(parsed) ? parsed.map((l: string | GitHubLabel) => typeof l === 'string' ? { name: l, color: repoLabels[l] || '374151' } : l) : [] } catch { return [] } })() : [];
           const reviewers = pr.reviewers ? ((): string[] => { try { return JSON.parse(pr.reviewers!) } catch { return [] } })() : [];
           const checks: GitHubCheck[] = pr.checks ? ((): GitHubCheck[] => { try { return JSON.parse(pr.checks!) } catch { return [] } })() : [];
-          const passedChecks = checks.filter((c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED").length;
-          const totalChecks = checks.length;
-          // Use checksStatus field directly (scan.ts calculates correct status from latest checks)
-          // The checks array in DB may contain stale check results, so checksStatus is more reliable
-          const computedChecksStatus = pr.checksStatus ?? null;
+          // Exclude per-repo ignored CI jobs from the all-green judgment + counts.
+          const judgedChecks = checks.filter((c) => !ignoredCiJobs.has(c.name));
+          const passedChecks = judgedChecks.filter((c) => c.conclusion === "SUCCESS" || c.conclusion === "SKIPPED").length;
+          const totalChecks = judgedChecks.length;
+          const computedChecksStatus = effectiveChecksStatus(
+            pr.checks,
+            ignoredCiJobs,
+            (pr.checksStatus ?? null) as "success" | "failure" | "pending" | null
+          );
           // Helper to get contrasting text color
           const getTextColor = (bgColor: string) => {
             const r = parseInt(bgColor.slice(0, 2), 16);
@@ -2168,30 +2178,50 @@ export function TaskDetailPanel({
                 {checks.length === 0 ? (
                   <p className="task-detail-panel__ci-empty">No checks found</p>
                 ) : (
-                  checks.map((check, i) => (
-                    check.detailsUrl ? (
-                      <a
+                  checks.map((check, i) => {
+                    const isIgnored = ignoredCiJobs.has(check.name);
+                    const icon = check.conclusion === "SUCCESS" ? "✓" : check.conclusion === "FAILURE" || check.conclusion === "ERROR" ? "✗" : check.conclusion === "SKIPPED" ? "⊘" : "●";
+                    return (
+                      <div
                         key={i}
-                        href={check.detailsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="task-detail-panel__ci-item task-detail-panel__ci-item--link"
+                        className="task-detail-panel__ci-item"
+                        style={{ display: "flex", alignItems: "center", gap: 6, opacity: isIgnored ? 0.45 : 1 }}
                       >
                         <span className={`task-detail-panel__ci-status task-detail-panel__ci-status--${check.conclusion?.toLowerCase() || "pending"}`}>
-                          {check.conclusion === "SUCCESS" ? "✓" : check.conclusion === "FAILURE" || check.conclusion === "ERROR" ? "✗" : check.conclusion === "SKIPPED" ? "⊘" : "●"}
+                          {icon}
                         </span>
-                        <span className="task-detail-panel__ci-name">{check.name}</span>
-                        <span className="task-detail-panel__ci-link-icon">↗</span>
-                      </a>
-                    ) : (
-                      <div key={i} className="task-detail-panel__ci-item">
-                        <span className={`task-detail-panel__ci-status task-detail-panel__ci-status--${check.conclusion?.toLowerCase() || "pending"}`}>
-                          {check.conclusion === "SUCCESS" ? "✓" : check.conclusion === "FAILURE" || check.conclusion === "ERROR" ? "✗" : check.conclusion === "SKIPPED" ? "⊘" : "●"}
-                        </span>
-                        <span className="task-detail-panel__ci-name">{check.name}</span>
+                        {check.detailsUrl ? (
+                          <a
+                            href={check.detailsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="task-detail-panel__ci-name"
+                            style={{ flex: 1, color: "inherit", textDecoration: isIgnored ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                          >
+                            {check.name} ↗
+                          </a>
+                        ) : (
+                          <span
+                            className="task-detail-panel__ci-name"
+                            style={{ flex: 1, textDecoration: isIgnored ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                          >
+                            {check.name}
+                          </span>
+                        )}
+                        {isIgnored && <span style={{ fontSize: 10, color: "#9ca3af", flexShrink: 0 }}>ignored</span>}
+                        {onToggleCiIgnoreJob && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleCiIgnoreJob(check.name); }}
+                            title={isIgnored ? "Include this check in the all-green judgment" : "Ignore this check in the all-green judgment"}
+                            style={{ flexShrink: 0, padding: "2px 8px", fontSize: 11, background: "transparent", border: "1px solid #4b5563", borderRadius: 4, color: "#9ca3af", cursor: "pointer" }}
+                          >
+                            {isIgnored ? "Unignore" : "Ignore"}
+                          </button>
+                        )}
                       </div>
-                    )
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

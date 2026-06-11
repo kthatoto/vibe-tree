@@ -500,6 +500,9 @@ export default function TreeDashboard() {
   // PR settings
   const [prQuickLabels, setPrQuickLabels] = useState<string[]>([]);
   const [prQuickReviewers, setPrQuickReviewers] = useState<string[]>([]);
+  // CI check names excluded from the all-green judgment (per repo)
+  const [ciIgnoreJobs, setCiIgnoreJobs] = useState<string[]>([]);
+  const ciIgnoreJobsSet = useMemo(() => new Set(ciIgnoreJobs), [ciIgnoreJobs]);
   const [repoLabels, setRepoLabels] = useState<Array<{ name: string; color: string; description: string }>>([]);
   const [repoCollaborators, setRepoCollaborators] = useState<RepoCollaborator[]>([]);
   const [repoTeams, setRepoTeams] = useState<RepoTeam[]>([]);
@@ -530,17 +533,19 @@ export default function TreeDashboard() {
           api.syncRepoCache(snapshot.repoId).catch(console.error);
         }
 
-        const [prSettings, labels, collaborators, teams] = await Promise.all([
+        const [prSettings, labels, collaborators, teams, ciIgnore] = await Promise.all([
           api.getPrSettings(snapshot.repoId),
           api.getRepoLabels(snapshot.repoId).catch(() => []),
           api.getRepoCollaborators(snapshot.repoId).catch(() => []),
           api.searchRepoTeams(snapshot.repoId).catch(() => []),
+          api.getCiIgnoreJobs(snapshot.repoId).catch(() => ({ jobs: [] as string[] })),
         ]);
         setPrQuickLabels(prSettings.quickLabels || []);
         setPrQuickReviewers(prSettings.quickReviewers || []);
         setRepoLabels(labels);
         setRepoCollaborators(collaborators);
         setRepoTeams(teams);
+        setCiIgnoreJobs(ciIgnore.jobs || []);
       } catch {
         // No settings yet, use defaults
         setPrQuickLabels([]);
@@ -555,8 +560,31 @@ export default function TreeDashboard() {
     }).catch(console.error);
   }, [snapshot?.repoId]);
 
+  // Persist the full ignore list, updating local state optimistically.
+  const saveCiIgnoreJobs = useCallback((jobs: string[]) => {
+    setCiIgnoreJobs(jobs);
+    const repoId = snapshot?.repoId;
+    if (repoId) {
+      api.updateCiIgnoreJobs({ repoId, jobs }).catch(console.error);
+    }
+  }, [snapshot?.repoId]);
+
+  // Toggle a single CI check in/out of the per-repo ignore list (used by the CI list).
+  const toggleCiIgnoreJob = useCallback((jobName: string) => {
+    setCiIgnoreJobs((prev) => {
+      const next = prev.includes(jobName)
+        ? prev.filter((j) => j !== jobName)
+        : [...prev, jobName];
+      const repoId = snapshot?.repoId;
+      if (repoId) {
+        api.updateCiIgnoreJobs({ repoId, jobs: next }).catch(console.error);
+      }
+      return next;
+    });
+  }, [snapshot?.repoId]);
+
   // Settings modal category
-  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "polling" | "pr-labels" | "pr-reviewers" | "commands" | "actions" | "cleanup" | "debug">("branch");
+  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "polling" | "pr-labels" | "pr-reviewers" | "ci-ignore" | "commands" | "actions" | "cleanup" | "debug">("branch");
   const [debugModeEnabled, setDebugModeEnabled] = useState(() => localStorage.getItem("vibe-tree-debug-mode") === "true");
   const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<{ chatSessions: number; taskInstructions: number; branchLinks: number } | null>(null);
@@ -3609,6 +3637,7 @@ export default function TreeDashboard() {
                       }}
                       refreshingBranches={refreshingBranches}
                       mergeStates={mergeStates}
+                      ignoredCiJobs={ciIgnoreJobsSet}
                       repoLabels={repoLabels}
                     />
                   </div>
@@ -3827,6 +3856,8 @@ export default function TreeDashboard() {
                     }}
                     onMergeStateChange={applyMergeStateUpdates}
                     onMergeStatesClear={clearMergeStates}
+                    ignoredCiJobs={ciIgnoreJobsSet}
+                    onToggleCiIgnoreJob={toggleCiIgnoreJob}
                     prQuickLabels={prQuickLabels}
                     prQuickReviewers={prQuickReviewers}
                     allRepoLabels={repoLabels}
@@ -3956,6 +3987,15 @@ export default function TreeDashboard() {
                     onClick={() => setSettingsCategory("pr-reviewers")}
                   >
                     Reviewers
+                  </button>
+                </div>
+                <div className="settings-modal__nav-group">
+                  <span className="settings-modal__nav-parent">CI</span>
+                  <button
+                    className={`settings-modal__nav-item settings-modal__nav-item--child ${settingsCategory === "ci-ignore" ? "settings-modal__nav-item--active" : ""}`}
+                    onClick={() => setSettingsCategory("ci-ignore")}
+                  >
+                    Ignored Jobs
                   </button>
                 </div>
                 <button
@@ -4521,6 +4561,44 @@ export default function TreeDashboard() {
                             </span>
                           )}
                         </div>
+                      </>
+                    )}
+
+                    {/* CI Ignored Jobs */}
+                    {settingsCategory === "ci-ignore" && (
+                      <>
+                        <h3 style={{ margin: "0 0 8px" }}>Ignored CI Jobs</h3>
+                        <p style={{ color: "#9ca3af", margin: "0 0 16px" }}>
+                          CI checks listed here are excluded from the all-green judgment on the
+                          branch graph for this repository. Add a job from the CI checks list on a
+                          branch; remove it here.
+                        </p>
+                        {ciIgnoreJobs.length === 0 ? (
+                          <span style={{ color: "#6b7280", fontStyle: "italic" }}>
+                            No ignored CI jobs. Use the ignore action in a branch&apos;s CI checks list to add one.
+                          </span>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {ciIgnoreJobs.map((job) => (
+                              <div
+                                key={job}
+                                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 12px", background: "#1f2937", borderRadius: 6 }}
+                              >
+                                <span style={{ color: "#e5e7eb", fontSize: 13, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {job}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="btn-secondary"
+                                  onClick={() => saveCiIgnoreJobs(ciIgnoreJobs.filter((j) => j !== job))}
+                                  style={{ padding: "2px 10px", fontSize: 12, flexShrink: 0 }}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </>
                     )}
 

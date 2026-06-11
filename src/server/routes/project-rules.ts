@@ -8,6 +8,7 @@ import {
   updateWorktreeSettingsSchema,
   updatePollingSettingsSchema,
   updatePrSettingsSchema,
+  updateCiIgnoreJobsSchema,
   updateCustomCommandsSchema,
   validateOrThrow,
 } from "../../shared/validation";
@@ -443,6 +444,93 @@ projectRulesRouter.post("/pr-settings", async (c) => {
   };
 
   // Broadcast update
+  broadcast({
+    type: "projectRules.updated",
+    repoId: input.repoId,
+    data: response,
+  });
+
+  return c.json(response);
+});
+
+// ============ CI Ignore Jobs ============
+// Per-repo list of CI check names excluded from the all-green judgment.
+// Adding happens from the CI list in the app; this API also supports removal.
+
+// GET /api/project-rules/ci-ignore-jobs?repoId=...
+projectRulesRouter.get("/ci-ignore-jobs", async (c) => {
+  const query = validateOrThrow(repoIdQuerySchema, {
+    repoId: c.req.query("repoId"),
+  });
+
+  const rules = await db
+    .select()
+    .from(schema.projectRules)
+    .where(
+      and(
+        eq(schema.projectRules.repoId, query.repoId),
+        eq(schema.projectRules.ruleType, "ci_ignore_jobs"),
+        eq(schema.projectRules.isActive, true)
+      )
+    );
+
+  const rule = rules[0];
+  if (!rule) {
+    return c.json({ id: null, repoId: query.repoId, jobs: [] });
+  }
+
+  const ruleData = JSON.parse(rule.ruleJson) as { jobs?: string[] };
+  return c.json({
+    id: rule.id,
+    repoId: rule.repoId,
+    jobs: ruleData.jobs ?? [],
+  });
+});
+
+// POST /api/project-rules/ci-ignore-jobs  { repoId, jobs }
+projectRulesRouter.post("/ci-ignore-jobs", async (c) => {
+  const body = await c.req.json();
+  const input = validateOrThrow(updateCiIgnoreJobsSchema, body);
+
+  // De-duplicate while preserving order
+  const jobs = Array.from(new Set(input.jobs));
+  const now = new Date().toISOString();
+  const ruleJson = JSON.stringify({ jobs });
+
+  const existing = await db
+    .select()
+    .from(schema.projectRules)
+    .where(
+      and(
+        eq(schema.projectRules.repoId, input.repoId),
+        eq(schema.projectRules.ruleType, "ci_ignore_jobs"),
+        eq(schema.projectRules.isActive, true)
+      )
+    );
+
+  let ruleId: number;
+  if (existing[0]) {
+    await db
+      .update(schema.projectRules)
+      .set({ ruleJson, updatedAt: now })
+      .where(eq(schema.projectRules.id, existing[0].id));
+    ruleId = existing[0].id;
+  } else {
+    const result = await db
+      .insert(schema.projectRules)
+      .values({
+        repoId: input.repoId,
+        ruleType: "ci_ignore_jobs",
+        ruleJson,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    ruleId = result[0]!.id;
+  }
+
+  const response = { id: ruleId, repoId: input.repoId, jobs };
   broadcast({
     type: "projectRules.updated",
     repoId: input.repoId,

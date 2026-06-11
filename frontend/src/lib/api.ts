@@ -607,6 +607,20 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  // CI ignore jobs (check names excluded from the all-green judgment, per repo)
+  getCiIgnoreJobs: (repoId: string) =>
+    fetchJson<{ id: number | null; repoId: string; jobs: string[] }>(
+      `${API_BASE}/project-rules/ci-ignore-jobs?repoId=${encodeURIComponent(repoId)}`
+    ),
+  updateCiIgnoreJobs: (data: { repoId: string; jobs: string[] }) =>
+    fetchJson<{ id: number | null; repoId: string; jobs: string[] }>(
+      `${API_BASE}/project-rules/ci-ignore-jobs`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    ),
+
   // Custom Commands
   getCustomCommands: (repoId: string) =>
     fetchJson<{ id: number | null; repoId: string; commands: CustomCommand[]; watchedWorkflows: string[] }>(

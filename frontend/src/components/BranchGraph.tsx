@@ -377,6 +377,12 @@ export default function BranchGraph({
   const onEdgeCreateRef = useRef(onEdgeCreate);
   onEdgeCreateRef.current = onEdgeCreate;
 
+  // Keyboard Shift+move marquee: the fixed origin of the rectangle (where the
+  // shift-drag began) and the selection that existed at that moment (to union the
+  // box with). Reset when Shift is released or a non-shift move happens.
+  const rangeOriginRef = useRef<string | null>(null);
+  const baseSelectionRef = useRef<Set<string>>(new Set());
+
   // Auto-scroll constants and ref (shared across all drag operations)
   const SCROLL_ZONE = 50; // Pixels from edge to trigger scroll
   const SCROLL_SPEED = 10; // Pixels per frame
@@ -1011,8 +1017,10 @@ export default function BranchGraph({
 
   // Vim-style cursor navigation between nodes: h/j/k/l → left/down/up/right.
   // Moving the cursor selects that node (same as a click). With Shift held, the
-  // moved-to node is added to the selection (range select). With no current
-  // cursor, the first press drops it on the default branch.
+  // cursor keeps moving while a rectangle (marquee) selection spans from a fixed
+  // origin (where the shift-drag began) to the cursor — the same row/depth box as
+  // Shift+click. With no current cursor, the first press drops it on the default
+  // branch.
   useEffect(() => {
     const handleNavKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1043,6 +1051,7 @@ export default function BranchGraph({
       const current = cursorId ? navNodes.find((n) => n.id === cursorId) : null;
 
       if (!current) {
+        rangeOriginRef.current = null;
         const start = navNodes.find((n) => n.id === defaultBranch) ?? navNodes.reduce((a, b) => (a.y <= b.y ? a : b));
         onSelectionChange(new Set([start.id]), start.id);
         scrollNodeIntoView(start);
@@ -1066,16 +1075,46 @@ export default function BranchGraph({
         if (ok && score < bestScore) { bestScore = score; best = n; }
       }
       if (best) {
-        // Shift held → extend the selection (range select); otherwise replace it
-        const nextSelection = e.shiftKey
-          ? new Set([...selectedBranches, best.id])
-          : new Set([best.id]);
-        onSelectionChange(nextSelection, best.id);
+        if (e.shiftKey) {
+          // Shift+move → rectangle (marquee) select. The box spans from a fixed
+          // origin (set when the shift-drag began) to the moving cursor, so the
+          // selection grows AND shrinks as the cursor moves. The cursor advances
+          // to `best` so subsequent presses keep resizing the box.
+          if (rangeOriginRef.current === null || !navNodes.some((n) => n.id === rangeOriginRef.current)) {
+            rangeOriginRef.current = current.id;
+            baseSelectionRef.current = new Set(selectedBranches);
+          }
+          const originNode = navNodes.find((n) => n.id === rangeOriginRef.current) ?? current;
+          const minRow = Math.min(originNode.row, best.row);
+          const maxRow = Math.max(originNode.row, best.row);
+          const minDepth = Math.min(originNode.depth, best.depth);
+          const maxDepth = Math.max(originNode.depth, best.depth);
+          const boxNodes = layoutNodes
+            .filter((n) =>
+              !n.isTentative &&
+              n.id !== defaultBranch &&
+              n.row >= minRow && n.row <= maxRow &&
+              n.depth >= minDepth && n.depth <= maxDepth
+            )
+            .map((n) => n.id);
+          onSelectionChange(new Set([...baseSelectionRef.current, ...boxNodes]), best.id);
+        } else {
+          rangeOriginRef.current = null;
+          onSelectionChange(new Set([best.id]), best.id);
+        }
         scrollNodeIntoView(best);
       }
     };
+    // Releasing Shift ends the current marquee so the next shift-drag starts fresh.
+    const handleNavKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Shift") rangeOriginRef.current = null;
+    };
     document.addEventListener("keydown", handleNavKey);
-    return () => document.removeEventListener("keydown", handleNavKey);
+    document.addEventListener("keyup", handleNavKeyUp);
+    return () => {
+      document.removeEventListener("keydown", handleNavKey);
+      document.removeEventListener("keyup", handleNavKeyUp);
+    };
   }, [layoutNodes, selectedBranches, selectionAnchor, defaultBranch, onSelectionChange, scrollNodeIntoView]);
 
   // Helper to get column bounds (used in multiple places)
@@ -1784,6 +1823,9 @@ export default function BranchGraph({
     const x = originalX + nodeOffset;
 
     const isSelected = effectiveSelection.has(id);
+    // The keyboard cursor (focused node). Only surfaced when more than one node is
+    // selected, so you can tell where hjkl / shift-marquee is currently anchored.
+    const isCursor = isSelected && effectiveSelection.size > 1 && id === selectionAnchor;
     const isDefault = id === defaultBranch;
     const hasWorktree = !!node.worktree;
     // Use branchLinks as single source of truth for PR info
@@ -1979,6 +2021,28 @@ export default function BranchGraph({
             opacity={0.4}
             pointerEvents="none"
           />
+        )}
+        {/* Cursor indicator: a bright cyan ring marking where the keyboard cursor is */}
+        {isCursor && (
+          <rect
+            x={x - 5}
+            y={y - 5}
+            width={nodeWidth + 10}
+            height={nodeHeight + 10}
+            rx={11}
+            ry={11}
+            fill="none"
+            stroke="#22d3ee"
+            strokeWidth={2}
+            pointerEvents="none"
+          >
+            <animate
+              attributeName="opacity"
+              values="1;0.45;1"
+              dur="1.2s"
+              repeatCount="indefinite"
+            />
+          </rect>
         )}
         {/* Node rectangle */}
         <rect

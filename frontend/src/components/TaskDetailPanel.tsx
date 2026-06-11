@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, type TaskInstruction, type ChatMessage, type TreeNode, type BranchLink, type GitHubCheck, type GitHubLabel, type BranchDescription, type RepoCollaborator } from "../lib/api";
+import type { MergeStateUpdate } from "../lib/mergeProgress";
 import { wsClient } from "../lib/ws";
 import { computeSimpleDiff, type DiffLine } from "../lib/diff";
 import { linkifyPreContent } from "../lib/linkify";
@@ -191,6 +192,9 @@ interface TaskDetailPanelProps {
   onBranchStatusRefresh?: (updates: Record<string, BranchStatusUpdate>) => void;
   onBranchStatusRefreshStart?: (branches: string[]) => void;
   onBranchStatusRefreshEnd?: (branches: string[]) => void;
+  // Report per-branch merge progress to the graph (and clear it)
+  onMergeStateChange?: (updates: MergeStateUpdate[]) => void;
+  onMergeStatesClear?: () => void;
   // PR quick actions (from project settings)
   prQuickLabels?: string[];
   prQuickReviewers?: string[];
@@ -222,6 +226,8 @@ export function TaskDetailPanel({
   onBranchStatusRefresh,
   onBranchStatusRefreshStart,
   onBranchStatusRefreshEnd,
+  onMergeStateChange,
+  onMergeStatesClear,
   prQuickLabels = [],
   prQuickReviewers = [],
   allRepoLabels = [],
@@ -390,8 +396,11 @@ export function TaskDetailPanel({
     setShowMergeConfirm(false); // optimistic: close the modal immediately
     setMerging(true);
     setError(null);
+    onMergeStatesClear?.();
+    onMergeStateChange?.([[branchName, { phase: "active", message: "merging…" }]]);
     try {
       await api.mergePr(repoId, prNumber);
+      onMergeStateChange?.([[branchName, { phase: "merged" }]]);
       // Refresh the PR link so it reflects the merged state, then rescan
       const link = branchLinks.find((l) => l.linkType === "pr" && l.number === prNumber);
       if (link) {
@@ -402,7 +411,9 @@ export function TaskDetailPanel({
       }
       onWorktreeCreated?.();
     } catch (err) {
-      setError((err as Error).message);
+      const message = (err as Error).message;
+      setError(message);
+      onMergeStateChange?.([[branchName, { phase: "failed", message }]]);
     } finally {
       setMerging(false);
     }

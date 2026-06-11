@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import type { TreeNode, TreeEdge, TaskNode, TaskEdge, BranchLink, RepoLabel } from "../lib/api";
+import type { MergeNodeState } from "../lib/mergeProgress";
 import { CIBadge, ReviewBadge, LabelChip, UserChip, TeamChip } from "./atoms/Chips";
 import { Dropdown } from "./atoms/Dropdown";
 
@@ -46,6 +47,8 @@ interface BranchGraphProps {
   onWorktreeMove?: (worktreePath: string, fromBranch: string, toBranch: string) => void;
   // Branches currently refreshing their status (for loading indicator)
   refreshingBranches?: Set<string>;
+  // Per-branch merge progress, shown on the nodes during single/stacked merges
+  mergeStates?: Map<string, MergeNodeState>;
   // Repo labels for highlight feature (with colors)
   repoLabels?: RepoLabel[];
 }
@@ -140,6 +143,7 @@ export default function BranchGraph({
   highlightedBranch = null,
   onWorktreeMove,
   refreshingBranches = new Set(),
+  mergeStates = new Map(),
   repoLabels = [],
 }: BranchGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -1966,6 +1970,8 @@ export default function BranchGraph({
     const nodeOpacity = (nodeUnfocused ? baseNodeOpacity * 0.3 : baseNodeOpacity) * highlightDim;
     const isRefreshing = refreshingBranches.has(id);
     const isJustRefreshed = justRefreshedBranches.has(id);
+    const mergeState = mergeStates.get(id);
+    const isMerging = mergeState?.phase === "active";
 
     // Determine cursor style
     const getCursorStyle = () => {
@@ -1992,8 +1998,8 @@ export default function BranchGraph({
         }}
         onMouseDown={handleNodeMouseDown}
       >
-        {/* Reloading: pulse the whole node to convey it's being refreshed */}
-        {isRefreshing && (
+        {/* Reloading / merging: pulse the whole node to convey work in progress */}
+        {(isRefreshing || isMerging) && (
           <animate
             attributeName="opacity"
             values={`${nodeOpacity};${nodeOpacity * 0.3};${nodeOpacity}`}
@@ -2096,6 +2102,59 @@ export default function BranchGraph({
               <animate attributeName="stroke-width" values="4;4;2" keyTimes="0;0.4;1" dur="0.6s" repeatCount="1" fill="freeze" />
             </rect>
           </g>
+        )}
+        {/* Merge progress: per-phase ring around the node */}
+        {mergeState?.phase === "waiting" && (
+          <rect
+            x={x - 4}
+            y={y - 4}
+            width={nodeWidth + 8}
+            height={nodeHeight + 8}
+            rx={10}
+            ry={10}
+            fill="none"
+            stroke="#4b5563"
+            strokeWidth={1}
+            strokeDasharray="3,3"
+            opacity={0.6}
+            pointerEvents="none"
+          />
+        )}
+        {mergeState?.phase === "active" && (
+          <rect
+            x={x - 6}
+            y={y - 6}
+            width={nodeWidth + 12}
+            height={nodeHeight + 12}
+            rx={12}
+            ry={12}
+            fill="none"
+            stroke="#f59e0b"
+            strokeWidth={2.5}
+            pointerEvents="none"
+          >
+            <animate attributeName="opacity" values="0.95;0.4;0.95" dur="1s" repeatCount="indefinite" />
+          </rect>
+        )}
+        {mergeState?.phase === "merged" && (
+          <rect x={x - 6} y={y - 6} width={nodeWidth + 12} height={nodeHeight + 12} rx={12} ry={12} fill="none" stroke="#c084fc" pointerEvents="none">
+            <animate attributeName="opacity" values="1;1;0" keyTimes="0;0.4;1" dur="0.7s" repeatCount="1" fill="freeze" />
+            <animate attributeName="stroke-width" values="4;4;1.5" keyTimes="0;0.4;1" dur="0.7s" repeatCount="1" fill="freeze" />
+            <animate attributeName="x" values={`${x - 6};${x - 12}`} dur="0.7s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+            <animate attributeName="y" values={`${y - 6};${y - 12}`} dur="0.7s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+            <animate attributeName="width" values={`${nodeWidth + 12};${nodeWidth + 24}`} dur="0.7s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+            <animate attributeName="height" values={`${nodeHeight + 12};${nodeHeight + 24}`} dur="0.7s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+          </rect>
+        )}
+        {mergeState?.phase === "failed" && (
+          <rect x={x - 5} y={y - 5} width={nodeWidth + 10} height={nodeHeight + 10} rx={11} ry={11} fill="none" stroke="#f87171" strokeWidth={2.5}>
+            <title>{mergeState.message || "merge failed"}</title>
+          </rect>
+        )}
+        {mergeState?.phase === "skipped" && (
+          <rect x={x - 5} y={y - 5} width={nodeWidth + 10} height={nodeHeight + 10} rx={11} ry={11} fill="none" stroke="#6b7280" strokeWidth={1.5} strokeDasharray="4,3" opacity={0.8}>
+            <title>{mergeState.message || "skipped"}</title>
+          </rect>
         )}
         {/* Node rectangle */}
         <rect
@@ -3033,6 +3092,33 @@ export default function BranchGraph({
           <g className="branch-graph__nodes">
             {layoutNodes.map((node) => renderNode(node))}
           </g>
+
+          {/* Merge step labels: a status pill over each node currently being merged */}
+          {mergeStates.size > 0 && (
+            <g className="branch-graph__merge-labels" pointerEvents="none">
+              {layoutNodes.map((node) => {
+                const st = mergeStates.get(node.id);
+                if (!st || st.phase !== "active" || !st.message) return null;
+                const nx = node.x + getNodeOffset(node.id);
+                const nIsMinimized = !node.isTentative && isMinimized(node.id);
+                const nWidth = nIsMinimized ? MINIMIZED_NODE_WIDTH : NODE_WIDTH;
+                const nIsDefault = node.id === defaultBranch;
+                const nHeight = node.isTentative ? TENTATIVE_NODE_HEIGHT : nIsDefault ? MINIMIZED_NODE_HEIGHT : NODE_HEIGHT;
+                const cx = nx + nWidth / 2;
+                const cy = node.y + nHeight / 2;
+                const label = st.message;
+                const w = label.length * 6.2 + 16;
+                return (
+                  <g key={`merge-label-${node.id}`}>
+                    <rect x={cx - w / 2} y={cy - 11} width={w} height={22} rx={11} ry={11} fill="#1c1917" stroke="#f59e0b" strokeWidth={1} opacity={0.96} />
+                    <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle" fontSize={11} fontWeight={600} fill="#fbbf24">
+                      {label}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          )}
 
           {/* Column reorder drag handles - rendered last to be on top */}
           {editMode && !columnDragState && (

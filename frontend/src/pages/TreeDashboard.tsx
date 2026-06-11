@@ -47,6 +47,7 @@ import MultiSelectPanel from "../components/MultiSelectPanel";
 import { useSmartPolling, INTERVALS, COUNTDOWN_INITIAL_PAUSE } from "../hooks/useSmartPolling";
 import { LabelChip, UserChip, TeamChip, ReviewBadge, CIBadge } from "../components/atoms/Chips";
 import type { PlanningSession, TaskNode, TaskEdge } from "../lib/api";
+import type { MergeNodeState, MergeStateUpdate } from "../lib/mergeProgress";
 
 // Scan progress bar component
 type PollingMode = "burst" | "dirty" | "ci_pending" | "active" | "idle" | "super_idle" | "hidden" | "debug";
@@ -330,6 +331,19 @@ export default function TreeDashboard() {
   const [branchDescriptions, setBranchDescriptions] = useState<Map<string, string>>(new Map());
   // Branches currently refreshing their status (for loading UI)
   const [refreshingBranches, setRefreshingBranches] = useState<Set<string>>(new Set());
+  // Per-branch merge progress, surfaced on the graph (single + stacked merges)
+  const [mergeStates, setMergeStates] = useState<Map<string, MergeNodeState>>(new Map());
+  const applyMergeStateUpdates = useCallback((updates: MergeStateUpdate[]) => {
+    setMergeStates((prev) => {
+      const next = new Map(prev);
+      for (const [branch, state] of updates) {
+        if (state === null) next.delete(branch);
+        else next.set(branch, state);
+      }
+      return next;
+    });
+  }, []);
+  const clearMergeStates = useCallback(() => setMergeStates(new Map()), []);
   // Branches pending deletion confirmation (d shortcut); null = no modal
   const [deleteConfirmBranches, setDeleteConfirmBranches] = useState<string[] | null>(null);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
@@ -3594,6 +3608,7 @@ export default function TreeDashboard() {
                         setPendingWorktreeMove({ worktreePath, fromBranch, toBranch });
                       }}
                       refreshingBranches={refreshingBranches}
+                      mergeStates={mergeStates}
                       repoLabels={repoLabels}
                     />
                   </div>
@@ -3642,6 +3657,8 @@ export default function TreeDashboard() {
                         return next;
                       });
                     }}
+                    onMergeStateChange={applyMergeStateUpdates}
+                    onMergeStatesClear={clearMergeStates}
                     onBranchesDeleted={applyBranchesDeleted}
                   />
                 ) : selectedNode && selectedPin ? (
@@ -3808,6 +3825,8 @@ export default function TreeDashboard() {
                         return next;
                       });
                     }}
+                    onMergeStateChange={applyMergeStateUpdates}
+                    onMergeStatesClear={clearMergeStates}
                     prQuickLabels={prQuickLabels}
                     prQuickReviewers={prQuickReviewers}
                     allRepoLabels={repoLabels}

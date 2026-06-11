@@ -1,5 +1,6 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { api, type BranchLink, type TreeEdge, type RepoLabel, type RepoCollaborator, type TreeNode } from "../lib/api";
+import type { MergeStateUpdate } from "../lib/mergeProgress";
 import { Dropdown } from "./atoms/Dropdown";
 import { LabelChip, UserChip, TeamChip } from "./atoms/Chips";
 import { WorktreeSelector } from "./atoms/WorktreeSelector";
@@ -58,6 +59,9 @@ interface MultiSelectPanelProps {
   // Show/hide the per-node "refreshing" spinner on the branch graph
   onBranchStatusRefreshStart?: (branches: string[]) => void;
   onBranchStatusRefreshEnd?: (branches: string[]) => void;
+  // Report per-branch merge progress to the graph (and clear it)
+  onMergeStateChange?: (updates: MergeStateUpdate[]) => void;
+  onMergeStatesClear?: () => void;
 }
 
 export default function MultiSelectPanel({
@@ -81,6 +85,8 @@ export default function MultiSelectPanel({
   onBranchesDeleted,
   onBranchStatusRefreshStart,
   onBranchStatusRefreshEnd,
+  onMergeStateChange,
+  onMergeStatesClear,
 }: MultiSelectPanelProps) {
   const selectedList = useMemo(() => [...selectedBranches], [selectedBranches]);
 
@@ -719,6 +725,8 @@ export default function MultiSelectPanel({
     const childrenOf = (b: string) => prs.filter((p) => parentOf.get(p.branch) === b).map((p) => p.branch);
 
     setProgress({ total: prs.length, completed: 0, current: null, results: [], status: "running" });
+    onMergeStatesClear?.();
+    onMergeStateChange?.(prs.map((p) => [p.branch, { phase: "waiting" }] as MergeStateUpdate));
     const results: BulkOperationProgress["results"] = [];
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     let completed = 0;
@@ -738,9 +746,11 @@ export default function MultiSelectPanel({
       // GitHub is re-targeting this PR to the default branch. Give it time.
       if (parentOf.get(branch) !== null) {
         setProgress((p) => ({ ...p, current: `${branch}: waiting for re-target…` }));
+        onMergeStateChange?.([[branch, { phase: "active", message: "waiting for re-target…" }]]);
         await sleep(10000);
       }
       setProgress((p) => ({ ...p, current: `${branch}: checking…` }));
+      onMergeStateChange?.([[branch, { phase: "active", message: "checking…" }]]);
       let retargeted = false;
       for (let i = 0; i < 20; i++) {
         const st = await api.getPrMergeStatus(repoId, prNumber);
@@ -750,6 +760,7 @@ export default function MultiSelectPanel({
         if (st.baseRefName && st.baseRefName !== defaultBranch) {
           if (!retargeted) {
             setProgress((p) => ({ ...p, current: `${branch}: → ${defaultBranch}` }));
+            onMergeStateChange?.([[branch, { phase: "active", message: `→ ${defaultBranch}` }]]);
             await api.changePrBaseBranch(link.id, defaultBranch);
             retargeted = true;
             await sleep(2000);
@@ -760,6 +771,7 @@ export default function MultiSelectPanel({
         const mss = st.mergeStateStatus;
         if (st.mergeable === "MERGEABLE" && (mss === "CLEAN" || mss === "UNSTABLE" || mss === "HAS_HOOKS")) {
           setProgress((p) => ({ ...p, current: `${branch}: merging…` }));
+          onMergeStateChange?.([[branch, { phase: "active", message: "merging…" }]]);
           await api.mergePr(repoId, prNumber);
           return;
         }
@@ -780,9 +792,12 @@ export default function MultiSelectPanel({
         await mergeOne(branch, link);
         merged.add(branch);
         record(branch, true);
+        onMergeStateChange?.([[branch, { phase: "merged" }]]);
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
         failed.add(branch);
-        record(branch, false, err instanceof Error ? err.message : String(err));
+        record(branch, false, message);
+        onMergeStateChange?.([[branch, { phase: "failed", message }]]);
         return; // do not merge descendants of a failed PR
       }
       await Promise.all(childrenOf(branch).map((c) => runFrom(c)));
@@ -795,6 +810,7 @@ export default function MultiSelectPanel({
     for (const { branch } of prs) {
       if (!merged.has(branch) && !failed.has(branch)) {
         record(branch, false, "skipped (ancestor not merged)");
+        onMergeStateChange?.([[branch, { phase: "skipped", message: "skipped (ancestor not merged)" }]]);
       }
     }
 
@@ -828,6 +844,7 @@ export default function MultiSelectPanel({
       results: [],
       status: "idle",
     });
+    onMergeStatesClear?.();
   };
 
   // Close dropdown and reset pending

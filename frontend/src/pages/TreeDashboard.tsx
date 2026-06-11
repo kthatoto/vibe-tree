@@ -898,22 +898,29 @@ export default function TreeDashboard() {
     }
   }, [snapshot, selectedBranches, selectionAnchor]);
 
-  // Refresh the PR links of the currently selected branches (single or multi-select)
+  // Refresh the PR links of the currently selected branches (single or multi-select).
+  // Branches that have no PR link yet are run through PR detection instead, so a
+  // single "r" both refreshes existing PRs and detects newly-opened ones.
   const refreshSelectedPRs = useCallback(async () => {
+    const repoId = snapshot?.repoId;
     const tasks: { branch: string; linkId: number }[] = [];
+    const detectBranches: string[] = [];
     for (const branch of selectedBranches) {
       const links = branchLinks.get(branch) ?? [];
-      for (const link of links) {
-        if (link.linkType === "pr") tasks.push({ branch, linkId: link.id });
+      const prLinks = links.filter((l) => l.linkType === "pr");
+      if (prLinks.length > 0) {
+        for (const link of prLinks) tasks.push({ branch, linkId: link.id });
+      } else if (repoId) {
+        detectBranches.push(branch);
       }
     }
-    if (tasks.length === 0) return;
+    if (tasks.length === 0 && detectBranches.length === 0) return;
 
-    const affected = [...new Set(tasks.map((t) => t.branch))];
+    const affected = [...new Set([...tasks.map((t) => t.branch), ...detectBranches])];
     setRefreshingBranches((prev) => new Set([...prev, ...affected]));
     try {
-      await Promise.all(
-        tasks.map(async ({ branch, linkId }) => {
+      await Promise.all([
+        ...tasks.map(async ({ branch, linkId }) => {
           try {
             const refreshed = await api.refreshBranchLink(linkId);
             setBranchLinks((prev) => {
@@ -925,8 +932,24 @@ export default function TreeDashboard() {
           } catch (err) {
             console.error("Failed to refresh PR link:", err);
           }
-        })
-      );
+        }),
+        ...detectBranches.map(async (branch) => {
+          try {
+            const result = await api.detectPr(repoId!, branch);
+            if (result.found && result.link) {
+              const link = result.link;
+              setBranchLinks((prev) => {
+                const next = new Map(prev);
+                const cur = next.get(branch) ?? [];
+                next.set(branch, [...cur, link]);
+                return next;
+              });
+            }
+          } catch (err) {
+            console.error("Failed to detect PR:", err);
+          }
+        }),
+      ]);
     } finally {
       setRefreshingBranches((prev) => {
         const next = new Set(prev);
@@ -934,7 +957,7 @@ export default function TreeDashboard() {
         return next;
       });
     }
-  }, [selectedBranches, branchLinks]);
+  }, [selectedBranches, branchLinks, snapshot?.repoId]);
 
   // Remove deleted branches from the snapshot, reparenting their children to the grandparent
   const applyBranchesDeleted = useCallback((deletedBranches: string[]) => {

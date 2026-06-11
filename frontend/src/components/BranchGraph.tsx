@@ -1895,6 +1895,7 @@ export default function BranchGraph({
     const isHighlightPartial = matchLevel === "partial";
     const highlightDim = highlightMatchLevel === null ? 1 : isHighlightFull ? 1 : isHighlightPartial ? 0.5 : 0.15;
     const nodeOpacity = (nodeUnfocused ? baseNodeOpacity * 0.3 : baseNodeOpacity) * highlightDim;
+    const isRefreshing = refreshingBranches.has(id);
 
     // Determine cursor style
     const getCursorStyle = () => {
@@ -1921,6 +1922,15 @@ export default function BranchGraph({
         }}
         onMouseDown={handleNodeMouseDown}
       >
+        {/* Reloading: pulse the whole node to convey it's being refreshed */}
+        {isRefreshing && (
+          <animate
+            attributeName="opacity"
+            values={`${nodeOpacity};${nodeOpacity * 0.3};${nodeOpacity}`}
+            dur="1s"
+            repeatCount="indefinite"
+          />
+        )}
         {/* Highlight glow effect - full match (yellow/golden) */}
         {isHighlightFull && (
           <rect
@@ -2403,42 +2413,6 @@ export default function BranchGraph({
 
         {/* All badges in a single horizontal row below the node */}
         {(() => {
-          const isRefreshing = refreshingBranches.has(id);
-
-          // Show loading indicator if refreshing
-          if (isRefreshing) {
-            const startX = x + 4;
-            return (
-              <g>
-                <rect
-                  x={startX}
-                  y={y + nodeHeight + 3}
-                  width={36}
-                  height={14}
-                  rx={3}
-                  fill="#6b7280"
-                >
-                  <animate
-                    attributeName="opacity"
-                    values="0.5;1;0.5"
-                    dur="1s"
-                    repeatCount="indefinite"
-                  />
-                </rect>
-                <text
-                  x={startX + 18}
-                  y={y + nodeHeight + 11}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize={8}
-                  fill="white"
-                >
-                  ...
-                </text>
-              </g>
-            );
-          }
-
           const badges: Array<{ label: string; color: string }> = [];
           // Local ahead/behind (vs parent branch)
           if (node.aheadBehind?.ahead && node.aheadBehind.ahead > 0) {
@@ -2490,7 +2464,7 @@ export default function BranchGraph({
         {/* Changed files + line stats (right-aligned, below the node) */}
         {(() => {
           const pr = node.pr;
-          if (refreshingBranches.has(id) || !pr || !pr.changedFiles) return null;
+          if (!pr || !pr.changedFiles) return null;
           const charW = 5.5;
           type FB = { kind: "file" | "add" | "del"; label: string; color: string; width: number };
           const fbs: FB[] = [];

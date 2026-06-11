@@ -301,6 +301,33 @@ export default function BranchGraph({
   const rectangleSelectStateRef = useRef(rectangleSelectState);
   rectangleSelectStateRef.current = rectangleSelectState;
 
+  // Branches that JUST finished refreshing — used to flash a brief "done" feedback
+  // on the node the moment its reload pulse stops.
+  const [justRefreshedBranches, setJustRefreshedBranches] = useState<Set<string>>(new Set());
+  const prevRefreshingRef = useRef<Set<string>>(refreshingBranches);
+  useEffect(() => {
+    const prev = prevRefreshingRef.current;
+    prevRefreshingRef.current = refreshingBranches;
+    const finished: string[] = [];
+    prev.forEach((b) => {
+      if (!refreshingBranches.has(b)) finished.push(b);
+    });
+    if (finished.length === 0) return;
+    setJustRefreshedBranches((cur) => {
+      const next = new Set(cur);
+      finished.forEach((b) => next.add(b));
+      return next;
+    });
+    // Clear the flash after it plays out so the node settles back to normal.
+    setTimeout(() => {
+      setJustRefreshedBranches((cur) => {
+        const next = new Set(cur);
+        finished.forEach((b) => next.delete(b));
+        return next;
+      });
+    }, 700);
+  }, [refreshingBranches]);
+
   // Prevent browser back/forward gesture on horizontal scroll (only when at scroll boundary)
   useEffect(() => {
     const svg = svgRef.current;
@@ -1938,6 +1965,7 @@ export default function BranchGraph({
     const highlightDim = highlightMatchLevel === null ? 1 : isHighlightFull ? 1 : isHighlightPartial ? 0.5 : 0.15;
     const nodeOpacity = (nodeUnfocused ? baseNodeOpacity * 0.3 : baseNodeOpacity) * highlightDim;
     const isRefreshing = refreshingBranches.has(id);
+    const isJustRefreshed = justRefreshedBranches.has(id);
 
     // Determine cursor style
     const getCursorStyle = () => {
@@ -2042,6 +2070,25 @@ export default function BranchGraph({
               dur="1.2s"
               repeatCount="indefinite"
             />
+          </rect>
+        )}
+        {/* Done: brief green ring that pops and fades the moment reload finishes.
+            Drawn last (on top) and offset outward so it stays visible even when the
+            node is selected (which paints a solid blue border + selection glow). */}
+        {isJustRefreshed && (
+          <rect
+            x={x - 6}
+            y={y - 6}
+            width={nodeWidth + 12}
+            height={nodeHeight + 12}
+            rx={12}
+            ry={12}
+            fill="none"
+            stroke="#4ade80"
+            pointerEvents="none"
+          >
+            <animate attributeName="opacity" values="1;1;0" dur="0.6s" repeatCount="1" fill="freeze" />
+            <animate attributeName="stroke-width" values="3.5;3.5;1" dur="0.6s" repeatCount="1" fill="freeze" />
           </rect>
         )}
         {/* Node rectangle */}

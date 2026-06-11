@@ -587,6 +587,27 @@ export default function BranchGraph({
 
     // Find root nodes (nodes that are not children of any other node)
     const childSet = new Set(edges.map((e) => e.child));
+
+    // A non-default branch with no detected parent would otherwise float at the
+    // root level next to the default branch. Branches basically never float, so
+    // unconditionally re-parent any such branch directly under the default branch
+    // (its own subtree moves with it). An inferred connector is drawn below.
+    const defaultExists = nodes.some((n) => n.branchName === defaultBranch);
+    const floatingRoots: string[] = defaultExists
+      ? nodes
+          .filter((n) => n.branchName !== defaultBranch && !childSet.has(n.branchName))
+          .map((n) => n.branchName)
+      : [];
+    if (floatingRoots.length > 0) {
+      const defChildren = childrenMap.get(defaultBranch) || [];
+      floatingRoots.forEach((b) => {
+        defChildren.push(b);
+        parentMap.set(b, defaultBranch);
+        childSet.add(b);
+      });
+      childrenMap.set(defaultBranch, defChildren);
+    }
+
     const rootNodes = nodes.filter((n) => !childSet.has(n.branchName));
 
     // Sort roots: default branch first, then by siblingOrder["__roots__"] if available
@@ -1007,6 +1028,15 @@ export default function BranchGraph({
         isDesigned: false,
         isInferred: true,
       });
+    });
+
+    // Inferred connectors for the re-parented floating roots (default → branch)
+    floatingRoots.forEach((b) => {
+      const from = nodeMap.get(defaultBranch);
+      const to = nodeMap.get(b);
+      if (from && to) {
+        layoutEdges.push({ from, to, isDesigned: false, isInferred: true });
+      }
     });
 
     // Calculate canvas size (add extra space for badges below nodes)
@@ -2078,28 +2108,41 @@ export default function BranchGraph({
             />
           </rect>
         )}
-        {/* Done: a green "ping" — a halo ripples outward while a core ring pops out and
-            fades, both easing out for a satisfying finish. Drawn last (on top) and offset
-            outward so it stays visible even when the node is selected (solid blue border). */}
+        {/* Done: a bold green "burst" — a soft bloom flashes, two halos ripple outward,
+            and a thick core ring pops and fades. Drawn last (on top) and offset outward so
+            it stays visible even when the node is selected (solid blue border). */}
         {isJustRefreshed && (
           <g pointerEvents="none">
-            {/* Expanding halo ripple */}
+            {/* Soft green bloom that flashes and fades */}
+            <rect x={x - 8} y={y - 8} width={nodeWidth + 16} height={nodeHeight + 16} rx={12} ry={12} fill="#4ade80" stroke="none">
+              <animate attributeName="opacity" values="0.4;0" dur="0.5s" calcMode="spline" keySplines="0.3 0 0.4 1" repeatCount="1" fill="freeze" />
+            </rect>
+            {/* Outer halo ripple (bright, expands far) */}
+            <rect x={x - 6} y={y - 6} width={nodeWidth + 12} height={nodeHeight + 12} rx={16} ry={16} fill="none" stroke="#86efac">
+              <animate attributeName="x" values={`${x - 6};${x - 36}`} dur="0.6s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="y" values={`${y - 6};${y - 36}`} dur="0.6s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="width" values={`${nodeWidth + 12};${nodeWidth + 72}`} dur="0.6s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="height" values={`${nodeHeight + 12};${nodeHeight + 72}`} dur="0.6s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="opacity" values="0.8;0" dur="0.6s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="stroke-width" values="4;0.5" dur="0.6s" repeatCount="1" fill="freeze" />
+            </rect>
+            {/* Inner halo ripple */}
             <rect x={x - 6} y={y - 6} width={nodeWidth + 12} height={nodeHeight + 12} rx={14} ry={14} fill="none" stroke="#4ade80">
-              <animate attributeName="x" values={`${x - 6};${x - 24}`} dur="0.55s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
-              <animate attributeName="y" values={`${y - 6};${y - 24}`} dur="0.55s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
-              <animate attributeName="width" values={`${nodeWidth + 12};${nodeWidth + 48}`} dur="0.55s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
-              <animate attributeName="height" values={`${nodeHeight + 12};${nodeHeight + 48}`} dur="0.55s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
-              <animate attributeName="opacity" values="0.5;0" dur="0.55s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="x" values={`${x - 6};${x - 22}`} dur="0.55s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="y" values={`${y - 6};${y - 22}`} dur="0.55s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="width" values={`${nodeWidth + 12};${nodeWidth + 44}`} dur="0.55s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="height" values={`${nodeHeight + 12};${nodeHeight + 44}`} dur="0.55s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="opacity" values="0.6;0" dur="0.55s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
               <animate attributeName="stroke-width" values="3;0.5" dur="0.55s" repeatCount="1" fill="freeze" />
             </rect>
-            {/* Core ring: pops outward, holds briefly, then fades */}
+            {/* Core ring: bright thick pop, holds, then fades */}
             <rect x={x - 6} y={y - 6} width={nodeWidth + 12} height={nodeHeight + 12} rx={12} ry={12} fill="none" stroke="#4ade80">
-              <animate attributeName="x" values={`${x - 6};${x - 12}`} dur="0.6s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
-              <animate attributeName="y" values={`${y - 6};${y - 12}`} dur="0.6s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
-              <animate attributeName="width" values={`${nodeWidth + 12};${nodeWidth + 24}`} dur="0.6s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
-              <animate attributeName="height" values={`${nodeHeight + 12};${nodeHeight + 24}`} dur="0.6s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
-              <animate attributeName="opacity" values="1;1;0" keyTimes="0;0.4;1" dur="0.6s" repeatCount="1" fill="freeze" />
-              <animate attributeName="stroke-width" values="4;4;2" keyTimes="0;0.4;1" dur="0.6s" repeatCount="1" fill="freeze" />
+              <animate attributeName="x" values={`${x - 6};${x - 14}`} dur="0.65s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="y" values={`${y - 6};${y - 14}`} dur="0.65s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="width" values={`${nodeWidth + 12};${nodeWidth + 28}`} dur="0.65s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="height" values={`${nodeHeight + 12};${nodeHeight + 28}`} dur="0.65s" calcMode="spline" keySplines="0.16 1 0.3 1" repeatCount="1" fill="freeze" />
+              <animate attributeName="opacity" values="1;1;0" keyTimes="0;0.45;1" dur="0.65s" repeatCount="1" fill="freeze" />
+              <animate attributeName="stroke-width" values="5;5;2" keyTimes="0;0.45;1" dur="0.65s" repeatCount="1" fill="freeze" />
             </rect>
           </g>
         )}

@@ -115,7 +115,7 @@ const SEPARATOR_HALF_WIDTH = 12; // Half width of separator zone (total width = 
 
 // Zoom constraints (exported for external use)
 export const MIN_ZOOM = 0.5;
-export const MAX_ZOOM = 1;
+export const MAX_ZOOM = 2;
 export const ZOOM_STEP = 0.1;
 
 export default function BranchGraph({

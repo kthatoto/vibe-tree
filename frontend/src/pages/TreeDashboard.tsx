@@ -1189,6 +1189,16 @@ export default function TreeDashboard() {
         }
         return;
       }
+      // +/-: zoom the graph in/out (works without a selection)
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "+" || e.key === "=" || e.key === "-" || e.key === "_")) {
+        e.preventDefault();
+        const dir = e.key === "-" || e.key === "_" ? -1 : 1;
+        setGraphZoom((z) => {
+          const next = Math.round((z + dir * ZOOM_STEP) * 100) / 100;
+          return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
+        });
+        return;
+      }
       if (selectedBranches.size === 0 || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.shiftKey && e.key.toLowerCase() === "r" && selectedPin) {
         // Shift+R: full repo reload (fetch all branches + rescan) with fetching echo

@@ -46,6 +46,13 @@ export interface PrSettings {
   quickReviewers: string[];
 }
 
+// A numbered shortcut applying a set of labels + reviewers to selected PRs.
+export interface PrShortcut {
+  name: string;
+  labels: string[];
+  reviewers: string[];
+}
+
 export interface CustomCommand {
   label: string;
   command: string;
@@ -606,6 +613,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  // PR shortcuts (numbered sets of labels + reviewers, per repo)
+  getPrShortcuts: (repoId: string) =>
+    fetchJson<{ id: number | null; repoId: string; shortcuts: PrShortcut[] }>(
+      `${API_BASE}/project-rules/pr-shortcuts?repoId=${encodeURIComponent(repoId)}`
+    ),
+  updatePrShortcuts: (data: { repoId: string; shortcuts: PrShortcut[] }) =>
+    fetchJson<{ id: number | null; repoId: string; shortcuts: PrShortcut[] }>(
+      `${API_BASE}/project-rules/pr-shortcuts`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    ),
 
   // CI ignore jobs (check names excluded from the all-green judgment, per repo)
   getCiIgnoreJobs: (repoId: string) =>

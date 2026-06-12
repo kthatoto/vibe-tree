@@ -84,6 +84,20 @@ export const updateCiIgnoreJobsSchema = z.object({
 
 export type UpdateCiIgnoreJobsInput = z.infer<typeof updateCiIgnoreJobsSchema>;
 
+// PR shortcuts: per-repo numbered sets of labels + reviewers (Shift+N applies set N)
+export const prShortcutSchema = z.object({
+  name: z.string(),
+  labels: z.array(z.string()),
+  reviewers: z.array(z.string()),
+});
+
+export const updatePrShortcutsSchema = z.object({
+  repoId: repoIdSchema,
+  shortcuts: z.array(prShortcutSchema),
+});
+
+export type UpdatePrShortcutsInput = z.infer<typeof updatePrShortcutsSchema>;
+
 // Custom commands schemas
 export const updateCustomCommandsSchema = z.object({
   repoId: repoIdSchema,

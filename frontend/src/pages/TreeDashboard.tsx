@@ -24,6 +24,7 @@ import {
   type RepoCollaborator,
   type RepoTeam,
   type ActionRun,
+  type PrShortcut,
 } from "../lib/api";
 import { wsClient } from "../lib/ws";
 import { diff, formatDiffSummary } from "../lib/scanDiff";
@@ -503,6 +504,10 @@ export default function TreeDashboard() {
   // CI check names excluded from the all-green judgment (per repo)
   const [ciIgnoreJobs, setCiIgnoreJobs] = useState<string[]>([]);
   const ciIgnoreJobsSet = useMemo(() => new Set(ciIgnoreJobs), [ciIgnoreJobs]);
+  // PR shortcuts: numbered label+reviewer sets (Shift+N applies set N)
+  const [prShortcuts, setPrShortcuts] = useState<PrShortcut[]>([]);
+  // Whether Shift is held — shows the shortcut hint overlay
+  const [shiftHeld, setShiftHeld] = useState(false);
   const [repoLabels, setRepoLabels] = useState<Array<{ name: string; color: string; description: string }>>([]);
   const [repoCollaborators, setRepoCollaborators] = useState<RepoCollaborator[]>([]);
   const [repoTeams, setRepoTeams] = useState<RepoTeam[]>([]);
@@ -533,12 +538,13 @@ export default function TreeDashboard() {
           api.syncRepoCache(snapshot.repoId).catch(console.error);
         }
 
-        const [prSettings, labels, collaborators, teams, ciIgnore] = await Promise.all([
+        const [prSettings, labels, collaborators, teams, ciIgnore, shortcuts] = await Promise.all([
           api.getPrSettings(snapshot.repoId),
           api.getRepoLabels(snapshot.repoId).catch(() => []),
           api.getRepoCollaborators(snapshot.repoId).catch(() => []),
           api.searchRepoTeams(snapshot.repoId).catch(() => []),
           api.getCiIgnoreJobs(snapshot.repoId).catch(() => ({ jobs: [] as string[] })),
+          api.getPrShortcuts(snapshot.repoId).catch(() => ({ shortcuts: [] as PrShortcut[] })),
         ]);
         setPrQuickLabels(prSettings.quickLabels || []);
         setPrQuickReviewers(prSettings.quickReviewers || []);
@@ -546,6 +552,7 @@ export default function TreeDashboard() {
         setRepoCollaborators(collaborators);
         setRepoTeams(teams);
         setCiIgnoreJobs(ciIgnore.jobs || []);
+        setPrShortcuts(shortcuts.shortcuts || []);
       } catch {
         // No settings yet, use defaults
         setPrQuickLabels([]);
@@ -584,7 +591,7 @@ export default function TreeDashboard() {
   }, [snapshot?.repoId]);
 
   // Settings modal category
-  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "polling" | "pr-labels" | "pr-reviewers" | "ci-ignore" | "commands" | "actions" | "cleanup" | "debug">("branch");
+  const [settingsCategory, setSettingsCategory] = useState<"branch" | "worktree" | "polling" | "pr-labels" | "pr-reviewers" | "pr-shortcuts" | "ci-ignore" | "commands" | "actions" | "cleanup" | "debug">("branch");
   const [debugModeEnabled, setDebugModeEnabled] = useState(() => localStorage.getItem("vibe-tree-debug-mode") === "true");
   const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<{ chatSessions: number; taskInstructions: number; branchLinks: number } | null>(null);
@@ -1068,6 +1075,30 @@ export default function TreeDashboard() {
     }
   }, [selectedBranches, branchLinks, snapshot?.repoId, patchNodePrStats]);
 
+  // Apply a PR shortcut (its labels + reviewers) to the selected branches' open PRs,
+  // then refresh so the change shows with the usual pulse → green flash feedback.
+  const applyPrShortcut = useCallback(async (shortcut: PrShortcut) => {
+    const tasks: number[] = [];
+    for (const branch of selectedBranches) {
+      const link = (branchLinks.get(branch) ?? []).find((l) => l.linkType === "pr" && l.status === "open");
+      if (link) tasks.push(link.id);
+    }
+    if (tasks.length === 0) return;
+    await Promise.all(
+      tasks.map(async (linkId) => {
+        for (const label of shortcut.labels) {
+          try { await api.addPrLabel(linkId, label); } catch (e) { console.error("Shortcut: addPrLabel failed", e); }
+        }
+        for (const reviewer of shortcut.reviewers) {
+          try { await api.addPrReviewer(linkId, reviewer); } catch (e) { console.error("Shortcut: addPrReviewer failed", e); }
+        }
+      })
+    );
+    refreshSelectedPRs();
+  }, [selectedBranches, branchLinks, refreshSelectedPRs]);
+  const prShortcutsRef = useRef<PrShortcut[]>(prShortcuts);
+  prShortcutsRef.current = prShortcuts;
+
   // Remove deleted branches from the snapshot, reparenting their children to the grandparent
   const applyBranchesDeleted = useCallback((deletedBranches: string[]) => {
     if (deletedBranches.length === 0) return;
@@ -1209,6 +1240,14 @@ export default function TreeDashboard() {
         // Shift+R: full repo reload (fetch all branches + rescan) with fetching echo
         e.preventDefault();
         handleFullReload(selectedPin.localPath);
+      } else if (e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
+        // Shift+1..9: apply the corresponding PR shortcut to the selected branches
+        const idx = parseInt(e.code.slice(5), 10) - 1;
+        const shortcut = prShortcutsRef.current[idx];
+        if (shortcut) {
+          e.preventDefault();
+          void applyPrShortcut(shortcut);
+        }
       } else if (e.key === "r" && !e.shiftKey) {
         // r: refresh the PR(s) of the selected branches
         e.preventDefault();
@@ -1225,7 +1264,22 @@ export default function TreeDashboard() {
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selectedBranches, selectedPin, triggerScan, handleFullReload, refreshSelectedPRs, selectWithDescendants, requestDeleteSelected, deleteConfirmBranches, branchLinks]);
+  }, [selectedBranches, selectedPin, triggerScan, handleFullReload, refreshSelectedPRs, applyPrShortcut, selectWithDescendants, requestDeleteSelected, deleteConfirmBranches, branchLinks]);
+
+  // Track whether Shift is held, to surface the PR shortcut hint overlay
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(true); };
+    const onUp = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(false); };
+    const onBlur = () => setShiftHeld(false);
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
 
   // Focus the Delete button when the confirmation opens, so d -> Enter confirms
   useEffect(() => {
@@ -2254,6 +2308,12 @@ export default function TreeDashboard() {
         repoId: snapshot.repoId,
         quickLabels: prQuickLabels,
         quickReviewers: prQuickReviewers,
+      });
+
+      // Save PR shortcuts
+      await api.updatePrShortcuts({
+        repoId: snapshot.repoId,
+        shortcuts: prShortcuts,
       });
 
       // Save custom commands (filter empty entries)
@@ -3705,6 +3765,41 @@ export default function TreeDashboard() {
                       ignoredCiJobs={ciIgnoreJobsSet}
                       repoLabels={repoLabels}
                     />
+                    {/* Shortcut hint overlay: shown while Shift is held over a selection */}
+                    {shiftHeld && prShortcuts.length > 0 && selectedBranches.size > 0 && (
+                      <div
+                        style={{
+                          position: "fixed",
+                          left: "50%",
+                          bottom: 24,
+                          transform: "translateX(-50%)",
+                          zIndex: 1000,
+                          background: "rgba(17,24,39,0.97)",
+                          border: "1px solid #374151",
+                          borderRadius: 8,
+                          padding: "10px 14px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 6,
+                          boxShadow: "0 6px 24px rgba(0,0,0,0.4)",
+                          pointerEvents: "none",
+                          maxWidth: "70vw",
+                        }}
+                      >
+                        <div style={{ color: "#9ca3af", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                          Apply to {selectedBranches.size} selected
+                        </div>
+                        {prShortcuts.slice(0, 9).map((s, i) => (
+                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#e5e7eb" }}>
+                            <kbd style={{ background: "#374151", borderRadius: 4, padding: "1px 6px", fontSize: 11, color: "#e5e7eb", flexShrink: 0 }}>⇧{i + 1}</kbd>
+                            <span style={{ fontWeight: 600 }}>{s.name || `Shortcut ${i + 1}`}</span>
+                            <span style={{ color: "#9ca3af", fontSize: 11 }}>
+                              {[...s.labels.map((l) => `🏷 ${l}`), ...s.reviewers.map((r) => `👤 ${r.replace("team/", "")}`)].join("   ") || "(empty)"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -4052,6 +4147,12 @@ export default function TreeDashboard() {
                     onClick={() => setSettingsCategory("pr-reviewers")}
                   >
                     Reviewers
+                  </button>
+                  <button
+                    className={`settings-modal__nav-item settings-modal__nav-item--child ${settingsCategory === "pr-shortcuts" ? "settings-modal__nav-item--active" : ""}`}
+                    onClick={() => setSettingsCategory("pr-shortcuts")}
+                  >
+                    Shortcuts
                   </button>
                 </div>
                 <div className="settings-modal__nav-group">
@@ -4626,6 +4727,90 @@ export default function TreeDashboard() {
                             </span>
                           )}
                         </div>
+                      </>
+                    )}
+
+                    {/* PR Shortcuts */}
+                    {settingsCategory === "pr-shortcuts" && (
+                      <>
+                        <h3 style={{ margin: "0 0 8px" }}>Shortcuts</h3>
+                        <p style={{ color: "#9ca3af", margin: "0 0 16px" }}>
+                          Numbered sets of labels + reviewers. Select branches on the graph and
+                          press Shift + the number to apply a set to their PRs. Hold Shift to see
+                          the list.
+                        </p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                          {prShortcuts.map((sc, i) => (
+                            <div key={i} style={{ border: "1px solid #374151", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <kbd style={{ background: "#374151", borderRadius: 4, padding: "2px 8px", fontSize: 12, color: "#e5e7eb", flexShrink: 0 }}>⇧{i + 1}</kbd>
+                                <input
+                                  value={sc.name}
+                                  placeholder={`Shortcut ${i + 1}`}
+                                  onChange={(e) => setPrShortcuts((prev) => prev.map((s, j) => (j === i ? { ...s, name: e.target.value } : s)))}
+                                  style={{ flex: 1, padding: "6px 8px", background: "#0f172a", border: "1px solid #374151", borderRadius: 4, color: "#e5e7eb", fontSize: 13 }}
+                                />
+                                <button type="button" className="btn-secondary" onClick={() => setPrShortcuts((prev) => prev.filter((_, j) => j !== i))} style={{ padding: "4px 10px", fontSize: 12 }}>
+                                  Remove
+                                </button>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                <span style={{ color: "#9ca3af", fontSize: 12, width: 70, flexShrink: 0 }}>Labels</span>
+                                {sc.labels.map((l) => (
+                                  <LabelChip
+                                    key={l}
+                                    name={l}
+                                    color={repoLabels.find((rl) => rl.name === l)?.color || "374151"}
+                                    onRemove={() => setPrShortcuts((prev) => prev.map((s, j) => (j === i ? { ...s, labels: s.labels.filter((x) => x !== l) } : s)))}
+                                  />
+                                ))}
+                                <select
+                                  value=""
+                                  onChange={(e) => { const v = e.target.value; if (v) setPrShortcuts((prev) => prev.map((s, j) => (j === i ? { ...s, labels: s.labels.includes(v) ? s.labels : [...s.labels, v] } : s))); }}
+                                  style={{ padding: "4px 6px", background: "#0f172a", border: "1px solid #374151", borderRadius: 4, color: "#9ca3af", fontSize: 12 }}
+                                >
+                                  <option value="">+ label</option>
+                                  {repoLabels.filter((rl) => !sc.labels.includes(rl.name)).map((rl) => (
+                                    <option key={rl.name} value={rl.name}>{rl.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                <span style={{ color: "#9ca3af", fontSize: 12, width: 70, flexShrink: 0 }}>Reviewers</span>
+                                {sc.reviewers.map((r) => (
+                                  <UserChip
+                                    key={r}
+                                    login={r.replace("team/", "")}
+                                    onRemove={() => setPrShortcuts((prev) => prev.map((s, j) => (j === i ? { ...s, reviewers: s.reviewers.filter((x) => x !== r) } : s)))}
+                                  />
+                                ))}
+                                <select
+                                  value=""
+                                  onChange={(e) => { const v = e.target.value; if (v) setPrShortcuts((prev) => prev.map((s, j) => (j === i ? { ...s, reviewers: s.reviewers.includes(v) ? s.reviewers : [...s.reviewers, v] } : s))); }}
+                                  style={{ padding: "4px 6px", background: "#0f172a", border: "1px solid #374151", borderRadius: 4, color: "#9ca3af", fontSize: 12 }}
+                                >
+                                  <option value="">+ reviewer</option>
+                                  {repoCollaborators.filter((c) => !sc.reviewers.includes(c.login)).map((c) => (
+                                    <option key={c.login} value={c.login}>{c.login}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {prShortcuts.length === 0 && (
+                          <span style={{ color: "#6b7280", fontStyle: "italic", display: "block", marginTop: 8 }}>No shortcuts yet.</span>
+                        )}
+                        {prShortcuts.length < 9 && (
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            style={{ marginTop: 12, padding: "6px 12px", fontSize: 13 }}
+                            onClick={() => setPrShortcuts((prev) => [...prev, { name: "", labels: [], reviewers: [] }])}
+                          >
+                            + Add shortcut
+                          </button>
+                        )}
                       </>
                     )}
 

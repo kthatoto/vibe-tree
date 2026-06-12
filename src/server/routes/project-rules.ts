@@ -9,6 +9,7 @@ import {
   updatePollingSettingsSchema,
   updatePrSettingsSchema,
   updateCiIgnoreJobsSchema,
+  updatePrShortcutsSchema,
   updateCustomCommandsSchema,
   validateOrThrow,
 } from "../../shared/validation";
@@ -531,6 +532,93 @@ projectRulesRouter.post("/ci-ignore-jobs", async (c) => {
   }
 
   const response = { id: ruleId, repoId: input.repoId, jobs };
+  broadcast({
+    type: "projectRules.updated",
+    repoId: input.repoId,
+    data: response,
+  });
+
+  return c.json(response);
+});
+
+// ============ PR Shortcuts ============
+// Per-repo numbered sets of labels + reviewers; Shift+N applies set N to the
+// selected branches' PRs.
+
+// GET /api/project-rules/pr-shortcuts?repoId=...
+projectRulesRouter.get("/pr-shortcuts", async (c) => {
+  const query = validateOrThrow(repoIdQuerySchema, {
+    repoId: c.req.query("repoId"),
+  });
+
+  const rules = await db
+    .select()
+    .from(schema.projectRules)
+    .where(
+      and(
+        eq(schema.projectRules.repoId, query.repoId),
+        eq(schema.projectRules.ruleType, "pr_shortcuts"),
+        eq(schema.projectRules.isActive, true)
+      )
+    );
+
+  const rule = rules[0];
+  if (!rule) {
+    return c.json({ id: null, repoId: query.repoId, shortcuts: [] });
+  }
+
+  const ruleData = JSON.parse(rule.ruleJson) as {
+    shortcuts?: Array<{ name: string; labels: string[]; reviewers: string[] }>;
+  };
+  return c.json({
+    id: rule.id,
+    repoId: rule.repoId,
+    shortcuts: ruleData.shortcuts ?? [],
+  });
+});
+
+// POST /api/project-rules/pr-shortcuts  { repoId, shortcuts }
+projectRulesRouter.post("/pr-shortcuts", async (c) => {
+  const body = await c.req.json();
+  const input = validateOrThrow(updatePrShortcutsSchema, body);
+
+  const now = new Date().toISOString();
+  const ruleJson = JSON.stringify({ shortcuts: input.shortcuts });
+
+  const existing = await db
+    .select()
+    .from(schema.projectRules)
+    .where(
+      and(
+        eq(schema.projectRules.repoId, input.repoId),
+        eq(schema.projectRules.ruleType, "pr_shortcuts"),
+        eq(schema.projectRules.isActive, true)
+      )
+    );
+
+  let ruleId: number;
+  if (existing[0]) {
+    await db
+      .update(schema.projectRules)
+      .set({ ruleJson, updatedAt: now })
+      .where(eq(schema.projectRules.id, existing[0].id));
+    ruleId = existing[0].id;
+  } else {
+    const result = await db
+      .insert(schema.projectRules)
+      .values({
+        repoId: input.repoId,
+        ruleType: "pr_shortcuts",
+        ruleJson,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    ruleId = result[0]!.id;
+  }
+
+  const response = { id: ruleId, repoId: input.repoId, shortcuts: input.shortcuts };
   broadcast({
     type: "projectRules.updated",
     repoId: input.repoId,

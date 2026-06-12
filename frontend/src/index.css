@@ -502,3 +502,18 @@ pre {
   display: inline-block;
   animation: vt-spin 0.8s linear infinite;
 }
+
+/* Pop-in used for the PR shortcut hint overlay */
+@keyframes vt-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.vt-pop-in {
+  animation: vt-pop-in 0.14s ease-out;
+}

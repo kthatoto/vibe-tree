@@ -3765,42 +3765,60 @@ export default function TreeDashboard() {
                       ignoredCiJobs={ciIgnoreJobsSet}
                       repoLabels={repoLabels}
                     />
-                    {/* Shortcut hint overlay: shown while Shift is held over a selection */}
-                    {shiftHeld && prShortcuts.length > 0 && selectedBranches.size > 0 && (
-                      <div
-                        style={{
-                          position: "fixed",
-                          left: "50%",
-                          bottom: 24,
-                          transform: "translateX(-50%)",
-                          zIndex: 1000,
-                          background: "rgba(17,24,39,0.97)",
-                          border: "1px solid #374151",
-                          borderRadius: 8,
-                          padding: "10px 14px",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 6,
-                          boxShadow: "0 6px 24px rgba(0,0,0,0.4)",
-                          pointerEvents: "none",
-                          maxWidth: "70vw",
-                        }}
-                      >
-                        <div style={{ color: "#9ca3af", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                          Apply to {selectedBranches.size} selected
-                        </div>
-                        {prShortcuts.slice(0, 9).map((s, i) => (
-                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#e5e7eb" }}>
-                            <kbd style={{ background: "#374151", borderRadius: 4, padding: "1px 6px", fontSize: 11, color: "#e5e7eb", flexShrink: 0 }}>⇧{i + 1}</kbd>
-                            <span style={{ fontWeight: 600 }}>{s.name || `Shortcut ${i + 1}`}</span>
-                            <span style={{ color: "#9ca3af", fontSize: 11 }}>
-                              {[...s.labels.map((l) => `🏷 ${l}`), ...s.reviewers.map((r) => `👤 ${r.replace("team/", "")}`)].join("   ") || "(empty)"}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
+                  {/* Shortcut hint overlay: pinned to the top-right of the Branch Graph while Shift is held */}
+                  {shiftHeld && prShortcuts.length > 0 && selectedBranches.size > 0 && (
+                    <div
+                      className="vt-pop-in"
+                      style={{
+                        position: "absolute",
+                        top: 48,
+                        right: 16,
+                        zIndex: 20,
+                        background: "rgba(17,24,39,0.98)",
+                        border: "2px solid #6366f1",
+                        borderRadius: 12,
+                        padding: "14px 18px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 10,
+                        boxShadow: "0 10px 40px rgba(99,102,241,0.45)",
+                        pointerEvents: "none",
+                        maxWidth: 440,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#a5b4fc", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6 }}>
+                        <span style={{ fontSize: 14 }}>⚡</span>
+                        PR Shortcuts · {selectedBranches.size} selected
+                      </div>
+                      {prShortcuts.slice(0, 9).map((s, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "#f3f4f6" }}>
+                          <kbd style={{ background: "#4338ca", border: "1px solid #6366f1", borderRadius: 6, padding: "2px 9px", fontSize: 13, fontWeight: 700, color: "#fff", flexShrink: 0, minWidth: 34, textAlign: "center" }}>⇧{i + 1}</kbd>
+                          <span style={{ fontWeight: 700, flexShrink: 0 }}>{s.name || `Shortcut ${i + 1}`}</span>
+                          <span style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                            {s.labels.map((l) => (
+                              <LabelChip key={`l-${l}`} name={l} color={repoLabels.find((rl) => rl.name === l)?.color || "374151"} />
+                            ))}
+                            {s.reviewers.map((r) =>
+                              r.startsWith("team/") ? (
+                                <TeamChip key={`r-${r}`} slug={r.replace("team/", "")} />
+                              ) : (
+                                <UserChip
+                                  key={`r-${r}`}
+                                  login={r}
+                                  name={repoCollaborators.find((c) => c.login === r)?.name}
+                                  avatarUrl={repoCollaborators.find((c) => c.login === r)?.avatarUrl}
+                                />
+                              )
+                            )}
+                            {s.labels.length === 0 && s.reviewers.length === 0 && (
+                              <span style={{ color: "#6b7280", fontSize: 12, fontStyle: "italic" }}>(empty)</span>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -5813,6 +5831,7 @@ export default function TreeDashboard() {
           flex-direction: column;
           overflow: hidden;
           transition: flex 0.2s ease;
+          position: relative;
         }
         .graph-container {
           flex: 1;

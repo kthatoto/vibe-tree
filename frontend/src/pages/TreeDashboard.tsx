@@ -1189,7 +1189,7 @@ export default function TreeDashboard() {
         }
         return;
       }
-      // +/-: zoom the graph in/out (works without a selection)
+      // +/-: zoom the graph in/out · 0: reset to 100% (works without a selection)
       if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "+" || e.key === "=" || e.key === "-" || e.key === "_")) {
         e.preventDefault();
         const dir = e.key === "-" || e.key === "_" ? -1 : 1;
@@ -1197,6 +1197,11 @@ export default function TreeDashboard() {
           const next = Math.round((z + dir * ZOOM_STEP) * 100) / 100;
           return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
         });
+        return;
+      }
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key === "0") {
+        e.preventDefault();
+        setGraphZoom(1);
         return;
       }
       if (selectedBranches.size === 0 || e.metaKey || e.ctrlKey || e.altKey) return;

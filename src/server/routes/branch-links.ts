@@ -668,6 +668,8 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
   }
 
   const now = new Date().toISOString();
+  let number = existing.number;
+  let url = existing.url;
   let title = existing.title;
   let status = existing.status;
   let checksStatus = existing.checksStatus;
@@ -692,7 +694,52 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
       projectStatus = issueInfo.projectStatus ?? null;
     }
   } else if (existing.linkType === "pr") {
-    const prInfo = await fetchGitHubPRInfo(existing.repoId, existing.number);
+    // Prefer the branch's current open PR. A closed/merged PR that happens to be
+    // created later would otherwise stay linked forever; reloading should surface
+    // the latest open PR for the branch instead of refreshing the stale one.
+    try {
+      const openResult = (await execAsync(
+        `gh pr list --head "${existing.branchName}" --repo "${existing.repoId}" --state open --json number,url --limit 1`
+      )).trim();
+      const openParsed = openResult ? JSON.parse(openResult) : [];
+      if (Array.isArray(openParsed) && openParsed.length > 0 && openParsed[0].number) {
+        number = openParsed[0].number as number;
+        url = (openParsed[0].url as string) || url;
+      }
+    } catch {
+      // Ignore lookup errors and fall back to the existing PR number.
+    }
+
+    // Switched to a different (open) PR: drop any other stale PR links for this branch.
+    if (number !== existing.number) {
+      const staleLinks = await db
+        .select()
+        .from(schema.branchLinks)
+        .where(and(
+          eq(schema.branchLinks.repoId, existing.repoId),
+          eq(schema.branchLinks.branchName, existing.branchName),
+          eq(schema.branchLinks.linkType, "pr"),
+          ne(schema.branchLinks.id, existing.id)
+        ));
+      if (staleLinks.length > 0) {
+        await db.delete(schema.branchLinks)
+          .where(and(
+            eq(schema.branchLinks.repoId, existing.repoId),
+            eq(schema.branchLinks.branchName, existing.branchName),
+            eq(schema.branchLinks.linkType, "pr"),
+            ne(schema.branchLinks.id, existing.id)
+          ));
+        for (const stale of staleLinks) {
+          broadcast({
+            type: "branchLink.deleted",
+            repoId: existing.repoId,
+            data: { id: stale.id },
+          });
+        }
+      }
+    }
+
+    const prInfo = await fetchGitHubPRInfo(existing.repoId, number);
     if (prInfo) {
       title = prInfo.title;
       status = prInfo.status;
@@ -716,6 +763,8 @@ branchLinksRouter.post("/:id/refresh", async (c) => {
   await db
     .update(schema.branchLinks)
     .set({
+      number,
+      url,
       title,
       status,
       checksStatus,

@@ -3324,45 +3324,27 @@ export default function TreeDashboard() {
                           <button
                             className="btn-icon"
                             onClick={() => {
-                              // Chain: sort branches by description and create linear chain
+                              // Chain: build edges from each branch's open PR base branch
+                              // (the actual stacked-PR chain on GitHub).
                               const defaultBranch = snapshot.defaultBranch;
-                              const branchesWithDesc: { branch: string; desc: string }[] = [];
-                              for (const node of snapshot.nodes) {
-                                if (node.branchName === defaultBranch) continue;
-                                const desc = branchDescriptions.get(node.branchName);
-                                if (desc) {
-                                  branchesWithDesc.push({ branch: node.branchName, desc });
-                                }
-                              }
-                              if (branchesWithDesc.length === 0) return;
-
-                              branchesWithDesc.sort((a, b) => a.desc.localeCompare(b.desc));
-
-                              // Group by prefix (e.g. "shr01" from "shr01-02 #123 PBI-2[7] foo")
-                              // Chain linearly within each group, each group starts from defaultBranch.
-                              // Only the leading token (before whitespace) defines the prefix; the
-                              // trailing free text may itself contain dashes (e.g. "PBI-2[7]") which
-                              // must NOT be treated as the prefix separator.
-                              const groups = new Map<string, { branch: string; desc: string }[]>();
-                              for (const item of branchesWithDesc) {
-                                const token = item.desc.split(/\s+/)[0];
-                                const lastDash = token.lastIndexOf("-");
-                                const group = lastDash > 0 ? token.slice(0, lastDash) : token;
-                                if (!groups.has(group)) groups.set(group, []);
-                                groups.get(group)!.push(item);
-                              }
+                              const openPr = (b: string): BranchLink | null =>
+                                (branchLinks.get(b) ?? []).find(
+                                  (l) => l.linkType === "pr" && l.status === "open",
+                                ) ?? null;
 
                               const newEdges: Array<{ parent: string; child: string }> = [];
-                              for (const members of groups.values()) {
-                                let prevBranch = defaultBranch;
-                                for (const { branch } of members) {
-                                  newEdges.push({ parent: prevBranch, child: branch });
-                                  prevBranch = branch;
+                              const chainedBranches = new Set<string>();
+                              for (const node of snapshot.nodes) {
+                                if (node.branchName === defaultBranch) continue;
+                                const pr = openPr(node.branchName);
+                                if (pr) {
+                                  newEdges.push({ parent: pr.baseBranch || defaultBranch, child: node.branchName });
+                                  chainedBranches.add(node.branchName);
                                 }
                               }
+                              if (chainedBranches.size === 0) return;
 
-                              // Keep edges for branches without descriptions
-                              const chainedBranches = new Set(branchesWithDesc.map((b) => b.branch));
+                              // Keep edges for branches without an open PR
                               for (const node of snapshot.nodes) {
                                 if (node.branchName === defaultBranch || chainedBranches.has(node.branchName)) continue;
                                 const existingEdge = snapshot.edges.find((e) => e.child === node.branchName);
@@ -3391,7 +3373,7 @@ export default function TreeDashboard() {
                                 };
                               });
                             }}
-                            title="Sort branches by description and chain linearly"
+                            title="Chain branches by their PR base branch"
                           >
                             Chain
                           </button>

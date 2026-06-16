@@ -2257,7 +2257,13 @@ export default function BranchGraph({
           strokeWidth={isDropTarget ? 2 : strokeWidth}
           strokeDasharray={strokeDash}
           onClick={(e) => {
-            if (isTentative || dragState || isDefault) return;
+            if (isTentative || dragState) return;
+            // The default branch is selectable (single click → focus) so its
+            // detail panel — with the reload/pull button — can be reached.
+            if (isDefault) {
+              onSelectionChange(new Set([id]), id);
+              return;
+            }
 
             const isMetaKey = e.metaKey || e.ctrlKey;
             const isShiftKey = e.shiftKey;

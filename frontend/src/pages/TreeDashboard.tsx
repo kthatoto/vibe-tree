@@ -1085,6 +1085,31 @@ export default function TreeDashboard() {
     }
   }, [selectedBranches, branchLinks, snapshot?.repoId, patchNodePrStats]);
 
+  // Reload (pull) the default branch: fast-forward the local ref to origin.
+  // When the branch isn't checked out anywhere the backend uses
+  // `git fetch origin <branch>:<branch>` — no checkout, just remote tracking.
+  // Mirrors the detail panel's pull button; bound to `r` while it is focused.
+  const reloadDefaultBranch = useCallback(async () => {
+    if (!selectedPin || !snapshot) return;
+    const branch = snapshot.defaultBranch;
+    const node = snapshot.nodes.find((n) => n.branchName === branch);
+    const worktreePath = node?.worktree?.path;
+    setRefreshingBranches((prev) => new Set([...prev, branch]));
+    try {
+      const result = await api.pull(selectedPin.localPath, branch, worktreePath);
+      addLog("manual", `Reloaded ${branch}: ${result.output || "up to date"}`);
+      triggerScan(selectedPin.localPath);
+    } catch (err) {
+      addLog("manual", `Reload ${branch} failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setRefreshingBranches((prev) => {
+        const next = new Set(prev);
+        next.delete(branch);
+        return next;
+      });
+    }
+  }, [selectedPin, snapshot, addLog, triggerScan]);
+
   // Apply a PR shortcut (its labels + reviewers) to the selected branches' open PRs,
   // then refresh so the change shows with the usual pulse → green flash feedback.
   const applyPrShortcut = useCallback(async (shortcut: PrShortcut) => {
@@ -1259,9 +1284,14 @@ export default function TreeDashboard() {
           void applyPrShortcut(shortcut);
         }
       } else if (e.key === "r" && !e.shiftKey) {
-        // r: refresh the PR(s) of the selected branches
+        // r: refresh the PR(s) of the selected branches.
+        // For the default branch (no PR) it reloads instead: fast-forward to origin.
         e.preventDefault();
-        refreshSelectedPRs();
+        if (selectedBranches.size === 1 && snapshot && selectedBranches.has(snapshot.defaultBranch)) {
+          void reloadDefaultBranch();
+        } else {
+          refreshSelectedPRs();
+        }
       } else if (e.key === "c" && !e.shiftKey) {
         // c: select all descendants of the selected branches
         e.preventDefault();
@@ -1274,7 +1304,7 @@ export default function TreeDashboard() {
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selectedBranches, selectedPin, triggerScan, handleFullReload, refreshSelectedPRs, applyPrShortcut, selectWithDescendants, requestDeleteSelected, deleteConfirmBranches, branchLinks]);
+  }, [selectedBranches, selectedPin, triggerScan, handleFullReload, refreshSelectedPRs, reloadDefaultBranch, snapshot?.defaultBranch, applyPrShortcut, selectWithDescendants, requestDeleteSelected, deleteConfirmBranches, branchLinks]);
 
   // Track whether Shift is held, to surface the PR shortcut hint overlay
   useEffect(() => {

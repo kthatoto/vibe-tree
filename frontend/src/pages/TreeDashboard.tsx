@@ -407,27 +407,49 @@ export default function TreeDashboard() {
   }, [graphZoom]);
 
   // Focus separator, persisted by branch IDENTITY (the unfocused/right-side branch
-  // names) in localStorage. Storing identities rather than a bare index means adding
-  // or deleting other branches never shifts which side a branch is displayed on.
-  const [unfocusedBranches, setUnfocusedBranches] = useState<string[]>(() => {
-    const saved = localStorage.getItem("branchGraph.unfocusedBranches");
+  // names) PER REPO in localStorage. Storing identities rather than a bare index means
+  // adding or deleting other branches never shifts which side a branch is displayed on;
+  // keying by pin id keeps each repo's separator independent so branch names from one
+  // repo can never leak into another repo's separator computation.
+  const unfocusedKey = (pinId: number) => `branchGraph.unfocusedBranches-${pinId}`;
+  const [unfocusedBranches, setUnfocusedBranches] = useState<string[]>([]);
+  const restoredUnfocused = useRef(false);
+  // One-time cleanup of legacy global keys (pre per-repo / pre identity-based storage).
+  useEffect(() => {
+    localStorage.removeItem("branchGraph.unfocusedBranches");
+    localStorage.removeItem("branchGraph.focusSeparatorIndex");
+  }, []);
+  // Reset the restore flag (and clear stale state) whenever the repo changes.
+  useEffect(() => {
+    restoredUnfocused.current = false;
+    setUnfocusedBranches([]);
+  }, [selectedPinId]);
+  // Restore this repo's separator once its snapshot is available.
+  useEffect(() => {
+    if (!snapshot || !selectedPinId || restoredUnfocused.current) return;
+    restoredUnfocused.current = true;
+    const saved = localStorage.getItem(unfocusedKey(selectedPinId));
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.filter((b): b is string => typeof b === "string");
+        if (Array.isArray(parsed)) {
+          setUnfocusedBranches(parsed.filter((b): b is string => typeof b === "string"));
+        }
       } catch {
         // ignore malformed value
       }
     }
-    return [];
-  });
+  }, [snapshot, selectedPinId]);
+  // Persist this repo's separator (only after it has been restored, so switching repos
+  // never overwrites the new repo's stored value with the previous repo's state).
   useEffect(() => {
+    if (!selectedPinId || !restoredUnfocused.current) return;
     if (unfocusedBranches.length > 0) {
-      localStorage.setItem("branchGraph.unfocusedBranches", JSON.stringify(unfocusedBranches));
+      localStorage.setItem(unfocusedKey(selectedPinId), JSON.stringify(unfocusedBranches));
     } else {
-      localStorage.removeItem("branchGraph.unfocusedBranches");
+      localStorage.removeItem(unfocusedKey(selectedPinId));
     }
-  }, [unfocusedBranches]);
+  }, [selectedPinId, unfocusedBranches]);
 
   // Branch graph filter (persisted in localStorage)
   const [checkedBranches, setCheckedBranches] = useState<Set<string>>(() => {

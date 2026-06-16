@@ -406,18 +406,28 @@ export default function TreeDashboard() {
     localStorage.setItem("branchGraph.zoom", String(graphZoom));
   }, [graphZoom]);
 
-  // Focus separator index (persisted in localStorage)
-  const [focusSeparatorIndex, setFocusSeparatorIndex] = useState<number | null>(() => {
-    const saved = localStorage.getItem("branchGraph.focusSeparatorIndex");
-    return saved ? parseInt(saved, 10) : null;
+  // Focus separator, persisted by branch IDENTITY (the unfocused/right-side branch
+  // names) in localStorage. Storing identities rather than a bare index means adding
+  // or deleting other branches never shifts which side a branch is displayed on.
+  const [unfocusedBranches, setUnfocusedBranches] = useState<string[]>(() => {
+    const saved = localStorage.getItem("branchGraph.unfocusedBranches");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter((b): b is string => typeof b === "string");
+      } catch {
+        // ignore malformed value
+      }
+    }
+    return [];
   });
   useEffect(() => {
-    if (focusSeparatorIndex !== null) {
-      localStorage.setItem("branchGraph.focusSeparatorIndex", String(focusSeparatorIndex));
+    if (unfocusedBranches.length > 0) {
+      localStorage.setItem("branchGraph.unfocusedBranches", JSON.stringify(unfocusedBranches));
     } else {
-      localStorage.removeItem("branchGraph.focusSeparatorIndex");
+      localStorage.removeItem("branchGraph.unfocusedBranches");
     }
-  }, [focusSeparatorIndex]);
+  }, [unfocusedBranches]);
 
   // Branch graph filter (persisted in localStorage)
   const [checkedBranches, setCheckedBranches] = useState<Set<string>>(() => {
@@ -3735,8 +3745,8 @@ export default function TreeDashboard() {
                           };
                         });
                       }}
-                      focusSeparatorIndex={focusSeparatorIndex}
-                      onFocusSeparatorIndexChange={setFocusSeparatorIndex}
+                      unfocusedBranches={unfocusedBranches}
+                      onUnfocusedBranchesChange={setUnfocusedBranches}
                       highlightedBranch={hoveredLogBranch}
                       onWorktreeMove={(worktreePath, fromBranch, toBranch) => {
                         // Show confirmation modal instead of immediate execution

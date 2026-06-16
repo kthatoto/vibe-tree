@@ -38,10 +38,12 @@ interface BranchGraphProps {
   // Sibling order for column reordering (parent branchName -> ordered child branchNames)
   siblingOrder?: Record<string, string[]>;
   onSiblingOrderChange?: (siblingOrder: Record<string, string[]>) => void;
-  // Focus separator - divides focused (left) from unfocused (right) items
-  // Index indicates separator position in root siblings (0 = before first, 1 = after first, etc.)
-  focusSeparatorIndex?: number | null; // null means no separator
-  onFocusSeparatorIndexChange?: (index: number | null) => void;
+  // Focus separator - divides focused (left) from unfocused (right) items.
+  // Persisted by branch IDENTITY (the unfocused/right-side branch names) rather than
+  // a bare index, so adding or deleting other branches never reclassifies which side a
+  // branch sits on. The separator index is derived from this set at render time.
+  unfocusedBranches?: string[];
+  onUnfocusedBranchesChange?: (branches: string[]) => void;
   // Highlighted branch (for log hover effect with rotating dashed border)
   highlightedBranch?: string | null;
   // Worktree move callback
@@ -141,8 +143,8 @@ export default function BranchGraph({
   filterEnabled = false,
   siblingOrder = {},
   onSiblingOrderChange,
-  focusSeparatorIndex = null,
-  onFocusSeparatorIndexChange,
+  unfocusedBranches = [],
+  onUnfocusedBranchesChange,
   highlightedBranch = null,
   onWorktreeMove,
   refreshingBranches = new Set(),
@@ -574,19 +576,32 @@ export default function BranchGraph({
     // Helper to sort children using siblingOrder if available
     const sortChildren = (parentBranch: string, children: string[]): string[] => {
       const order = siblingOrder[parentBranch];
+      let sorted: string[];
       if (!order || order.length === 0) {
         // No custom order, sort alphabetically
-        return [...children].sort((a, b) => a.localeCompare(b));
+        sorted = [...children].sort((a, b) => a.localeCompare(b));
+      } else {
+        // Sort by custom order, unknown children go to the end
+        sorted = [...children].sort((a, b) => {
+          const indexA = order.indexOf(a);
+          const indexB = order.indexOf(b);
+          if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+          if (indexA === -1) return 1;
+          if (indexB === -1) return -1;
+          return indexA - indexB;
+        });
       }
-      // Sort by custom order, unknown children go to the end
-      return [...children].sort((a, b) => {
-        const indexA = order.indexOf(a);
-        const indexB = order.indexOf(b);
-        if (indexA === -1 && indexB === -1) return a.localeCompare(b);
-        if (indexA === -1) return 1;
-        if (indexB === -1) return -1;
-        return indexA - indexB;
-      });
+      // For the default branch's children, keep all unfocused (right-of-separator)
+      // branches as a contiguous right-hand suffix. This keeps the single separator
+      // line valid, and means newly-appeared branches (not in the unfocused set) land
+      // at the right end of the FOCUSED group — i.e. just left of the border.
+      if (parentBranch === defaultBranch && unfocusedBranches.length > 0) {
+        const unfocused = new Set(unfocusedBranches);
+        const focusedFirst = sorted.filter((b) => !unfocused.has(b));
+        const unfocusedLast = sorted.filter((b) => unfocused.has(b));
+        sorted = [...focusedFirst, ...unfocusedLast];
+      }
+      return sorted;
     };
 
     // Find root nodes (nodes that are not children of any other node)
@@ -1057,7 +1072,7 @@ export default function BranchGraph({
       width: Math.max(400, maxX),
       height: Math.max(150, maxY),
     };
-  }, [nodes, edges, defaultBranch, tentativeNodes, tentativeEdges, tentativeBaseBranch, checkedBranches, filterEnabled, siblingOrder]);
+  }, [nodes, edges, defaultBranch, tentativeNodes, tentativeEdges, tentativeBaseBranch, checkedBranches, filterEnabled, siblingOrder, unfocusedBranches]);
 
   // Scroll a node into view within the graph container (coords are pre-zoom)
   const scrollNodeIntoView = useCallback((n: LayoutNode) => {
@@ -1233,6 +1248,35 @@ export default function BranchGraph({
 
   // Effective selection: use preview during drag, otherwise use actual selection
   const effectiveSelection = rectangleSelectState ? previewSelection : selectedBranches;
+
+  // Root siblings (children of the default branch) in layout (x) order. Thanks to
+  // sortChildren, this is always [focused... , unfocused...].
+  const rootSiblings = useMemo(() => {
+    const children = edges.filter((e) => e.parent === defaultBranch).map((e) => e.child);
+    const childNodes = layoutNodes.filter((n) => children.includes(n.id));
+    return childNodes.sort((a, b) => a.x - b.x).map((n) => n.id);
+  }, [edges, defaultBranch, layoutNodes]);
+
+  // Unfocused (right-of-separator) branches, persisted by identity.
+  const unfocusedSet = useMemo(() => new Set(unfocusedBranches), [unfocusedBranches]);
+
+  // Separator index is DERIVED from the unfocused set. Because unfocused branches are
+  // laid out as the right-hand suffix, the index is simply the count of focused
+  // (non-unfocused) root siblings currently present. Deleting/adding other branches
+  // therefore never moves the border relative to the branches that remain.
+  const focusSeparatorIndex = useMemo(
+    () => rootSiblings.filter((b) => !unfocusedSet.has(b)).length,
+    [rootSiblings, unfocusedSet]
+  );
+
+  // Convert a separator/column-drag index into the persisted identity set: everything
+  // from `index` onward (in current root-sibling order) becomes unfocused.
+  const handleSepIndexChange = useCallback(
+    (index: number) => {
+      onUnfocusedBranchesChange?.(rootSiblings.slice(index));
+    },
+    [rootSiblings, onUnfocusedBranchesChange]
+  );
 
   // Handle column drag movement and drop (must be after layoutNodes is defined)
   // Use ref to avoid re-running effect on every state update during drag
@@ -1442,9 +1486,11 @@ export default function BranchGraph({
           onSiblingOrderChange(newSiblingOrder);
         }
 
-        // Apply pending separator index change (if separator was crossed during drag)
-        if (dragState.pendingSepIndex !== undefined && onFocusSeparatorIndexChange) {
-          onFocusSeparatorIndexChange(dragState.pendingSepIndex);
+        // Apply pending separator index change (if separator was crossed during drag).
+        // Convert against the NEW order so the right-side set reflects the reorder.
+        if (dragState.pendingSepIndex !== undefined && onUnfocusedBranchesChange) {
+          const newOrder = JSON.stringify(reordered) !== JSON.stringify(sorted) ? reordered : sorted;
+          onUnfocusedBranchesChange(newOrder.slice(dragState.pendingSepIndex));
         }
       }
       setColumnDragState(null);
@@ -1460,7 +1506,7 @@ export default function BranchGraph({
       stopAutoScroll();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!columnDragState, getSVGCoords, onSiblingOrderChange, siblingOrder, getColumnBoundsHelper, focusSeparatorIndex, onFocusSeparatorIndexChange, defaultBranch, startAutoScroll, stopAutoScroll, updateAutoScrollMouseEvent]);
+  }, [!!columnDragState, getSVGCoords, onSiblingOrderChange, siblingOrder, getColumnBoundsHelper, focusSeparatorIndex, onUnfocusedBranchesChange, defaultBranch, startAutoScroll, stopAutoScroll, updateAutoScrollMouseEvent]);
 
   // Handle separator drag
   useEffect(() => {
@@ -1521,9 +1567,7 @@ export default function BranchGraph({
           currentIndex: newIndex,
         } : null);
 
-        if (onFocusSeparatorIndexChange) {
-          onFocusSeparatorIndexChange(newIndex);
-        }
+        handleSepIndexChange(newIndex);
       } else {
         setSeparatorDragState(prev => prev ? {
           ...prev,
@@ -1545,7 +1589,7 @@ export default function BranchGraph({
       document.body.style.userSelect = originalUserSelect;
       stopAutoScroll();
     };
-  }, [separatorDragState, getSVGCoords, edges, defaultBranch, layoutNodes, getColumnBoundsHelper, onFocusSeparatorIndexChange, startAutoScroll, stopAutoScroll, updateAutoScrollMouseEvent]);
+  }, [separatorDragState, getSVGCoords, edges, defaultBranch, layoutNodes, getColumnBoundsHelper, handleSepIndexChange, startAutoScroll, stopAutoScroll, updateAutoScrollMouseEvent]);
 
   // Handle rectangle selection drag (multi-select)
   useEffect(() => {
@@ -1670,13 +1714,6 @@ export default function BranchGraph({
       stopAutoScroll();
     };
   }, [worktreeDragState, getSVGCoords, layoutNodes, worktreeDropTarget, onWorktreeMove, startAutoScroll, stopAutoScroll, updateAutoScrollMouseEvent]);
-
-  // Get root siblings (children of default branch) sorted by X position
-  const rootSiblings = useMemo(() => {
-    const children = edges.filter(e => e.parent === defaultBranch).map(e => e.child);
-    const childNodes = layoutNodes.filter(n => children.includes(n.id));
-    return childNodes.sort((a, b) => a.x - b.x).map(n => n.id);
-  }, [edges, defaultBranch, layoutNodes]);
 
   // Effective separator index: if null, place at the end (all items focused)
   // During column drag, use pendingSepIndex for real-time preview

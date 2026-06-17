@@ -1,7 +1,6 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
-import { api, type BranchLink, type TreeEdge, type RepoLabel, type RepoCollaborator, type TreeNode } from "../lib/api";
+import { api, type BranchLink, type TreeEdge, type RepoLabel, type RepoCollaborator, type TreeNode, type PrShortcut } from "../lib/api";
 import type { MergeStateUpdate } from "../lib/mergeProgress";
-import { Dropdown } from "./atoms/Dropdown";
 import { LabelChip, UserChip, TeamChip } from "./atoms/Chips";
 import { WorktreeSelector } from "./atoms/WorktreeSelector";
 import "./TaskDetailPanel.css";
@@ -48,9 +47,8 @@ interface MultiSelectPanelProps {
   edges: TreeEdge[];
   nodes: TreeNode[];
   defaultBranch: string;
-  // Quick labels/reviewers (pre-selected in settings)
-  quickLabels: string[];
-  quickReviewers: string[];
+  // Favorite PR shortcuts (named label+reviewer sets, defined in settings)
+  prShortcuts: PrShortcut[];
   // For resolving label colors
   repoLabels: RepoLabel[];
   repoCollaborators: RepoCollaborator[];
@@ -77,8 +75,7 @@ export default function MultiSelectPanel({
   edges,
   nodes,
   defaultBranch,
-  quickLabels,
-  quickReviewers,
+  prShortcuts,
   repoLabels,
   repoCollaborators,
   onRefreshBranches,
@@ -120,15 +117,6 @@ export default function MultiSelectPanel({
     status: "idle",
   });
 
-  // Dropdown states
-  const [showLabelDropdown, setShowLabelDropdown] = useState(false);
-  const [showReviewerDropdown, setShowReviewerDropdown] = useState(false);
-  const [labelMode, setLabelMode] = useState<"add" | "remove">("add");
-  const [reviewerMode, setReviewerMode] = useState<"add" | "remove">("add");
-
-  // Selected items in dropdowns (before applying)
-  const [pendingLabels, setPendingLabels] = useState<Set<string>>(new Set());
-  const [pendingReviewers, setPendingReviewers] = useState<Set<string>>(new Set());
 
   // Get branches with PRs
   const branchesWithPRs = useMemo(() => {
@@ -146,44 +134,6 @@ export default function MultiSelectPanel({
       return !links?.some((l) => l.linkType === "pr");
     });
   }, [selectedList, branchLinks, defaultBranch]);
-
-  // Get label counts across selected PRs (label → number of PRs that have it)
-  const labelCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    if (branchesWithPRs.length === 0) return counts;
-
-    for (const branch of branchesWithPRs) {
-      const links = branchLinks.get(branch);
-      const prLink = links?.find((l) => l.linkType === "pr" && l.status === "open");
-      if (!prLink?.labels) continue;
-      try {
-        const parsed = JSON.parse(prLink.labels) as Array<{ name: string }>;
-        for (const l of parsed) {
-          counts.set(l.name, (counts.get(l.name) ?? 0) + 1);
-        }
-      } catch { /* ignore */ }
-    }
-    return counts;
-  }, [branchesWithPRs, branchLinks]);
-
-  // Get reviewer counts across selected PRs (reviewer → number of PRs that have it)
-  const reviewerCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    if (branchesWithPRs.length === 0) return counts;
-
-    for (const branch of branchesWithPRs) {
-      const links = branchLinks.get(branch);
-      const prLink = links?.find((l) => l.linkType === "pr" && l.status === "open");
-      if (!prLink?.reviewers) continue;
-      try {
-        const parsed = JSON.parse(prLink.reviewers) as string[];
-        for (const r of parsed) {
-          counts.set(r, (counts.get(r) ?? 0) + 1);
-        }
-      } catch { /* ignore */ }
-    }
-    return counts;
-  }, [branchesWithPRs, branchLinks]);
 
   // Detect PRs whose baseBranch differs from Graph parent
   const mismatchedBaseBranches = useMemo(() => {
@@ -433,50 +383,6 @@ export default function MultiSelectPanel({
     return ordered;
   }, [selectedList, branchLinks, defaultBranch]);
 
-  // Resolve label info from name
-  const getLabelInfo = useCallback(
-    (name: string) => repoLabels.find((l) => l.name === name),
-    [repoLabels]
-  );
-
-  // Resolve reviewer info from login
-  const getReviewerInfo = useCallback(
-    (login: string) => {
-      if (login.startsWith("team/")) {
-        return { login, isTeam: true };
-      }
-      const collab = repoCollaborators.find((c) => c.login === login);
-      return collab ? { ...collab, isTeam: false } : { login, isTeam: false };
-    },
-    [repoCollaborators]
-  );
-
-  // Toggle label selection
-  const togglePendingLabel = (labelName: string) => {
-    setPendingLabels((prev) => {
-      const next = new Set(prev);
-      if (next.has(labelName)) {
-        next.delete(labelName);
-      } else {
-        next.add(labelName);
-      }
-      return next;
-    });
-  };
-
-  // Toggle reviewer selection
-  const togglePendingReviewer = (reviewer: string) => {
-    setPendingReviewers((prev) => {
-      const next = new Set(prev);
-      if (next.has(reviewer)) {
-        next.delete(reviewer);
-      } else {
-        next.add(reviewer);
-      }
-      return next;
-    });
-  };
-
   // Run a one-op-per-item bulk operation across branches in parallel (bounded concurrency).
   const runBulkPerItem = async <T,>(
     items: T[],
@@ -502,19 +408,16 @@ export default function MultiSelectPanel({
     setProgress((p) => ({ ...p, current: null, status: "done" }));
   };
 
-  // Apply pending labels AND reviewers together in one bulk operation.
-  // Branches are processed in parallel; within a single PR the operations run
-  // sequentially so concurrent edits don't race on the same PR.
-  const handleApply = async () => {
-    if (pendingLabels.size === 0 && pendingReviewers.size === 0) return;
-    setShowLabelDropdown(false);
-    setShowReviewerDropdown(false);
+  // Apply a favorite PR shortcut (its labels + reviewers, add-only) to the
+  // selected branches' open PRs in one bulk operation. Branches are processed
+  // in parallel; within a single PR the operations run sequentially so
+  // concurrent edits don't race on the same PR.
+  const handleApplyShortcut = async (shortcut: PrShortcut) => {
+    if (progress.status === "running") return;
 
     const targetBranches = branchesWithPRs;
-    const labels = [...pendingLabels];
-    const reviewers = [...pendingReviewers];
-    const labelRemove = labelMode === "remove";
-    const reviewerRemove = reviewerMode === "remove";
+    const labels = shortcut.labels;
+    const reviewers = shortcut.reviewers;
     const totalOps = targetBranches.length * (labels.length + reviewers.length);
     if (totalOps === 0) return;
 
@@ -531,30 +434,22 @@ export default function MultiSelectPanel({
     await forEachWithConcurrency(targetBranches, BULK_CONCURRENCY, async (branch) => {
       const linkId = getPRLinkId(branch);
       for (const label of labels) {
-        const opLabel = `${branch} (${labelRemove ? "−" : "+"}${label})`;
+        const opLabel = `${branch} (+${label})`;
         if (!linkId) { record(opLabel, false, "No PR found"); continue; }
         setProgress((p) => ({ ...p, current: opLabel }));
         try {
-          if (labelRemove) {
-            await api.removePrLabel(linkId, label);
-          } else {
-            await api.addPrLabel(linkId, label);
-          }
+          await api.addPrLabel(linkId, label);
           record(opLabel, true);
         } catch (e: unknown) {
           record(opLabel, false, e instanceof Error ? e.message : String(e));
         }
       }
       for (const reviewer of reviewers) {
-        const opLabel = `${branch} (${reviewerRemove ? "−" : "+"}${reviewer})`;
+        const opLabel = `${branch} (+${reviewer})`;
         if (!linkId) { record(opLabel, false, "No PR found"); continue; }
         setProgress((p) => ({ ...p, current: opLabel }));
         try {
-          if (reviewerRemove) {
-            await api.removePrReviewer(linkId, reviewer);
-          } else {
-            await api.addPrReviewer(linkId, reviewer);
-          }
+          await api.addPrReviewer(linkId, reviewer);
           record(opLabel, true);
         } catch (e: unknown) {
           record(opLabel, false, e instanceof Error ? e.message : String(e));
@@ -563,8 +458,6 @@ export default function MultiSelectPanel({
     });
 
     setProgress((p) => ({ ...p, current: null, status: "done" }));
-    setPendingLabels(new Set());
-    setPendingReviewers(new Set());
     onRefreshBranches?.();
   };
 
@@ -845,17 +738,6 @@ export default function MultiSelectPanel({
       status: "idle",
     });
     onMergeStatesClear?.();
-  };
-
-  // Close dropdown and reset pending
-  // Keep pending selections when closing a dropdown so labels + reviewers can be
-  // selected across both dropdowns and applied together. They are cleared on Apply.
-  const closeLabelDropdown = () => {
-    setShowLabelDropdown(false);
-  };
-
-  const closeReviewerDropdown = () => {
-    setShowReviewerDropdown(false);
   };
 
   const isOperationRunning = progress.status === "running";
@@ -1144,368 +1026,76 @@ export default function MultiSelectPanel({
                 </button>
               )}
 
-              {/* Add/Remove Label */}
-              <Dropdown
-                isOpen={showLabelDropdown}
-                onClose={closeLabelDropdown}
-                trigger={
-                  <button
-                    onClick={() => setShowLabelDropdown(!showLabelDropdown)}
-                    disabled={isOperationRunning || quickLabels.length === 0}
-                    style={{
-                      width: "100%",
-                      padding: "8px 12px",
-                      background: "#1f2937",
-                      border: "1px solid #374151",
-                      borderRadius: 6,
-                      color: isOperationRunning || quickLabels.length === 0 ? "#6b7280" : "#e5e7eb",
-                      cursor: isOperationRunning || quickLabels.length === 0 ? "not-allowed" : "pointer",
-                      fontSize: 13,
-                      textAlign: "left",
-                      opacity: isOperationRunning ? 0.5 : 1,
-                    }}
-                  >
-                    ± Labels
-                    {quickLabels.length === 0 && (
-                      <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>(no quick labels)</span>
-                    )}
-                  </button>
-                }
-              >
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  {/* Add/Remove toggle */}
-                  <div style={{ display: "flex", borderBottom: "1px solid #374151" }}>
+              {/* Apply favorite PR shortcut (labels + reviewers, add-only, one-click) */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ fontSize: 11, color: "#9ca3af" }}>
+                  {prShortcuts.length === 0
+                    ? "No shortcuts — define them in Settings → PR → Shortcuts"
+                    : `Apply shortcut → ${branchesWithPRs.length} PR${branchesWithPRs.length === 1 ? "" : "s"}`}
+                </div>
+                {prShortcuts.map((shortcut, i) => {
+                  const isEmpty = shortcut.labels.length === 0 && shortcut.reviewers.length === 0;
+                  const displayName = shortcut.name || `Shortcut ${i + 1}`;
+                  return (
                     <button
-                      onClick={() => setLabelMode("add")}
+                      key={i}
+                      onClick={() => handleApplyShortcut(shortcut)}
+                      disabled={isOperationRunning || isEmpty}
+                      title={isEmpty ? "This shortcut is empty" : `Apply "${displayName}" to ${branchesWithPRs.length} PR(s)`}
                       style={{
-                        flex: 1,
-                        padding: "8px",
-                        background: labelMode === "add" ? "#374151" : "transparent",
-                        border: "none",
-                        color: labelMode === "add" ? "#10b981" : "#9ca3af",
-                        fontSize: 12,
-                        fontWeight: labelMode === "add" ? 600 : 400,
-                        cursor: "pointer",
+                        width: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "6px 10px",
+                        background: isOperationRunning || isEmpty ? "#1f2937" : "#0f172a",
+                        border: `1px solid ${isOperationRunning || isEmpty ? "#374151" : "#334155"}`,
+                        borderRadius: 6,
+                        color: isOperationRunning || isEmpty ? "#6b7280" : "#e5e7eb",
+                        cursor: isOperationRunning || isEmpty ? "not-allowed" : "pointer",
+                        fontSize: 13,
+                        textAlign: "left",
                       }}
                     >
-                      + Add
-                    </button>
-                    <button
-                      onClick={() => setLabelMode("remove")}
-                      style={{
-                        flex: 1,
-                        padding: "8px",
-                        background: labelMode === "remove" ? "#374151" : "transparent",
-                        border: "none",
-                        color: labelMode === "remove" ? "#ef4444" : "#9ca3af",
-                        fontSize: 12,
-                        fontWeight: labelMode === "remove" ? 600 : 400,
-                        cursor: "pointer",
-                      }}
-                    >
-                      − Remove
-                    </button>
-                  </div>
-                  {/* Label list with checkboxes */}
-                  <div style={{ maxHeight: 180, overflowY: "auto" }}>
-                    {(labelMode === "remove" && labelCounts.size === 0) && (
-                      <div style={{ padding: "12px", color: "#6b7280", fontSize: 12, textAlign: "center" }}>
-                        No labels found
-                      </div>
-                    )}
-                    {(labelMode === "remove" ? [...labelCounts.keys()] : quickLabels).map((labelName) => {
-                      const label = getLabelInfo(labelName);
-                      const isSelected = pendingLabels.has(labelName);
-                      const count = labelCounts.get(labelName) ?? 0;
-                      const total = branchesWithPRs.length;
-                      const isPartial = count > 0 && count < total;
-                      const isAll = count === total;
-                      return (
-                        <button
-                          key={labelName}
-                          onClick={() => togglePendingLabel(labelName)}
+                      {i < 9 && (
+                        <kbd
                           style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            width: "100%",
-                            padding: "8px 12px",
-                            background: isSelected ? "#374151" : "transparent",
-                            border: "none",
-                            color: "#e5e7eb",
-                            fontSize: 12,
-                            textAlign: "left",
-                            cursor: "pointer",
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!isSelected) e.currentTarget.style.background = "#2d3748";
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!isSelected) e.currentTarget.style.background = "transparent";
+                            flexShrink: 0,
+                            fontSize: 10,
+                            fontFamily: "monospace",
+                            color: "#9ca3af",
+                            background: "#1f2937",
+                            border: "1px solid #374151",
+                            borderRadius: 4,
+                            padding: "1px 5px",
                           }}
                         >
-                          <span
-                            style={{
-                              width: 16,
-                              height: 16,
-                              borderRadius: 3,
-                              border: isSelected ? "none" : "1px solid #4b5563",
-                              background: isSelected ? "#3b82f6" : "transparent",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              fontSize: 10,
-                              color: "#fff",
-                              flexShrink: 0,
-                            }}
-                          >
-                            {isSelected && "✓"}
-                          </span>
-                          <LabelChip name={labelName} color={label?.color || "6b7280"} />
-                          {count > 0 && (
-                            <span
-                              style={{
-                                marginLeft: "auto",
-                                fontSize: 10,
-                                color: isAll ? "#4ade80" : isPartial ? "#f59e0b" : "#6b7280",
-                                flexShrink: 0,
-                              }}
-                            >
-                              {count}/{total}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {/* Apply footer */}
-                  <div
-                    style={{
-                      borderTop: "1px solid #374151",
-                      padding: "8px 12px",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <span style={{ fontSize: 11, color: "#9ca3af" }}>
-                      {pendingLabels.size} labels, {pendingReviewers.size} reviewers
-                    </span>
-                    <button
-                      onClick={handleApply}
-                      disabled={pendingLabels.size + pendingReviewers.size === 0}
-                      style={{
-                        padding: "6px 16px",
-                        background: pendingLabels.size + pendingReviewers.size === 0 ? "#374151" : "#10b981",
-                        border: "none",
-                        borderRadius: 4,
-                        color: pendingLabels.size + pendingReviewers.size === 0 ? "#6b7280" : "#fff",
-                        fontSize: 12,
-                        fontWeight: 500,
-                        cursor: pendingLabels.size + pendingReviewers.size === 0 ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      Apply
+                          ⇧{i + 1}
+                        </kbd>
+                      )}
+                      <span style={{ flexShrink: 0, fontWeight: 600 }}>{displayName}</span>
+                      {isEmpty ? (
+                        <span style={{ fontSize: 11, color: "#6b7280" }}>(empty)</span>
+                      ) : (
+                        <span style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", minWidth: 0 }}>
+                          {shortcut.labels.map((labelName) => {
+                            const info = repoLabels.find((l) => l.name === labelName);
+                            return <LabelChip key={`l-${labelName}`} name={labelName} color={info?.color ?? "6b7280"} />;
+                          })}
+                          {shortcut.reviewers.map((reviewer) => {
+                            if (reviewer.startsWith("team/")) {
+                              return <TeamChip key={`r-${reviewer}`} slug={reviewer.slice("team/".length)} />;
+                            }
+                            const c = repoCollaborators.find((rc) => rc.login === reviewer);
+                            return <UserChip key={`r-${reviewer}`} login={reviewer} name={c?.name} avatarUrl={c?.avatarUrl} />;
+                          })}
+                        </span>
+                      )}
                     </button>
-                  </div>
-                </div>
-              </Dropdown>
+                  );
+                })}
+              </div>
 
-              {/* Add/Remove Reviewer */}
-              <Dropdown
-                isOpen={showReviewerDropdown}
-                onClose={closeReviewerDropdown}
-                trigger={
-                  <button
-                    onClick={() => setShowReviewerDropdown(!showReviewerDropdown)}
-                    disabled={isOperationRunning || quickReviewers.length === 0}
-                    style={{
-                      width: "100%",
-                      padding: "8px 12px",
-                      background: "#1f2937",
-                      border: "1px solid #374151",
-                      borderRadius: 6,
-                      color: isOperationRunning || quickReviewers.length === 0 ? "#6b7280" : "#e5e7eb",
-                      cursor: isOperationRunning || quickReviewers.length === 0 ? "not-allowed" : "pointer",
-                      fontSize: 13,
-                      textAlign: "left",
-                      opacity: isOperationRunning ? 0.5 : 1,
-                    }}
-                  >
-                    ± Reviewers
-                    {quickReviewers.length === 0 && (
-                      <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>(no quick reviewers)</span>
-                    )}
-                  </button>
-                }
-              >
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  {/* Add/Remove toggle */}
-                  <div style={{ display: "flex", borderBottom: "1px solid #374151" }}>
-                    <button
-                      onClick={() => setReviewerMode("add")}
-                      style={{
-                        flex: 1,
-                        padding: "8px",
-                        background: reviewerMode === "add" ? "#374151" : "transparent",
-                        border: "none",
-                        color: reviewerMode === "add" ? "#10b981" : "#9ca3af",
-                        fontSize: 12,
-                        fontWeight: reviewerMode === "add" ? 600 : 400,
-                        cursor: "pointer",
-                      }}
-                    >
-                      + Add
-                    </button>
-                    <button
-                      onClick={() => setReviewerMode("remove")}
-                      style={{
-                        flex: 1,
-                        padding: "8px",
-                        background: reviewerMode === "remove" ? "#374151" : "transparent",
-                        border: "none",
-                        color: reviewerMode === "remove" ? "#ef4444" : "#9ca3af",
-                        fontSize: 12,
-                        fontWeight: reviewerMode === "remove" ? 600 : 400,
-                        cursor: "pointer",
-                      }}
-                    >
-                      − Remove
-                    </button>
-                  </div>
-                  {/* Reviewer list with checkboxes */}
-                  <div style={{ maxHeight: 180, overflowY: "auto" }}>
-                    {(reviewerMode === "remove" && reviewerCounts.size === 0) && (
-                      <div style={{ padding: "12px", color: "#6b7280", fontSize: 12, textAlign: "center" }}>
-                        No reviewers found
-                      </div>
-                    )}
-                    {(reviewerMode === "remove" ? [...reviewerCounts.keys()] : quickReviewers).map((reviewerName) => {
-                      const info = getReviewerInfo(reviewerName);
-                      const isSelected = pendingReviewers.has(reviewerName);
-                      const count = reviewerCounts.get(reviewerName) ?? 0;
-                      const total = branchesWithPRs.length;
-                      const isPartial = count > 0 && count < total;
-                      const isAll = count === total;
-                      return (
-                        <button
-                          key={reviewerName}
-                          onClick={() => togglePendingReviewer(reviewerName)}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            width: "100%",
-                            padding: "8px 12px",
-                            background: isSelected ? "#374151" : "transparent",
-                            border: "none",
-                            color: "#e5e7eb",
-                            fontSize: 12,
-                            textAlign: "left",
-                            cursor: "pointer",
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!isSelected) e.currentTarget.style.background = "#2d3748";
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!isSelected) e.currentTarget.style.background = "transparent";
-                          }}
-                        >
-                          <span
-                            style={{
-                              width: 16,
-                              height: 16,
-                              borderRadius: 3,
-                              border: isSelected ? "none" : "1px solid #4b5563",
-                              background: isSelected ? "#3b82f6" : "transparent",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              fontSize: 10,
-                              color: "#fff",
-                              flexShrink: 0,
-                            }}
-                          >
-                            {isSelected && "✓"}
-                          </span>
-                          {info.isTeam ? (
-                            <TeamChip slug={reviewerName.replace("team/", "")} />
-                          ) : (
-                            <UserChip
-                              login={info.login}
-                              avatarUrl={"avatarUrl" in info ? info.avatarUrl : undefined}
-                            />
-                          )}
-                          {count > 0 && (
-                            <span
-                              style={{
-                                marginLeft: "auto",
-                                fontSize: 10,
-                                color: isAll ? "#4ade80" : isPartial ? "#f59e0b" : "#6b7280",
-                                flexShrink: 0,
-                              }}
-                            >
-                              {count}/{total}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {/* Apply footer */}
-                  <div
-                    style={{
-                      borderTop: "1px solid #374151",
-                      padding: "8px 12px",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <span style={{ fontSize: 11, color: "#9ca3af" }}>
-                      {pendingLabels.size} labels, {pendingReviewers.size} reviewers
-                    </span>
-                    <button
-                      onClick={handleApply}
-                      disabled={pendingLabels.size + pendingReviewers.size === 0}
-                      style={{
-                        padding: "6px 16px",
-                        background: pendingLabels.size + pendingReviewers.size === 0 ? "#374151" : "#10b981",
-                        border: "none",
-                        borderRadius: 4,
-                        color: pendingLabels.size + pendingReviewers.size === 0 ? "#6b7280" : "#fff",
-                        fontSize: 12,
-                        fontWeight: 500,
-                        cursor: pendingLabels.size + pendingReviewers.size === 0 ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      Apply
-                    </button>
-                  </div>
-                </div>
-              </Dropdown>
-
-              {/* Combined Apply: applies pending labels + reviewers together (in parallel) */}
-              {(pendingLabels.size > 0 || pendingReviewers.size > 0) && (
-                <button
-                  onClick={handleApply}
-                  disabled={isOperationRunning}
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    background: isOperationRunning ? "#1f2937" : "#065f46",
-                    border: `1px solid ${isOperationRunning ? "#374151" : "#10b981"}`,
-                    borderRadius: 6,
-                    color: isOperationRunning ? "#6b7280" : "#6ee7b7",
-                    cursor: isOperationRunning ? "not-allowed" : "pointer",
-                    fontSize: 13,
-                    fontWeight: 500,
-                    textAlign: "left",
-                  }}
-                >
-                  ✓ Apply pending ({pendingLabels.size} labels, {pendingReviewers.size} reviewers)
-                </button>
-              )}
             </div>
           </div>
         )}
